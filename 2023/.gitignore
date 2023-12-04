@@ -31,9 +31,5 @@
 *.out
 *.app
 
-a.out
-target
-zig-cache
-zig-out
-
-*/*/data.txt
+cmake-*/**
+*/input.cpp
