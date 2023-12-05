@@ -144,14 +144,16 @@ void parseB()
     std::vector<Range> rangeA;
     std::vector<Range> rangeB;
 
-    // Reserving some size to reduce resize amounts on pushbacks.
+    // Reserving some size to reduce resize from pushbacks.
     rangeA.reserve(1024);
     rangeB.reserve(1024);
 
     for(size_t i = 0; i < sSeeds.size(); i += 2)
     {
         // Transform begin, range -> [begin, end] inclusive
-        rangeA.push_back({sSeeds[i], sSeeds[i] + sSeeds[i + 1] - 1});
+        int64_t begin = sSeeds[i];
+        int64_t range = sSeeds[i + 1];
+        rangeA.push_back({begin, begin + range - 1});
     }
 
     std::vector<Range>* current = &rangeA;
