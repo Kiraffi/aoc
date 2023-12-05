@@ -91,21 +91,24 @@ void sParseValues(const char* data)
     }
     data++;
     ConversionMap map = {};
-    for(int i = 0; i < 7; ++i)
+    for(std::vector<ConversionMap>& conversionMaps : sConversionMaps)
     {
         while(*data++ != '\n');
         while(*data++ != '\n');
         while(*data >= '0')
         {
+            // Calculate begin and end inclusive. Also calculate dst - src offset.
             int64_t dst = sParserNumber(&data);
-            map.first = sParserNumber(&data);
-            map.last = sParserNumber(&data) + map.first - 1;
-            map.offset = dst - map.first;
-            sConversionMaps[i].emplace_back(map);
+            int64_t src = sParserNumber(&data);
+            int64_t range = sParserNumber(&data);
+            map.first = src;
+            map.last = src + range - 1;
+            map.offset = dst - src;
+            conversionMaps.emplace_back(map);
 
             data++;
         }
-        std::sort(sConversionMaps[i].begin(), sConversionMaps[i].end(),
+        std::sort(conversionMaps.begin(), conversionMaps.end(),
             [](const ConversionMap& a, const ConversionMap& b)
             {
                 return a.first < b.first;
@@ -118,9 +121,9 @@ void parseA()
     int64_t smallestSeed = 1 << 30;
     for(int64_t seed : sSeeds)
     {
-        for(std::vector<ConversionMap>& conversionMap : sConversionMaps)
+        for(const std::vector<ConversionMap>& conversionMaps : sConversionMaps)
         {
-            for(const ConversionMap& map : conversionMap)
+            for(const ConversionMap& map : conversionMaps)
             {
                 if(seed >= map.first && seed <= map.last)
                 {
@@ -147,39 +150,42 @@ void parseB()
 
     for(size_t i = 0; i < sSeeds.size(); i += 2)
     {
+        // Transform begin, range -> [begin, end] inclusive
         rangeA.push_back({sSeeds[i], sSeeds[i] + sSeeds[i + 1] - 1});
     }
 
-    for(int i = 0; i < 7; ++i)
+    std::vector<Range>* current = &rangeA;
+    std::vector<Range>* other = &rangeB;
+
+    for(const std::vector<ConversionMap>& conversionMaps : sConversionMaps)
     {
-        std::vector<Range>& current = (i % 2) == 0 ? rangeA : rangeB;
-        std::vector<Range>& other = (i % 2) == 1 ? rangeA : rangeB;
+        other->clear();
 
-        other.clear();
-
-        for(Range range : current)
+        for(Range range : *current)
         {
-            for(const ConversionMap& map : sConversionMaps[i])
+            for(const ConversionMap& map : conversionMaps)
             {
+                // Skip until we find something that starts after range.first
                 if(range.first > map.last)
                 {
                     continue;
                 }
+                // Remove the range until map.first - 1
                 if(range.first < map.first)
                 {
                     int64_t last = range.last < map.first ? range.last : map.first - 1;
-                    other.push_back({range.first, last});
+                    other->push_back({range.first, last});
                     range.first = last + 1;
                     if(range.first > range.last)
                     {
                         break;
                     }
                 }
-
-                if(range.first >= map.first && range.first <= map.last)
+                // Remove the range until map.last. The range.first must be >= map.first
+                if(range.first <= map.last)
                 {
                     int64_t last = range.last < map.last ? range.last : map.last;
-                    other.push_back({range.first + map.offset, last + map.offset});
+                    other->push_back({range.first + map.offset, last + map.offset});
                     range.first = last + 1;
                     if(range.first > range.last)
                     {
@@ -187,13 +193,16 @@ void parseB()
                     }
                 }
             }
+            // If anything is left, push it to next round.
             if(range.first <= range.last)
             {
-                other.push_back(range);
+                other->push_back(range);
             }
+
+            std::swap(current, other);
         }
     }
-    for(const Range& range : rangeB)
+    for(const Range& range : *current)
     {
         smallestSeed = range.first < smallestSeed ? range.first : smallestSeed;
     }
