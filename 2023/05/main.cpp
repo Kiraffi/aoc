@@ -18,7 +18,7 @@
 
 struct ConversionMap
 {
-    int64_t dst;
+    int64_t offset;
     int64_t first;
     int64_t last;
 };
@@ -97,9 +97,10 @@ void sParseValues(const char* data)
         while(*data++ != '\n');
         while(*data >= '0')
         {
-            map.dst = sParserNumber(&data);
+            int64_t dst = sParserNumber(&data);
             map.first = sParserNumber(&data);
             map.last = sParserNumber(&data) + map.first - 1;
+            map.offset = dst - map.first;
             sConversionMaps[i].emplace_back(map);
 
             data++;
@@ -123,7 +124,7 @@ void parseA()
             {
                 if(seed >= map.first && seed <= map.last)
                 {
-                    seed += map.dst - map.first;
+                    seed += map.offset;
                     break;
                 }
             }
@@ -177,9 +178,8 @@ void parseB()
 
                 if(range.first >= map.first && range.first <= map.last)
                 {
-                    int64_t offset = map.dst - map.first;
                     int64_t last = range.last < map.last ? range.last : map.last;
-                    other.push_back({range.first + offset, last + offset});
+                    other.push_back({range.first + map.offset, last + map.offset});
                     range.first = last + 1;
                     if(range.first > range.last)
                     {
