@@ -183,6 +183,8 @@ void parseB()
                         break;
                     }
                 }
+                assert(range.first >= map.first);
+
                 // Remove the range until map.last. The range.first must be >= map.first
                 if(range.first <= map.last)
                 {
