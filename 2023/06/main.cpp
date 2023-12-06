@@ -22,7 +22,7 @@ alignas(16) static constexpr char testA[] =
 Distance:  9  40  200
 )";
 
-int64_t sParserNumber(int64_t startNumber, const char** data)
+static int64_t sParserNumber(int64_t startNumber, const char** data)
 {
     int64_t number = startNumber;
     while(**data == ' ') ++*data;
@@ -35,7 +35,7 @@ int64_t sParserNumber(int64_t startNumber, const char** data)
     return number;
 }
 
-int64_t sCalculatePossibleWinAmounts(int64_t time, int64_t distance)
+static int64_t sCalculatePossibleWinAmounts(int64_t time, int64_t distance)
 {
     // n * (t - n) = distance => -n^2 + t*n - distance = 0, solve n
     // x = (-b +- sqrt(b^2 - 4ac))/ (2a) to solve quadratic equation.
@@ -66,7 +66,7 @@ int64_t sCalculatePossibleWinAmounts(int64_t time, int64_t distance)
     return newRecords;
 }
 
-void parseA(const char* data)
+static void sParse06A(const char* data, bool printOut)
 {
     int64_t times[4];
     int64_t distances[4];
@@ -92,10 +92,11 @@ void parseA(const char* data)
     {
         records *= sCalculatePossibleWinAmounts(times[i], distances[i]);
     }
-    printf("6A: Potential records: %" PRIi64 "\n", records);
+    if(printOut)
+        printf("6A: Potential records: %" PRIi64 "\n", records);
 }
 
-void parseB(const char* data)
+static void sParse06B(const char* data, bool printOut)
 {
     int64_t time = 0;
     int64_t distance = 0;
@@ -113,13 +114,25 @@ void parseB(const char* data)
 
     int64_t records = sCalculatePossibleWinAmounts(time, distance);
 
-    printf("6B: Potential records: %" PRIi64 "\n", records);
+    if(printOut)
+        printf("6B: Potential records: %" PRIi64 "\n", records);
 }
 
-
+#ifndef RUNNER
 int main()
 {
-    parseA(dataA);
-    parseB(dataA);
+    sParse06A(data06A, true);
+    sParse06B(data06A, true);
     return 0;
 }
+#endif
+
+void run06A(bool printOut)
+{
+    sParse06A(data06A, printOut);
+}
+void run06B(bool printOut)
+{
+    sParse06B(data06A, printOut);
+}
+

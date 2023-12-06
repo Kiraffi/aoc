@@ -6,15 +6,15 @@
 
 #include "input.cpp"
 
-static const char testA[] = R"(1abc2
+static const char test01A[] = R"(1abc2
 pqr3stu8vwx
 a1b2c3d4e5f
 treb7uchet
       )";
-constexpr size_t testASize = sizeof(testA);
-static_assert((testASize % 16) == 0, "Need to be dividable by 16 for alignment");
+constexpr size_t test01ASize = sizeof(test01A);
+static_assert((test01ASize % 16) == 0, "Need to be dividable by 16 for alignment");
 
-static const char testB[] = R"(two1nine
+static const char test02B[] = R"(two1nine
 eightwothree
 abcone2threexyz
 xtwone3four
@@ -22,8 +22,8 @@ xtwone3four
 zoneight234
 7pqrstsixteen
   )";
-constexpr size_t testBSize = sizeof(testB);
-static_assert((testBSize % 16) == 0, "Need to be dividable by 16 for alignment");
+constexpr size_t test02BSize = sizeof(test02B);
+static_assert((test02BSize % 16) == 0, "Need to be dividable by 16 for alignment");
 
 
 static const char* numbers[] = {
@@ -45,6 +45,7 @@ static int sLineNumbers = 0;
 
 static void sFindLines(const char* str, int len)
 {
+    sLineNumbers = 0;
     assert((intptr_t(str) % 16) == 0);
     assert((len % 16) == 0);
 
@@ -127,7 +128,7 @@ static __m128i bitMasks[16] =
     _mm_set_epi32(bitMaskValues[3], bitMaskValues[3], bitMaskValues[3], bitMaskValues[3]),
 };
 
-void parseA(const char* data)
+static void sParse01A(const char* data, bool printOut)
 {
     int sum = 0;
     __m128i zeroChar = _mm_set1_epi8('0');
@@ -185,11 +186,11 @@ void parseA(const char* data)
         sum += first * 10 + last;
     }
 
-
-    printf("Sum of lines 1A: %i\n", sum);
+    if(printOut)
+        printf("Sum of lines 1A: %i\n", sum);
 }
 
-void parseB(const char* data)
+static void sParse01B(const char* data, bool printOut)
 {
 
     int first = -1;
@@ -223,17 +224,35 @@ void parseB(const char* data)
         data++;
 
     }
-
-    printf("Sum of lines 1B: %i\n", sum);
+    if(printOut)
+        printf("Sum of lines 1B: %i\n", sum);
 }
 
-
+#ifndef RUNNER
 int main()
 {
-    sFindLines(dataA, sizeof(dataA));
+    sFindLines(data01A, sizeof(data01A));
 
 
-    parseA(dataA);
-    parseB(dataA);
+    sParse01A(data01A, true);
+    sParse01B(data01A, true);
     return 0;
 }
+#endif
+
+
+
+void parse01()
+{
+    sFindLines(data01A, sizeof(data01A));
+}
+
+void run01A(bool printOut)
+{
+    sParse01A(data01A, printOut);
+}
+void run01B(bool printOut)
+{
+    sParse01B(data01A, printOut);
+}
+

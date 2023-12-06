@@ -9,21 +9,21 @@
 
 #include "input.cpp"
 
-alignas(16) static constexpr char testA[] =
+alignas(16) static constexpr char test02A[] =
     R"(Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
 Game 2: 1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue
 Game 3: 8 green, 6 blue, 20 red; 5 blue, 4 red, 13 green; 5 green, 1 red
 Game 4: 1 green, 3 red, 6 blue; 3 green, 6 red; 3 green, 15 blue, 14 red
 Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green
               )";
-constexpr size_t testASize = sizeof(testA);
-static_assert((testASize % 16) == 0, "Need to be dividable by 16 for alignment");
+static constexpr size_t test02ASize = sizeof(test02A);
+static_assert((test02ASize % 16) == 0, "Need to be dividable by 16 for alignment");
 
 
-alignas(16) static const char testB[] = R"(
+alignas(16) static const char test02B[] = R"(
               )";
-constexpr size_t testBSize = sizeof(testB);
-static_assert((testBSize % 16) == 0, "Need to be dividable by 16 for alignment");
+static constexpr size_t test02BSize = sizeof(test02B);
+static_assert((test02BSize % 16) == 0, "Need to be dividable by 16 for alignment");
 
 static constexpr int MAX_RED = 12;
 static constexpr int MAX_GREEN = 13;
@@ -38,7 +38,7 @@ static void sParseSpace(const char** data)
 }
 
 
-void parseA(const char* data)
+static void sParse02A(const char* data, bool printOut)
 {
     int gameIndex = 1;
     int sumOfValidIds = 0;
@@ -71,10 +71,11 @@ void parseA(const char* data)
         sumOfValidIds += isValid * gameIndex;
         ++gameIndex;
     }
-    printf("2A: Sum of valid Ids: %i\n", sumOfValidIds);
+    if(printOut)
+        printf("2A: Sum of valid Ids: %i\n", sumOfValidIds);
 }
 
-void parseB(const char* data)
+static void sParse02B(const char* data, bool printOut)
 {
     int sumOfMinProduct = 0;
     while(*data)
@@ -108,13 +109,25 @@ void parseB(const char* data)
         int product = minR * minG * minB;
         sumOfMinProduct += product;
     }
-    printf("2B: Sum of min multiplies Ids: %i\n", sumOfMinProduct);
+    if(printOut)
+        printf("2B: Sum of min multiplies Ids: %i\n", sumOfMinProduct);
 }
 
-
+#ifndef RUNNER
 int main()
 {
-    parseA(dataA);
-    parseB(dataA);
+    sParse02A(data02A, true);
+    sParse02B(data02A, true);
     return 0;
+}
+#endif
+
+
+void run02A(bool printOut)
+{
+    sParse02A(data02A, printOut);
+}
+void run02B(bool printOut)
+{
+    sParse02B(data02A, printOut);
 }

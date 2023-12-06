@@ -30,10 +30,10 @@ struct Range
 };
 
 // Globals
-std::vector<ConversionMap> sConversionMaps[7];
-std::vector<int64_t> sSeeds;
+static std::vector<ConversionMap> sConversionMaps[7];
+static std::vector<int64_t> sSeeds;
 
-alignas(16) static constexpr char testA[] =
+alignas(16) static constexpr char test05A[] =
     R"(seeds: 79 14 55 13
 
 seed-to-soil map:
@@ -69,7 +69,7 @@ humidity-to-location map:
 56 93 4
 )";
 
-int64_t sParserNumber(const char** data)
+static int64_t sParserNumber(const char** data)
 {
     int64_t number = 0;
     while(**data == ' ') ++*data;
@@ -84,6 +84,11 @@ int64_t sParserNumber(const char** data)
 
 void sParseValues(const char* data)
 {
+    sSeeds.clear();
+    for(std::vector<ConversionMap>& conversionMaps : sConversionMaps)
+    {
+        conversionMaps.clear();
+    }
     while(*data++ != ':');
     while(*data != '\n')
     {
@@ -116,7 +121,7 @@ void sParseValues(const char* data)
     }
 }
 
-void parseA()
+static void sParse05A(bool printOut)
 {
     int64_t smallestSeed = 1 << 30;
     for(int64_t seed : sSeeds)
@@ -134,10 +139,11 @@ void parseA()
         }
         smallestSeed = seed < smallestSeed ? seed : smallestSeed;
     }
-    printf("5A: Smallest seed: %" PRIi64 "\n", smallestSeed);
+    if(printOut)
+        printf("5A: Smallest seed: %" PRIi64 "\n", smallestSeed);
 }
 
-void parseB()
+static void sParse05B(bool printOut)
 {
     int64_t smallestSeed = 1 << 30;
 
@@ -210,14 +216,31 @@ void parseB()
     {
         smallestSeed = range.first < smallestSeed ? range.first : smallestSeed;
     }
-    printf("5B: Smallest seed: %" PRIi64 "\n", smallestSeed);
+    if(printOut)
+        printf("5B: Smallest seed: %" PRIi64 "\n", smallestSeed);
 }
 
-
+#ifndef RUNNER
 int main()
 {
-    sParseValues(dataA);
-    parseA();
-    parseB();
+    sParseValues(data05A);
+    sParse05A(true);
+    sParse05B(true);
     return 0;
+}
+#endif
+
+
+void parse05()
+{
+    sParseValues(data05A);
+}
+
+void run05A(bool printOut)
+{
+    sParse05A(printOut);
+}
+void run05B(bool printOut)
+{
+    sParse05B(printOut);
 }

@@ -14,7 +14,7 @@
 
 #include "input.cpp"
 
-alignas(16) static constexpr char testA[] =
+alignas(16) static constexpr char test04A[] =
     R"(Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
 Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
 Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
@@ -23,7 +23,7 @@ Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
 Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
 )";
 
-char sParserNumber(const char** data)
+static char sParserNumber(const char** data)
 {
     char number = 0;
     while(**data == ' ') ++*data;
@@ -35,7 +35,7 @@ char sParserNumber(const char** data)
     while(**data == ' ') ++*data;
     return number;
 }
-int sGetFoundMatchesCount(const char** rowStart)
+static int sGetFoundMatchesCount(const char** rowStart)
 {
     alignas(32) char rightNumbers[32] = {};
     char leftNumbers[16] = {};
@@ -106,7 +106,7 @@ int sGetFoundMatchesCount(const char** rowStart)
     return (int)matches;
 }
 
-void parseA(const char* data)
+static void sParse04A(const char* data, bool printOut)
 {
     int64_t sum = 0;
     int index = 1;
@@ -119,11 +119,11 @@ void parseA(const char* data)
         ++index;
         ++data;
     }
-
-    printf("4A: Card points: %" PRIi64 "\n", sum);
+    if(printOut)
+        printf("4A: Card points: %" PRIi64 "\n", sum);
 }
 
-void parseB(const char* data)
+static void sParse04B(const char* data, bool printOut)
 {
     int64_t sum = 0;
     int index = 0;
@@ -147,13 +147,24 @@ void parseB(const char* data)
     {
         sum += cards[i];
     }
-    printf("4B: Cards: %" PRIi64 "\n", sum);
+    if(printOut)
+        printf("4B: Cards: %" PRIi64 "\n", sum);
 }
 
-
+#ifndef RUNNER
 int main()
 {
-    parseA(dataA);
-    parseB(dataA);
+    sParse04A(data04A, true);
+    sParse04B(data04A, true);
     return 0;
+}
+#endif
+
+void run04A(bool printOut)
+{
+    sParse04A(data04A, printOut);
+}
+void run04B(bool printOut)
+{
+    sParse04B(data04A, printOut);
 }

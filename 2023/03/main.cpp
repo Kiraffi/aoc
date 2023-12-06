@@ -11,7 +11,7 @@
 
 #include "input.cpp"
 
-alignas(16) static constexpr char testA[] =
+alignas(16) static constexpr char test03A[] =
     R"(467..114..
 ...*......
 ..35..633.
@@ -24,7 +24,7 @@ alignas(16) static constexpr char testA[] =
 .664.598..
 )";
 
-bool sCheckValid(char c)
+static bool sCheckValid(char c)
 {
     if(isdigit(c))
         return false;
@@ -35,7 +35,7 @@ bool sCheckValid(char c)
     return true;
 }
 
-void parseA(const char* data)
+static void sParse03A(const char* data, bool printOut)
 {
     const char* start = data;
     const char* tmp = data;
@@ -95,11 +95,11 @@ void parseA(const char* data)
         ++x;
     }
 
-
-    printf("3A: Sum of valid digits: %i\n", sum);
+    if(printOut)
+        printf("3A: Sum of valid digits: %i\n", sum);
 }
 
-void parseB(const char* data)
+static void sParse03B(const char* data, bool printOut)
 {
     std::unordered_map<int, std::vector<int>> gearNumbers;
     const char* start = data;
@@ -175,14 +175,25 @@ void parseB(const char* data)
             sum += value.second[0] * value.second[1];
         }
     }
-
-    printf("3B: Sum of gear ratios: %i\n", sum);
+    if(printOut)
+        printf("3B: Sum of gear ratios: %i\n", sum);
 }
 
-
+#ifndef RUNNER
 int main()
 {
-    parseA(dataA);
-    parseB(dataA);
+    sParse03A(data03A, true);
+    sParse03B(data03A, true);
     return 0;
+}
+#endif
+
+
+void run03A(bool printOut)
+{
+    sParse03A(data03A, printOut);
+}
+void run03B(bool printOut)
+{
+    sParse03B(data03A, printOut);
 }
