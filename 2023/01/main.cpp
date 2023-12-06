@@ -27,18 +27,33 @@ constexpr size_t test02BSize = sizeof(test02B);
 static_assert((test02BSize % 16) == 0, "Need to be dividable by 16 for alignment");
 
 
-static const char* numbers[] = {
-    "zero",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine"
+static uint64_t numbers[] = {
+    *(uint64_t*)("zero\0\0\0\0"),
+    *(uint64_t*)("one\0\0\0\0\0"),
+    *(uint64_t*)("two\0\0\0\0\0"),
+    *(uint64_t*)("three\0\0\0"),
+    *(uint64_t*)("four\0\0\0\0"),
+    *(uint64_t*)("five\0\0\0\0"),
+    *(uint64_t*)("six\0\0\0\0\0"),
+    *(uint64_t*)("seven\0\0\0"),
+    *(uint64_t*)("eight\0\0\0"),
+    *(uint64_t*)("nine\0\0\0\0")
 };
+
+static const uint64_t masks[] = {
+    uint64_t(0xff'ff'ff'ff),
+    uint64_t(0xff'ff'ff),
+    uint64_t(0xff'ff'ff),
+    uint64_t(0xff'ff'ff'ff'ff),
+    uint64_t(0xff'ff'ff'ff),
+    uint64_t(0xff'ff'ff'ff),
+    uint64_t(0xff'ff'ff),
+    uint64_t(0xff'ff'ff'ff'ff),
+    uint64_t(0xff'ff'ff'ff'ff),
+    uint64_t(0xff'ff'ff'ff),
+};
+
+
 
 static const char* sLineEnds[2000];
 static int sLineNumbers = 0;
@@ -78,24 +93,19 @@ static void sFindLineBreaks(const char* str, int len)
     }
 }
 
-static bool sTestNumber(const char* str, const char* numberStr)
+static bool sTestNumber(const char* str, uint64_t comp, uint64_t mask)
 {
-    while(*str == *numberStr)
-    {
-        ++str;
-        ++numberStr;
-    }
-    return *numberStr == '\0';
+    uint64_t value = *((const uint64_t*)str);
+    uint64_t maskedValue = value & mask;
+    return maskedValue == comp;
 }
 
 static int sTestNumbers(const char* str)
 {
     for(int i = 1; i < 10; ++i)
     {
-        if(sTestNumber(str, numbers[i]))
-        {
+        if(sTestNumber(str, numbers[i], masks[i]))
             return i;
-        }
     }
     return 0;
 }
@@ -198,35 +208,51 @@ static int sParse01A(const char* data)
 static int sParse01B(const char* data)
 {
 
-    int first = -1;
-    int last = -1;
     int sum = 0;
-    while(*data != '\0')
+
+    for(int i = 0; i < sLineNumbers; ++i)
     {
-        char c = *data;
-        if(c == '\n')
+        int first = 0;
+        int last = 0;
+
+        data = i > 0 ? sLineEnds[i - 1] : data;
+        while(first == 0)
         {
-            assert(first > 0);
-            assert(last > 0);
-            sum += first * 10 + last;
-            first = last = -1;
-        }
-        else if(isdigit(c))
-        {
-            last = c - '0';
-            assert(last > 0);
-            first = first == -1 ? last : first;
-        }
-        else
-        {
-            int numb = sTestNumbers(data);
-            if(numb > 0)
+            char c = *data;
+            if (isdigit(c))
             {
-                last = numb;
-                first = first == -1 ? last : first;
+                first = c - '0';
             }
+            else
+            {
+                int numb = sTestNumbers(data);
+                if (numb > 0)
+                {
+                    first = numb;
+                }
+            }
+            data++;
         }
-        data++;
+        data = sLineEnds[i];
+        while(last == 0)
+        {
+            char c = *data;
+            if(isdigit(c))
+            {
+                last = c - '0';
+            }
+            else
+            {
+                int numb = sTestNumbers(data);
+                if (numb > 0)
+                {
+                    last = numb;
+                }
+            }
+            data--;
+        }
+
+        sum += first * 10 + last;
 
     }
     return sum;
