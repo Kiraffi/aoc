@@ -38,7 +38,7 @@ static void sParseSpace(const char** data)
 }
 
 
-static void sParse02A(const char* data, bool printOut)
+static int sParse02A(const char* data)
 {
     int gameIndex = 1;
     int sumOfValidIds = 0;
@@ -71,11 +71,10 @@ static void sParse02A(const char* data, bool printOut)
         sumOfValidIds += isValid * gameIndex;
         ++gameIndex;
     }
-    if(printOut)
-        printf("2A: Sum of valid Ids: %i\n", sumOfValidIds);
+    return sumOfValidIds;
 }
 
-static void sParse02B(const char* data, bool printOut)
+static int sParse02B(const char* data)
 {
     int sumOfMinProduct = 0;
     while(*data)
@@ -109,25 +108,37 @@ static void sParse02B(const char* data, bool printOut)
         int product = minR * minG * minB;
         sumOfMinProduct += product;
     }
-    if(printOut)
-        printf("2B: Sum of min multiplies Ids: %i\n", sumOfMinProduct);
+    return sumOfMinProduct;
 }
 
 #ifndef RUNNER
 int main()
 {
-    sParse02A(data02A, true);
-    sParse02B(data02A, true);
+    printf("2A: Sum of valid Ids: %i\n", sParse02A(data02A));
+    printf("2B: Sum of min multiplies Ids: %i\n", sParse02B(data02A));
+
     return 0;
 }
 #endif
 
 
-void run02A(bool printOut)
+int run02A(bool printOut, char* buffer)
 {
-    sParse02A(data02A, printOut);
+    int charsAdded = 0;
+    int aResult = sParse02A(data02A);
+
+    if(printOut)
+        charsAdded = sprintf(buffer, "2A: Sum of valid Ids: %i", aResult);
+    return charsAdded;
 }
-void run02B(bool printOut)
+
+int run02B(bool printOut, char* buffer)
 {
-    sParse02B(data02A, printOut);
+    int charsAdded = 0;
+    int resultB = sParse02B(data02A);
+    if(printOut)
+        charsAdded = sprintf(buffer, "2B: Sum of min multiplies Ids: %i", resultB);
+
+    return charsAdded;
 }
+

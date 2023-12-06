@@ -121,7 +121,7 @@ void sParseValues(const char* data)
     }
 }
 
-static void sParse05A(bool printOut)
+static int64_t sParse05A()
 {
     int64_t smallestSeed = 1 << 30;
     for(int64_t seed : sSeeds)
@@ -139,11 +139,10 @@ static void sParse05A(bool printOut)
         }
         smallestSeed = seed < smallestSeed ? seed : smallestSeed;
     }
-    if(printOut)
-        printf("5A: Smallest seed: %" PRIi64 "\n", smallestSeed);
+    return smallestSeed;
 }
 
-static void sParse05B(bool printOut)
+static int64_t sParse05B()
 {
     int64_t smallestSeed = 1 << 30;
 
@@ -216,16 +215,16 @@ static void sParse05B(bool printOut)
     {
         smallestSeed = range.first < smallestSeed ? range.first : smallestSeed;
     }
-    if(printOut)
-        printf("5B: Smallest seed: %" PRIi64 "\n", smallestSeed);
+    return smallestSeed;
 }
 
 #ifndef RUNNER
 int main()
 {
     sParseValues(data05A);
-    sParse05A(true);
-    sParse05B(true);
+
+    printf("5A: Smallest seed: %" PRIi64 "\n", sParse05A());
+    printf("5B: Smallest seed: %" PRIi64 "\n", sParse05B());
     return 0;
 }
 #endif
@@ -236,11 +235,24 @@ void parse05()
     sParseValues(data05A);
 }
 
-void run05A(bool printOut)
+int run05A(bool printOut, char* buffer)
 {
-    sParse05A(printOut);
+    int charsAdded = 0;
+    int64_t aResult = sParse05A();
+
+    if(printOut)
+        charsAdded = sprintf(buffer, "5A: Smallest seed: %" PRIi64, aResult);
+    return charsAdded;
 }
-void run05B(bool printOut)
+
+int run05B(bool printOut, char* buffer)
 {
-    sParse05B(printOut);
+    int charsAdded = 0;
+    int64_t resultB = sParse05B();
+
+    if(printOut)
+        charsAdded = sprintf(buffer, "5B: Smallest seed: %" PRIi64, resultB);
+
+    return charsAdded;
 }
+

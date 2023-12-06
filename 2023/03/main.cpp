@@ -78,7 +78,7 @@ static void sFindSurroundingNumbers(int x, int y, int width, int height, const c
 
 }
 
-static void sParse03A(const char* data, bool printOut)
+static int sParse03A(const char* data)
 {
     const char* start = data;
 
@@ -147,13 +147,11 @@ static void sParse03A(const char* data, bool printOut)
         ++ptr;
         ++data;
     };
-
-    if(printOut)
-        printf("3A: Sum of valid digits: %i\n", sum);
+    return sum;
 }
 
 
-static void sParse03B(const char* data, bool printOut)
+static int sParse03B(const char* data)
 {
     const char* start = data;
     int width = 0;
@@ -213,27 +211,35 @@ static void sParse03B(const char* data, bool printOut)
         ++ptr;
         ++data;
     };
-    if(printOut)
-        printf("3B: Sum of gear ratios: %i\n", sum);
-
+    return sum;
 }
 
 
 #ifndef RUNNER
 int main()
 {
-    sParse03A(data03A, true);
-    sParse03B(data03A, true);
+    printf("3A: Sum of valid digits: %i\n", sParse03A(data03A));
+    printf("3B: Sum of gear ratios: %i\n", sParse03B(data03A));
     return 0;
 }
 #endif
 
+int run03A(bool printOut, char* buffer)
+{
+    int charsAdded = 0;
+    int aResult = sParse03A(data03A);
 
-void run03A(bool printOut)
-{
-    sParse03A(data03A, printOut);
+    if(printOut)
+        charsAdded = sprintf(buffer, "3A: Sum of valid digits: %i", aResult);
+    return charsAdded;
 }
-void run03B(bool printOut)
+
+int run03B(bool printOut, char* buffer)
 {
-    sParse03B(data03A, printOut);
+    int charsAdded = 0;
+    int resultB = sParse03B(data03A);
+    if(printOut)
+        charsAdded = sprintf(buffer, "3B: Sum of gear ratios: %i", resultB);
+
+    return charsAdded;
 }

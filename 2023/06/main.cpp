@@ -66,7 +66,7 @@ static int64_t sCalculatePossibleWinAmounts(int64_t time, int64_t distance)
     return newRecords;
 }
 
-static void sParse06A(const char* data, bool printOut)
+static int64_t sParse06A(const char* data)
 {
     int64_t times[4];
     int64_t distances[4];
@@ -87,16 +87,14 @@ static void sParse06A(const char* data, bool printOut)
 
     int64_t records = 1;
 
-
     for(int i = 0; i < values; ++i)
     {
         records *= sCalculatePossibleWinAmounts(times[i], distances[i]);
     }
-    if(printOut)
-        printf("6A: Potential records: %" PRIi64 "\n", records);
+    return records;
 }
 
-static void sParse06B(const char* data, bool printOut)
+static int64_t sParse06B(const char* data)
 {
     int64_t time = 0;
     int64_t distance = 0;
@@ -113,26 +111,36 @@ static void sParse06B(const char* data, bool printOut)
     }
 
     int64_t records = sCalculatePossibleWinAmounts(time, distance);
-
-    if(printOut)
-        printf("6B: Potential records: %" PRIi64 "\n", records);
+    return records;
 }
 
 #ifndef RUNNER
 int main()
 {
-    sParse06A(data06A, true);
-    sParse06B(data06A, true);
+    printf("6A: Potential records: %" PRIi64 "\n", sParse06A(data06A));
+    printf("6B: Potential records: %" PRIi64 "\n", sParse06B(data06A));
     return 0;
 }
 #endif
 
-void run06A(bool printOut)
+int run06A(bool printOut, char* buffer)
 {
-    sParse06A(data06A, printOut);
+    int charsAdded = 0;
+    int64_t aResult = sParse06A(data06A);
+
+    if(printOut)
+        charsAdded = sprintf(buffer, "6A: Potential records: %" PRIi64, aResult);
+    return charsAdded;
 }
-void run06B(bool printOut)
+
+int run06B(bool printOut, char* buffer)
 {
-    sParse06B(data06A, printOut);
+    int charsAdded = 0;
+    int64_t resultB = sParse06B(data06A);
+
+    if(printOut)
+        charsAdded = sprintf(buffer, "6B: Potential records: %" PRIi64, resultB);
+
+    return charsAdded;
 }
 

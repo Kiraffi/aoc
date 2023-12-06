@@ -131,7 +131,7 @@ static __m128i bitMasks[16] =
     _mm_set_epi32(bitMaskValues[3], bitMaskValues[3], bitMaskValues[3], bitMaskValues[3]),
 };
 
-static void sParse01A(const char* data, bool printOut)
+static int sParse01A(const char* data)
 {
     int sum = 0;
     __m128i zeroChar = _mm_set1_epi8('0');
@@ -191,12 +191,11 @@ static void sParse01A(const char* data, bool printOut)
 
         sum += first * 10 + last;
     }
+    return sum;
 
-    if(printOut)
-        printf("Sum of lines 1A: %i\n", sum);
 }
 
-static void sParse01B(const char* data, bool printOut)
+static int sParse01B(const char* data)
 {
 
     int first = -1;
@@ -230,8 +229,7 @@ static void sParse01B(const char* data, bool printOut)
         data++;
 
     }
-    if(printOut)
-        printf("Sum of lines 1B: %i\n", sum);
+    return sum;
 }
 
 #ifndef RUNNER
@@ -239,9 +237,8 @@ int main()
 {
     sFindLineBreaks(data01A, sizeof(data01A));
 
-
-    sParse01A(data01A, true);
-    sParse01B(data01A, true);
+    printf("Sum of lines 1A: %i\n", sParse01A(data01A));
+    printf("Sum of lines 1B: %i\n", sParse01B(data01A));
     return 0;
 }
 #endif
@@ -253,12 +250,22 @@ void parse01()
     sFindLineBreaks(data01A, sizeof(data01A));
 }
 
-void run01A(bool printOut)
+int run01A(bool printOut, char* buffer)
 {
-    sParse01A(data01A, printOut);
+    int charsAdded = 0;
+    int aResult = sParse01A(data01A);
+    if(printOut)
+        charsAdded = sprintf(buffer, "Sum of lines 1A: %i", aResult);
+    return charsAdded;
 }
-void run01B(bool printOut)
+
+int run01B(bool printOut, char* buffer)
 {
-    sParse01B(data01A, printOut);
+    int charsAdded = 0;
+    int resultB = sParse01B(data01A);
+    if(printOut)
+        charsAdded = sprintf(buffer, "Sum of lines 1B: %i", resultB);
+
+    return charsAdded;
 }
 

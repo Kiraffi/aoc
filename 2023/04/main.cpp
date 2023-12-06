@@ -106,7 +106,7 @@ static int sGetFoundMatchesCount(const char** rowStart)
     return (int)matches;
 }
 
-static void sParse04A(const char* data, bool printOut)
+static int64_t sParse04A(const char* data)
 {
     int64_t sum = 0;
     int index = 1;
@@ -119,11 +119,10 @@ static void sParse04A(const char* data, bool printOut)
         ++index;
         ++data;
     }
-    if(printOut)
-        printf("4A: Card points: %" PRIi64 "\n", sum);
+    return sum;
 }
 
-static void sParse04B(const char* data, bool printOut)
+static int64_t sParse04B(const char* data)
 {
     int64_t sum = 0;
     int index = 0;
@@ -147,24 +146,36 @@ static void sParse04B(const char* data, bool printOut)
     {
         sum += cards[i];
     }
-    if(printOut)
-        printf("4B: Cards: %" PRIi64 "\n", sum);
+    return sum;
 }
 
 #ifndef RUNNER
 int main()
 {
-    sParse04A(data04A, true);
-    sParse04B(data04A, true);
+    printf("4A: Card points: %" PRIi64 "\n", sParse04A(data04A));
+
+    printf("4B: Cards: %" PRIi64 "\n", sParse04B(data04A));
     return 0;
 }
 #endif
 
-void run04A(bool printOut)
+int run04A(bool printOut, char* buffer)
 {
-    sParse04A(data04A, printOut);
+    int charsAdded = 0;
+    int64_t aResult = sParse04A(data04A);
+
+    if(printOut)
+        charsAdded = sprintf(buffer, "4A: Card points: %" PRIi64, aResult);
+    return charsAdded;
 }
-void run04B(bool printOut)
+
+int run04B(bool printOut, char* buffer)
 {
-    sParse04B(data04A, printOut);
+    int charsAdded = 0;
+    int64_t resultB = sParse04B(data04A);
+    if(printOut)
+        charsAdded = sprintf(buffer, "4B: Cards: %" PRIi64, resultB);
+
+    return charsAdded;
 }
+
