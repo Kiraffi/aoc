@@ -135,8 +135,8 @@ static void sParse01A(const char* data, bool printOut)
 {
     int sum = 0;
     __m128i zeroChar = _mm_set1_epi8('0');
-    __m128i zero = _mm_set1_epi8(0);
-    __m128i ten = _mm_set1_epi8(10);
+    __m128i zero = _mm_set1_epi8('0');
+    __m128i ten = _mm_set1_epi8('9' + 1);
     for(int i = 0; i < sLineNumbers; ++i)
     {
         int first = 0;
@@ -152,20 +152,21 @@ static void sParse01A(const char* data, bool printOut)
             {
                 value = _mm_and_si128(value, bitMasks[len]);
             }
-            // char - '0'
-            __m128i sub = _mm_sub_epi8(value, zeroChar);
 
             // 0 < x < 10
-            __m128i lt10 = _mm_cmplt_epi8(sub, ten);
-            __m128i gt0 = _mm_cmpgt_epi8(sub, zero);
+            __m128i lt10 = _mm_cmplt_epi8(value, ten);
+            __m128i gt0 = _mm_cmpgt_epi8(value, zero);
 
             // And the masks together to find numbers between 1 and 9.
             __m128i numbsMask = _mm_and_si128(lt10, gt0);
-            __m128i numbs = _mm_and_si128(sub, numbsMask);
 
             uint32_t mask = _mm_movemask_epi8(numbsMask);
             if(mask)
             {
+                // char - '0'
+                __m128i sub = _mm_sub_epi8(value, zeroChar);
+                __m128i numbs = _mm_and_si128(sub, numbsMask);
+
                 alignas(16) int8_t values[16];
                 _mm_storeu_si128((__m128i_u*) values, numbs);
                 int offset = 0;
