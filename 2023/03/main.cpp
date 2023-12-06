@@ -24,6 +24,20 @@ alignas(16) static constexpr char test03A[] =
 .664.598..
 )";
 
+static void sGetSize(const char* data, int& width, int& height)
+{
+    width = 0;
+    height = 0;
+    while(*data++ != '\n') width++;
+
+    ++height;
+    while(*data != '\0')
+    {
+        ++height;
+        data += width + 1;
+    }
+}
+
 static bool sCheckValid(char c)
 {
     if(isdigit(c))
@@ -38,58 +52,61 @@ static bool sCheckValid(char c)
 static void sParse03A(const char* data, bool printOut)
 {
     const char* start = data;
-    const char* tmp = data;
     int sum = 0;
     int width = 0;
     int height = 0;
-    int tmpWidth = 0;
-    while(*tmp)
-    {
-        if(*tmp++ == '\n')
-        {
-            ++height;
-            tmpWidth = 0;
-            continue;
-        }
-        tmpWidth++;
-        width = width < tmpWidth ? tmpWidth : width;
-    }
+
+    sGetSize(data, width, height);
 
     int x = 0;
     int y = 0;
     int digit = 0;
-    bool isValidDigit = false;
+    int digitCount = 0;
+
     while(*data)
     {
-        if(*data == '\n')
+        if(isdigit(*data))
         {
-            x = 0;
-            y++;
-            data++;
-            continue;
-        }
-        else if(isdigit(*data))
-        {
+            ++digitCount;
             digit = digit * 10 + (*data - '0');
-            for(int j = y - 1; j <= y + 1; ++j)
-            {
-                for (int i = x - 1; i <= x + 1; ++i)
-                {
-                    if(i >= 0 && j >= 0 && i < width && j < height)
-                    {
-                        isValidDigit |= sCheckValid(*(start + (width + 1) * j + i));
-                    }
-                }
-            }
         }
         else
         {
-            if(digit > 0 && isValidDigit)
+            if(digit > 0)
             {
-                sum += digit;
+                int startX = x - digitCount - 1;
+                startX = startX > 0 ? startX : 0;
+                int endX = x < width ? x : width - 1;
+
+                int startY = y > 0 ? y - 1 : 0;
+                int endY = y + 1 < height ? y + 1 : height - 1;
+
+                while(startY <= endY)
+                {
+                    int i = startX;
+                    const char* pos = start + startY * (width + 1) + startX;
+                    while(i++ <= endX)
+                    {
+                        if(sCheckValid(*pos++))
+                        {
+                            startY = endY + 1;
+                            sum += digit;
+                            break;
+
+                        }
+                    }
+                    startY++;
+                }
             }
             digit = 0;
-            isValidDigit = false;
+            digitCount = 0;
+            if(*data == '\n')
+            {
+                x = 0;
+                y++;
+                data++;
+                continue;
+            }
         }
         ++data;
         ++x;
@@ -103,69 +120,61 @@ static void sParse03B(const char* data, bool printOut)
 {
     std::unordered_map<int, std::vector<int>> gearNumbers;
     const char* start = data;
-    const char* tmp = data;
     int width = 0;
     int height = 0;
-    int tmpWidth = 0;
-    while(*tmp)
-    {
-        if(*tmp++ == '\n')
-        {
-            ++height;
-            tmpWidth = 0;
-            continue;
-        }
-        tmpWidth++;
-        width = width < tmpWidth ? tmpWidth : width;
-    }
-
+    sGetSize(data, width, height);
     int x = 0;
     int y = 0;
     int digit = 0;
-    std::unordered_set<int> gearIndices;
+    int digitCount = 0;
+
     while(*data)
     {
-        if(*data == '\n')
+        if(isdigit(*data))
         {
-            x = 0;
-            y++;
-            data++;
-            continue;
-        }
-        else if(isdigit(*data))
-        {
+            ++digitCount;
             digit = digit * 10 + (*data - '0');
-            for(int j = y - 1; j <= y + 1; ++j)
-            {
-                for (int i = x - 1; i <= x + 1; ++i)
-                {
-                    if(i >= 0 && j >= 0 && i < width && j < height)
-                    {
-                        //if(sCheckValid(*(start + width * j + i)))
-                        //    printf("%i,%i is valid\n", i, j);
-                        char cc = *(start + (width + 1) * j + i);
-                        if(cc == '*')
-                        {
-                            gearIndices.insert(width * j + i);
-                        }
-                    }
-                }
-            }
         }
         else
         {
-            if(digit > 0 && !gearIndices.empty())
+            if(digit > 0)
             {
-                for(int index : gearIndices)
+                int startX = x - digitCount - 1;
+                startX = startX > 0 ? startX : 0;
+                int endX = x < width ? x : width - 1;
+
+                int startY = y > 0 ? y - 1 : 0;
+                int endY = y + 1 < height ? y + 1 : height - 1;
+
+                while(startY <= endY)
                 {
-                    gearNumbers[index].push_back(digit);
+                    int i = startX;
+                    const char* pos = start + startY * (width + 1) + startX;
+                    while(i++ <= endX)
+                    {
+                        char cc = *pos++;
+                        if(cc == '*')
+                        {
+                            gearNumbers[width * startY + i].push_back(digit);
+                        }
+                    }
+                    startY++;
                 }
             }
             digit = 0;
-            gearIndices.clear();
+            digitCount = 0;
+            if(*data == '\n')
+            {
+                x = 0;
+                y++;
+                data++;
+                continue;
+            }
+
         }
         ++data;
         ++x;
+
     }
     int sum = 0;
     for(const auto& value : gearNumbers)

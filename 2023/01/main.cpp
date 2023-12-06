@@ -1,4 +1,5 @@
 #include <assert.h> // assert
+#include <bit> // std::count
 #include <ctype.h> //isdigit
 #include <immintrin.h> // SIMD
 #include <stdint.h> // intptr
@@ -43,7 +44,7 @@ static const char* sLineEnds[2000];
 static int sLineNumbers = 0;
 
 
-static void sFindLines(const char* str, int len)
+static void sFindLineBreaks(const char* str, int len)
 {
     sLineNumbers = 0;
     assert((intptr_t(str) % 16) == 0);
@@ -59,14 +60,16 @@ static void sFindLines(const char* str, int len)
     {
         __m128i value = _mm_loadu_si128(ptr);
         __m128i found = _mm_cmpeq_epi8(value, findChar);
-        int mask = _mm_movemask_epi8(found);
+        uint32_t mask = _mm_movemask_epi8(found);
         int offset = 0;
         while(mask)
         {
-            if(mask & 1)
-            {
-                sLineEnds[sLineNumbers++] = str + offset + pos;
-            }
+            int zeros = std::countr_zero(mask);
+            mask = mask >> zeros;
+            offset += zeros;
+
+            sLineEnds[sLineNumbers++] = str + offset + pos;
+
             mask >>= 1;
             offset++;
         }
@@ -160,7 +163,7 @@ static void sParse01A(const char* data, bool printOut)
             __m128i numbsMask = _mm_and_si128(lt10, gt0);
             __m128i numbs = _mm_and_si128(sub, numbsMask);
 
-            int mask = _mm_movemask_epi8(numbsMask);
+            uint32_t mask = _mm_movemask_epi8(numbsMask);
             if(mask)
             {
                 alignas(16) int8_t values[16];
@@ -168,11 +171,13 @@ static void sParse01A(const char* data, bool printOut)
                 int offset = 0;
                 while(mask)
                 {
-                    if(mask & 1)
-                    {
-                        last = (int)values[offset];
-                        first = first == 0 ? last : first;
-                    }
+                    int zeros = std::countr_zero(mask);
+                    mask = mask >> zeros;
+                    offset += zeros;
+
+                    last = (int)values[offset];
+                    first = first == 0 ? last : first;
+
                     offset++;
                     mask >>= 1;
                 }
@@ -231,7 +236,7 @@ static void sParse01B(const char* data, bool printOut)
 #ifndef RUNNER
 int main()
 {
-    sFindLines(data01A, sizeof(data01A));
+    sFindLineBreaks(data01A, sizeof(data01A));
 
 
     sParse01A(data01A, true);
@@ -244,7 +249,7 @@ int main()
 
 void parse01()
 {
-    sFindLines(data01A, sizeof(data01A));
+    sFindLineBreaks(data01A, sizeof(data01A));
 }
 
 void run01A(bool printOut)
