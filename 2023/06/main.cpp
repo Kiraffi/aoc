@@ -17,7 +17,7 @@
 
 #include "input.cpp"
 
-alignas(16) static constexpr char testA[] =
+alignas(16) static constexpr char test06A[] =
     R"(Time:      7  15   30
 Distance:  9  40  200
 )";

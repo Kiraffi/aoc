@@ -23,6 +23,8 @@ int run05A(bool printOut, char* buffer);
 int run05B(bool printOut, char* buffer);
 int run06A(bool printOut, char* buffer);
 int run06B(bool printOut, char* buffer);
+int run07A(bool printOut, char* buffer);
+int run07B(bool printOut, char* buffer);
 
 using RunFunc = int (*)(bool, char*);
 using ParseFunc = void (*)();
@@ -65,7 +67,7 @@ static void sAddLineBreak()
     charBufferIndex += sprintf(charBuffer + charBufferIndex, "\n");
 }
 
-int runAll(bool unused, char* buffer)
+int runAll(bool, char*)
 {
     measureParse(sParseAmount, "01", parse01);
     measureRun(sParseAmount, "01A", run01A);
@@ -86,6 +88,9 @@ int runAll(bool unused, char* buffer)
     sAddLineBreak();
     measureRun(sParseAmount, "06A", run06A);
     measureRun(sParseAmount, "06B", run06B);
+    sAddLineBreak();
+    measureRun(sParseAmount, "07A", run07A);
+    measureRun(sParseAmount, "07B", run07B);
     sAddLineBreak();
     return 0;
 }

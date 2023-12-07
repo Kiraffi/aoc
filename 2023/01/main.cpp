@@ -69,7 +69,6 @@ static void sFindLineBreaks(const char* str, int len)
     const __m128i* end = ptr + (len / 16);
 
     const __m128i findChar = _mm_set1_epi8('\n');
-    const __m128i zero = _mm_set1_epi8(0);
     int pos = 0;
     while(ptr < end)
     {
@@ -152,8 +151,8 @@ static int sParse01A(const char* data)
         int first = 0;
         int last = 0;
         const __m128i* ptr = (const __m128i *)(data);
-        const __m128i* const end = (const __m128i * const)sLineEnds[i];
-        intptr_t len = sLineEnds[i] - data;
+        const __m128i* end = (const __m128i *)(sLineEnds[i]);
+        intptr_t len = intptr_t (sLineEnds[i] - data);
         while(ptr < end)
         {
             __m128i value = _mm_loadu_si128(ptr);
@@ -170,9 +169,9 @@ static int sParse01A(const char* data)
             // And the masks together to find numbers between 1 and 9.
             __m128i numbsMask = _mm_and_si128(lt10, gt0);
 
-            uint32_t mask = _mm_movemask_epi8(numbsMask);
-            if(mask)
+            if(_mm_test_all_ones(~numbsMask) == 0)
             {
+                uint32_t mask = _mm_movemask_epi8(numbsMask);
                 // char - '0'
                 __m128i sub = _mm_sub_epi8(value, zeroChar);
                 __m128i numbs = _mm_and_si128(sub, numbsMask);
