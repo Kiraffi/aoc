@@ -194,7 +194,7 @@ static int64_t sCalculateWinnings(const std::vector<std::vector<Hand>>& allHands
 
 }
 
-static int64_t sParse07A(const char* data, MapCharFn mapFn)
+static int64_t sParse07A(const char* data)
 {
     std::vector<std::vector<Hand>> allHands;
     allHands.resize(HandType::HandTypeCount, {});
@@ -209,7 +209,7 @@ static int64_t sParse07A(const char* data, MapCharFn mapFn)
         for(int i = 0; i < 5; ++i)
         {
             char c = *data++;
-            c = mapFn(c) - '0';
+            c = sMapCardCharA(c) - '0';
 
             hand <<= 4;
             hand |= c;
@@ -226,7 +226,7 @@ static int64_t sParse07A(const char* data, MapCharFn mapFn)
     return sCalculateWinnings(allHands);
 }
 
-static int64_t sParse07B(const char* data, MapCharFn mapFn)
+static int64_t sParse07B(const char* data)
 {
     std::vector<std::vector<Hand>> allHands;
     allHands.resize(HandType::HandTypeCount, {});
@@ -240,7 +240,7 @@ static int64_t sParse07B(const char* data, MapCharFn mapFn)
         for(int i = 0; i < 5; ++i)
         {
             char c = *data++;
-            c = mapFn(c) - '0';
+            c = sMapCardCharB(c) - '0';
 
             hand <<= 4;
             hand |= c;
@@ -270,8 +270,8 @@ static int64_t sParse07B(const char* data, MapCharFn mapFn)
 #ifndef RUNNER
 int main()
 {
-    printf("7A: winnings: %" PRIi64 "\n", sParse07A(data07A, sMapCardCharA));
-    printf("7B: winnings: %" PRIi64 "\n", sParse07B(data07A, sMapCardCharB));
+    printf("7A: winnings: %" PRIi64 "\n", sParse07A(data07A));
+    printf("7B: winnings: %" PRIi64 "\n", sParse07B(data07A));
     return 0;
 }
 #endif
@@ -279,7 +279,7 @@ int main()
 int run07A(bool printOut, char* buffer)
 {
     int charsAdded = 0;
-    int64_t aResult = sParse07A(data07A, sMapCardCharA);
+    int64_t aResult = sParse07A(data07A);
 
     if(printOut)
         charsAdded = sprintf(buffer, "7A: Potential records: %" PRIi64, aResult);
@@ -289,7 +289,7 @@ int run07A(bool printOut, char* buffer)
 int run07B(bool printOut, char* buffer)
 {
     int charsAdded = 0;
-    int64_t resultB = sParse07B(data07A, sMapCardCharB);
+    int64_t resultB = sParse07B(data07A);
 
     if(printOut)
         charsAdded = sprintf(buffer, "6B: Potential records: %" PRIi64, resultB);
