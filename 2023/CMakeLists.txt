@@ -14,6 +14,7 @@ add_subdirectory(04)
 add_subdirectory(05)
 add_subdirectory(06)
 add_subdirectory(07)
+add_executable(08exec "08/main.cpp")
 
 
 add_executable(runall "mainrunner.cpp"
@@ -24,5 +25,6 @@ add_executable(runall "mainrunner.cpp"
         "05/main.cpp"
         "06/main.cpp"
         "07/main.cpp"
+        "08/main.cpp"
 )
 target_compile_definitions(runall PRIVATE RUNNER=1 )
