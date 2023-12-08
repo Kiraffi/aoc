@@ -10,6 +10,7 @@ static int charBufferIndex = 0;
 
 void parse01();
 void parse05();
+void parse08();
 
 int run01A(bool printOut, char* buffer);
 int run01B(bool printOut, char* buffer);
@@ -94,6 +95,7 @@ int runAll(bool, char*)
     measureRun(sParseAmount, "07A", run07A);
     measureRun(sParseAmount, "07B", run07B);
     sAddLineBreak();
+    measureParse(sParseAmount, "08", parse08);
     measureRun(sParseAmount, "08A", run08A);
     measureRun(sParseAmount, "08B", run08B);
     sAddLineBreak();

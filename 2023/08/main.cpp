@@ -93,41 +93,129 @@ int sFindPrimes(int64_t value, int64_t* primeOut)
     return primeCount;
 }
 
-static uint32_t table[65536] = {};
+static uint32_t table[2048] = {};
+
+static uint16_t table2[65536] = {};
+static uint32_t startTable[8] = {};
+static int startCount = 1;
+static int tableCount = 1;
+static int zAmount = 0;
+
+static int sGetChars(const char** data)
+{
+    static const int endPoint = 25 + (25 << 5) + (25 << 10);
+    static const int zMask = 0x1f << 10;
+    static const int A = 0;
+    static const int Z = 25 << 10;
+    const char* ptr = *data;
+
+    uint16_t index = sGetChar(*ptr++);
+    index += sGetChar(*ptr++) << 5;
+    index += sGetChar(*ptr++) << 10;
+
+    bool isA = (index & zMask) == A;
+
+
+    if(index == endPoint)
+    {
+        index = 1024;
+    }
+    else if(index == A)
+    {
+        index = 1023;
+        startTable[0] = index;
+    }
+    else if((index & zMask) == Z)
+    {
+        if(table2[index] == 0)
+        {
+            int newIndex = 1025 + zAmount;
+            table2[index] = newIndex;
+            index = newIndex;
+            zAmount++;
+        }
+        else
+        {
+            index = table2[index];
+        }
+    }
+    else
+    {
+        if(table2[index] == 0)
+        {
+            table2[index] = tableCount;
+            index = tableCount;
+            tableCount++;
+            if(isA)
+            {
+
+                startTable[startCount] = index;
+                startCount++;
+            }
+        }
+        else
+        {
+            index = table2[index];
+        }
+        /*
+        auto iter = mapping.find(index);
+        if(iter == mapping.end())
+        {
+            int currSize = mapping.size();
+            mapping[index] = currSize;
+            index = currSize;
+        }
+        else
+        {
+            //printf("index: %i vs %i\n", index, iter->second);
+            index = iter->second;
+        }
+         */
+    }
+    *data = ptr;
+    return index;
+}
+
+static void sParseValues08(const char* data)
+{
+    //memset(table, 0, sizeof(table));
+    memset(table2, 0, sizeof(table2));
+    startCount = 1;
+    tableCount = 1;
+    zAmount = 0;
+
+    while(*data++ != '\n');
+    data++;
+
+    while(*data)
+    {
+        uint16_t index = sGetChars(&data);
+        data += 4;
+        uint32_t left = sGetChars(&data);
+        data += 2;
+        uint32_t right = sGetChars(&data);
+        right <<= 16;
+
+        table[index] = left | right;
+        data += 2;
+    }
+
+}
 
 static int64_t sParse08A(const char* data)
 {
     const char* start = data;
     const char* end = data;
     while(*end != '\n') end++;
-    data = end + 2;
 
-    while(*data)
-    {
-        uint16_t index = sGetChar(*data++);
-        index += sGetChar(*data++) << 5;
-        index += sGetChar(*data++) << 10;
+    //const char* str = "AAA";
+    int index = 1023; // sGetChars(&str);
 
-        data += 4;
-        uint32_t left = sGetChar(*data++);
-        left += sGetChar(*data++) << 5;
-        left += sGetChar(*data++) << 10;
-
-        data += 2;
-        uint32_t right = sGetChar(*data++);
-        right += sGetChar(*data++) << 5;
-        right += sGetChar(*data++) << 10;
-
-        right <<= 16;
-
-        table[index] = left | right;
-        data += 2;
-    }
-    static const int endPoint = 25 + (25 << 5) + (25 << 10);
-    int index = 0;
-    int64_t steps = 0;
     data = start;
-    while(index != endPoint)
+
+    int64_t steps = 0;
+
+    while(index != 1024)// endPoint)
     {
         if(*data == 'L')
         {
@@ -152,43 +240,14 @@ static int64_t sParse08B(const char* data)
     const char* start = data;
     const char* end = data;
     while(*end != '\n') end++;
-    data = end + 2;
 
-    int nodesEndingWithA = 0;
-
-    int starts[32] = {};
-    static constexpr int Z = 0b11001 << 10;
-
-    while(*data)
-    {
-        bool isA = false;
-        uint16_t index = sGetChar(*data++);
-        index += sGetChar(*data++) << 5;
-        if(*data == 'A')
-            isA = true;
-        index += sGetChar(*data++) << 10;
-        if(isA)
-            starts[nodesEndingWithA++] = index;
-
-        data += 4;
-        uint32_t left = sGetChar(*data++);
-        left += sGetChar(*data++) << 5;
-        left += sGetChar(*data++) << 10;
-
-        data += 2;
-        uint32_t right = sGetChar(*data++);
-        right += sGetChar(*data++) << 5;
-        right += sGetChar(*data++) << 10;
-
-        right <<= 16;
-
-        table[index] = left | right;
-        data += 2;
-    }
-
+    static constexpr int Z = 1024;
 
     int64_t steps = 0;
     data = start;
+
+    uint32_t starts[8];
+    memcpy(starts, startTable, 8 * 4);
     // Looks like the first index is same as loop index for my input.
     int64_t loops[8] = {};
     int indicesFound = 0;
@@ -197,7 +256,7 @@ static int64_t sParse08B(const char* data)
         steps++;
         if(*data == 'L')
         {
-            for(int i = 0; i < nodesEndingWithA; ++i)
+            for(int i = 0; i < startCount; ++i)
             {
                 starts[i] = table[starts[i]] & 0xffff;
                 if((starts[i] & Z ) == Z)
@@ -209,7 +268,7 @@ static int64_t sParse08B(const char* data)
         }
         else
         {
-            for(int i = 0; i < nodesEndingWithA; ++i)
+            for(int i = 0; i < startCount; ++i)
             {
                 starts[i] = table[starts[i]] >> 16;
                 if((starts[i] & Z ) == Z)
@@ -222,7 +281,7 @@ static int64_t sParse08B(const char* data)
         data++;
         if(data == end)
             data = start;
-        if(indicesFound == ((1 << nodesEndingWithA) - 1))
+        if(indicesFound == ((1 << startCount) - 1))
             break;
     }
 
@@ -233,7 +292,7 @@ static int64_t sParse08B(const char* data)
     int64_t mergedPrimes[32] = {};
 
 
-    for(int i = 0; i < nodesEndingWithA; ++i)
+    for(int i = 0; i < startCount; ++i)
     {
         int64_t *currentPrimes = primes[i];
         int& currentPrimeCount = primeCounts[i];
@@ -265,6 +324,7 @@ static int64_t sParse08B(const char* data)
 
 
     int64_t leastCommonMultiple = 1;
+
     for(int i = 0; i < mergedPrimeCounts; ++i)
     {
         leastCommonMultiple *= mergedPrimes[i];
@@ -276,11 +336,18 @@ static int64_t sParse08B(const char* data)
 #ifndef RUNNER
 int main()
 {
+    sParseValues08(data08A);
     printf("8A: Steps: %" PRIi64 "\n", sParse08A(data08A));
     printf("8B: Steps: %" PRIi64 "\n", sParse08B(data08A));
     return 0;
 }
 #endif
+
+void parse08()
+{
+    sParseValues08(data08A);
+}
+
 
 int run08A(bool printOut, char* buffer)
 {
