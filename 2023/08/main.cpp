@@ -92,6 +92,7 @@ int sFindPrimes(int64_t value, int64_t* primeOut)
     }
     return primeCount;
 }
+//static uint32_t table[2048] = {};
 
 static uint32_t table[2048] = {};
 
