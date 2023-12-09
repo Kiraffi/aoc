@@ -199,25 +199,43 @@ static int64_t sParse07A(const char* data)
     std::vector<std::vector<Hand>> allHands;
     allHands.resize(HandType::HandTypeCount, {});
 
+    uint32_t cards[5] = {};
+
     while(*data)
     {
-        int cards[16] = {};
-        int64_t hand = 0;
+        int hand = 0;
 
         int kinds = 0;
         int same = 0;
+        uint32_t checked = 0;
         for(int i = 0; i < 5; ++i)
         {
             char c = *data++;
-            c = sMapCardCharA(c) - '0';
+            c = char(sMapCardCharA(c) - '1');
 
             hand <<= 4;
             hand |= c;
-            int& cardCount = cards[(int)c];
-            kinds += (cardCount++ == 0) ? 1 : 0;
 
-            same = same < cardCount ? cardCount : same;
+            cards[4 - i] = c * 0x11111;
         }
+        for(int i = 0; i < 5; ++i)
+        {
+            if(checked  & (1 << (4 * i)))
+                continue;
+            uint32_t value = cards[i] ^ hand;
+            value = ~value;
+            value = value & (value >> 2);
+            value = value & (value >> 1);
+            value &= 0x11111;
+            assert(value);
+            checked |= value;
+            kinds++;
+            int currentSame = std::popcount(value);
+            same = same < currentSame ? currentSame : same;
+
+        }
+        assert(checked == 0x11111);
+
         int bid = sParserNumber(0, &data);
         sAddToHands(hand, bid, same, kinds, allHands);
         data++;
@@ -233,7 +251,7 @@ static int64_t sParse07B(const char* data)
 
     while(*data)
     {
-        int cards[16] = {};
+        char cards[16] = {};
         int64_t hand = 0;
         int kinds = 0;
         int same = 0;
@@ -244,7 +262,7 @@ static int64_t sParse07B(const char* data)
 
             hand <<= 4;
             hand |= c;
-            int& cardCount = cards[(int)c];
+            char& cardCount = cards[(int)c];
             cardCount++;
             if(c != 1)
             {
@@ -282,7 +300,7 @@ int run07A(bool printOut, char* buffer)
     int64_t aResult = sParse07A(data07A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "7A: Potential records: %" PRIi64, aResult);
+        charsAdded = sprintf(buffer, "7A: winnings: %" PRIi64, aResult);
     return charsAdded;
 }
 
@@ -292,7 +310,7 @@ int run07B(bool printOut, char* buffer)
     int64_t resultB = sParse07B(data07A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "6B: Potential records: %" PRIi64, resultB);
+        charsAdded = sprintf(buffer, "7B: winnings: %" PRIi64, resultB);
 
     return charsAdded;
 }

@@ -123,8 +123,8 @@ static int64_t sParse09B(const char* data)
 #ifndef RUNNER
 int main()
 {
-    printf("9A: Potential records: %" PRIi64 "\n", sParse09A(data09A));
-    printf("9B: Potential records: %" PRIi64 "\n", sParse09B(data09A));
+    printf("9A: Value: %" PRIi64 "\n", sParse09A(data09A));
+    printf("9B: Value: %" PRIi64 "\n", sParse09B(data09A));
     return 0;
 }
 #endif
@@ -135,7 +135,7 @@ int run09A(bool printOut, char* buffer)
     int64_t aResult = sParse09A(data09A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "9A: Potential records: %" PRIi64, aResult);
+        charsAdded = sprintf(buffer, "9A: Value: %" PRIi64, aResult);
     return charsAdded;
 }
 
@@ -145,7 +145,7 @@ int run09B(bool printOut, char* buffer)
     int64_t resultB = sParse09B(data09A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "9B: Potential records: %" PRIi64, resultB);
+        charsAdded = sprintf(buffer, "9B: Value: %" PRIi64, resultB);
 
     return charsAdded;
 }
