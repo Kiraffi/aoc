@@ -104,27 +104,23 @@ static int64_t sParse09A(const char* data)
 static int64_t sParse09B(const char* data)
 {
     int64_t sum = 0;
-    int64_t number = 0;
+    int64_t previousNumber = 0;
     int previosLevel = 0;
     sGetValues(data, [&](const int64_t* numbers, int, int level)
     {
         int64_t newNumber = numbers[0];
         if(previosLevel == 0)
         {
-            sum += number;
-            number = 0;
-        }
-        else if(number == 0)
-        {
-            number = newNumber;
+            sum += previousNumber;
+            previousNumber = 0;
         }
         else
         {
-            number = newNumber - number;
+            previousNumber = newNumber - previousNumber;
         }
         previosLevel = level;
     });
-    sum += number;
+    sum += previousNumber;
     return sum;
 }
 
