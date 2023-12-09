@@ -81,6 +81,8 @@ static void sGetValues(const char* data, T&& lambdaFn)
             level++;
             numberIndex--;
         }
+        level--;
+        numberIndex++;
         while (level)
         {
             lambdaFn(numbers[level - 1], numberIndex, level - 1);
@@ -105,22 +107,16 @@ static int64_t sParse09B(const char* data)
 {
     int64_t sum = 0;
     int64_t previousNumber = 0;
-    int previosLevel = 0;
     sGetValues(data, [&](const int64_t* numbers, int, int level)
     {
         int64_t newNumber = numbers[0];
-        if(previosLevel == 0)
+        previousNumber = newNumber - previousNumber;
+        if(level == 0)
         {
             sum += previousNumber;
             previousNumber = 0;
         }
-        else
-        {
-            previousNumber = newNumber - previousNumber;
-        }
-        previosLevel = level;
     });
-    sum += previousNumber;
     return sum;
 }
 
