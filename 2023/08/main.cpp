@@ -92,86 +92,38 @@ int sFindPrimes(int64_t value, int64_t* primeOut)
     }
     return primeCount;
 }
-//static uint32_t table[2048] = {};
 
-static uint32_t table[2048] = {};
+static const uint16_t AStart = 0;
+static const uint16_t ZEnd = 25 + (25 << 5) + (25 << 10);
+static const uint16_t ZValue = 25 << 10;
+static const uint16_t ZMask = 0x1f << 10;
 
-static uint16_t table2[65536] = {};
+static uint32_t table[65536] = {};
+
 static uint32_t startTable[8] = {};
-static int startCount = 1;
-static int tableCount = 1;
-static int zAmount = 0;
+static int startCount = 0;
 
 static int sGetChars(const char** data)
 {
-    static const int endPoint = 25 + (25 << 5) + (25 << 10);
-    static const int zMask = 0x1f << 10;
     static const int A = 0;
-    static const int Z = 25 << 10;
     const char* ptr = *data;
 
     uint16_t index = sGetChar(*ptr++);
     index += sGetChar(*ptr++) << 5;
     index += sGetChar(*ptr++) << 10;
 
-    bool isA = (index & zMask) == A;
-
-
-    if(index == endPoint)
+    bool isA = (index & ZMask) == A;
+    if(isA)
     {
-        index = 1024;
-    }
-    else if(index == A)
-    {
-        index = 1023;
-        startTable[0] = index;
-    }
-    else if((index & zMask) == Z)
-    {
-        if(table2[index] == 0)
+        startTable[startCount++] = index;
+        for(int i = 0; i < startCount - 1; ++i)
         {
-            int newIndex = 1025 + zAmount;
-            table2[index] = newIndex;
-            index = newIndex;
-            zAmount++;
-        }
-        else
-        {
-            index = table2[index];
-        }
-    }
-    else
-    {
-        if(table2[index] == 0)
-        {
-            table2[index] = tableCount;
-            index = tableCount;
-            tableCount++;
-            if(isA)
+            if(startTable[i] == index)
             {
-
-                startTable[startCount] = index;
-                startCount++;
+                startCount--;
+                break;
             }
         }
-        else
-        {
-            index = table2[index];
-        }
-        /*
-        auto iter = mapping.find(index);
-        if(iter == mapping.end())
-        {
-            int currSize = mapping.size();
-            mapping[index] = currSize;
-            index = currSize;
-        }
-        else
-        {
-            //printf("index: %i vs %i\n", index, iter->second);
-            index = iter->second;
-        }
-         */
     }
     *data = ptr;
     return index;
@@ -179,12 +131,7 @@ static int sGetChars(const char** data)
 
 static void sParseValues08(const char* data)
 {
-    //memset(table, 0, sizeof(table));
-    memset(table2, 0, sizeof(table2));
-    startCount = 1;
-    tableCount = 1;
-    zAmount = 0;
-
+    startCount = 0;
     while(*data++ != '\n');
     data++;
 
@@ -210,13 +157,13 @@ static int64_t sParse08A(const char* data)
     while(*end != '\n') end++;
 
     //const char* str = "AAA";
-    int index = 1023; // sGetChars(&str);
+    int index = AStart; // sGetChars(&str);
 
     data = start;
 
     int64_t steps = 0;
 
-    while(index != 1024)// endPoint)
+    while(index != ZEnd)// endPoint)
     {
         if(*data == 'L')
         {
@@ -242,7 +189,7 @@ static int64_t sParse08B(const char* data)
     const char* end = data;
     while(*end != '\n') end++;
 
-    static constexpr int Z = 1024;
+    //static constexpr int Z = 1024;
 
     int64_t steps = 0;
     data = start;
@@ -260,7 +207,7 @@ static int64_t sParse08B(const char* data)
             for(int i = 0; i < startCount; ++i)
             {
                 starts[i] = table[starts[i]] & 0xffff;
-                if((starts[i] & Z ) == Z)
+                if((starts[i] & ZMask) == ZValue)
                 {
                     loops[i] = steps;
                     indicesFound |= 1 << i;
@@ -272,7 +219,7 @@ static int64_t sParse08B(const char* data)
             for(int i = 0; i < startCount; ++i)
             {
                 starts[i] = table[starts[i]] >> 16;
-                if((starts[i] & Z ) == Z)
+                if((starts[i] & ZMask) == ZValue)
                 {
                     loops[i] = steps;
                     indicesFound |= 1 << i;
