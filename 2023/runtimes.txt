@@ -1,34 +1,34 @@
-Parsing 01: 12.013000us
-Sum of lines 1A: 55123 | Running 01A: duration 20.045000us
-Sum of lines 1B: 55260 | Running 01B: duration 33.664001us
+Parsing 01: 10.896000us
+Sum of lines 1A: 55123 | Running 01A: duration 19.695000us
+Sum of lines 1B: 55260 | Running 01B: duration 35.201000us
 
-2A: Sum of valid Ids: 2913 | Running 02A: duration 18.368000us
-2B: Sum of min multiplies Ids: 55593 | Running 02B: duration 18.159000us
+2A: Sum of valid Ids: 2913 | Running 02A: duration 18.229000us
+2B: Sum of min multiplies Ids: 55593 | Running 02B: duration 17.530001us
 
-3A: Sum of valid digits: 535078 | Running 03A: duration 35.758999us
-3B: Sum of gear ratios: 75312571 | Running 03B: duration 21.023001us
+3A: Sum of valid digits: 535078 | Running 03A: duration 34.921001us
+3B: Sum of gear ratios: 75312571 | Running 03B: duration 22.209999us
 
-4A: Card points: 20829 | Running 04A: duration 28.146999us
-4B: Cards: 12648035 | Running 04B: duration 24.724001us
+4A: Card points: 20829 | Running 04A: duration 27.937000us
+4B: Cards: 12648035 | Running 04B: duration 23.955999us
 
-Parsing 05: 21.023001us
-5A: Smallest seed: 525792406 | Running 05A: duration 3.772000us
-5B: Smallest seed: 79004094 | Running 05B: duration 8.731000us
+Parsing 05: 21.021999us
+5A: Smallest seed: 525792406 | Running 05A: duration 4.260000us
+5B: Smallest seed: 79004094 | Running 05B: duration 9.429000us
 
-6A: Potential records: 588588 | Running 06A: duration 1.886000us
+6A: Potential records: 588588 | Running 06A: duration 1.466000us
 6B: Potential records: 34655848 | Running 06B: duration 1.397000us
 
-7A: Potential records: 253866470 | Running 07A: duration 72.775002us
-6B: Potential records: 254494947 | Running 07B: duration 64.814003us
+7A: winnings: 253866470 | Running 07A: duration 81.016998us
+7B: winnings: 254494947 | Running 07B: duration 65.302002us
 
-Parsing 08: 64.813004us
-8A: Steps: 14257 | Running 08A: duration 24.794001us
-8B: Steps: 16187743689077 | Running 08B: duration 76.406998us
+Parsing 08: 37.365002us
+8A: Steps: 14257 | Running 08A: duration 25.282000us
+8B: Steps: 16187743689077 | Running 08B: duration 87.303001us
 
-9A: Potential records: 1641934234 | Running 09A: duration 51.962002us
-9B: Potential records: 975 | Running 09B: duration 50.634998us
+9A: Value: 1641934234 | Running 09A: duration 53.009998us
+9B: Value: 975 | Running 09B: duration 51.264000us
 
- | Running all: duration 723.560974us
+10A: Steps: 6823 | Running 10A: duration 172.998001us
+10B: Area: 415 | Running 10B: duration 1755.754028us
 
-
-Process finished with exit code 0
+ | Running all avg 1 times: duration 2649.729980us

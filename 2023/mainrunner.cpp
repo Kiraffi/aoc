@@ -5,7 +5,7 @@
 
 static constexpr int sParseAmount = 1;
 
-static char charBuffer[1024 * 1024] = {};
+static char charBuffer[1024 * 1024 * 8] = {};
 static int charBufferIndex = 0;
 
 void parse01();
@@ -30,6 +30,8 @@ int run08A(bool printOut, char* buffer);
 int run08B(bool printOut, char* buffer);
 int run09A(bool printOut, char* buffer);
 int run09B(bool printOut, char* buffer);
+int run10A(bool printOut, char* buffer);
+int run10B(bool printOut, char* buffer);
 
 using RunFunc = int (*)(bool, char*);
 using ParseFunc = void (*)();
@@ -104,12 +106,15 @@ int runAll(bool, char*)
     measureRun(sParseAmount, "09A", run09A);
     measureRun(sParseAmount, "09B", run09B);
     sAddLineBreak();
+    measureRun(sParseAmount, "10A", run10A);
+    measureRun(sParseAmount, "10B", run10B);
+    sAddLineBreak();
     return 0;
 }
 
 int main()
 {
-    measureRun(1, "all", runAll);
+    measureRun(1, "all avg 1 times", runAll);
     printf("%s\n", charBuffer);
     return 0;
 }

@@ -20,6 +20,7 @@ add_executable(10exec "10/main.cpp")
 
 
 add_executable(runall "mainrunner.cpp"
+        "profile.h"
         "01/main.cpp"
         "02/main.cpp"
         "03/main.cpp"
@@ -30,5 +31,6 @@ add_executable(runall "mainrunner.cpp"
         "08/main.cpp"
         "09/main.cpp"
         "10/main.cpp"
+
 )
 target_compile_definitions(runall PRIVATE RUNNER=1 )

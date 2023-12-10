@@ -15,7 +15,11 @@
 #include <unordered_map>
 #include <unordered_set>
 
+
 #include "input.cpp"
+
+#define PROFILE 0
+#include "../profile.h"
 
 alignas(16) static constexpr char test10A[] =
     R"(.....
@@ -324,127 +328,117 @@ static int64_t sParse10B(const char* data)
 {
     int width = 0;
     int height = 0;
-    sGetMapSize(data, width, height);
-
     std::vector<Map> map;
-    map.resize(width * height, Map{});
-    sMarkEdge(data, width, [&](int mapPos){
-        map[mapPos].flags |= HasPipe;
-    });
+    {
+        TIMEDSCOPE("A part");
+        sGetMapSize(data, width, height);
 
-    std::vector<uint8_t> map3x3;
+        map.resize(width * height, Map{});
+        sMarkEdge(data, width, [&](int mapPos) {
+            map[mapPos].flags |= HasPipe;
+        });
+    }
+    std::vector<uint8_t> map4x3;
 
 
     int mapWidth = width * 4;
-    mapWidth = ((mapWidth + 31) / 32) * 32 / 8;
+    mapWidth = ((mapWidth + 127) / 128) * 128 / 8;
     int mapHeight = height * 3;
-    map3x3.resize(mapWidth * mapHeight);
+    map4x3.resize(mapWidth * mapHeight);
 
-    std::vector<uint8_t> map4x4Mask;
-    map4x4Mask.resize(mapWidth * mapHeight);
+    std::vector<uint8_t> map4x3Mask;
+    map4x3Mask.resize(mapWidth * mapHeight);
     for(int i = 0; i < mapWidth; ++i)
-        map4x4Mask[i] = 0xff;
+        map4x3Mask[i] = 0xff;
 
-    std::vector<uint8_t> map4x4Mask2;
-    map4x4Mask2.resize(mapWidth * mapHeight);
+    std::vector<uint8_t> map4x3Mask2;
+    map4x3Mask2.resize(mapWidth * mapHeight);
     for(int i = 0; i < mapWidth; ++i)
-        map4x4Mask2[i] = 0xff;
-
-
-    uint8_t* map4x4MaskCurrent = map4x4Mask.data();
-    uint8_t* map4x4MaskOther = map4x4Mask2.data();
-
-    // Zoom map by 4x4.
-
-
-    for(int j = 0; j < height; j++)
     {
-        uint32_t* line0 = (uint32_t*)(map3x3.data() + (j * 3 + 0) * mapWidth);
-        uint32_t* line1 = (uint32_t*)(map3x3.data() + (j * 3 + 1) * mapWidth);
-        uint32_t* line2 = (uint32_t*)(map3x3.data() + (j * 3 + 2) * mapWidth);
+        map4x3Mask2[i] = 0xff;
+        map4x3Mask2[i + (mapHeight - 1) * mapWidth] = 0xff;
+    }
 
-        //*line08 = 0;
-        //*line18 = 0;
-        //*line28 = 0;
+    uint8_t* map4x3MaskCurrent = map4x3Mask.data();
+    //uint8_t* map4x3MaskOther = map4x3Mask2.data();
 
-        //*line0 = 0;
-        //*line1 = 0;
-        //*line2 = 0;
+    // Zoom map by 4x3.
 
-        for(int i = 0; i < width; ++i)
+    {
+        TIMEDSCOPE("Zoom map");
+        for (int j = 0; j < height; j++)
         {
-            int index = i + j * width;
+            uint8_t *line08 = map4x3.data() + (j * 3 + 0) * mapWidth;
+            uint8_t *line18 = map4x3.data() + (j * 3 + 1) * mapWidth;
+            uint8_t *line28 = map4x3.data() + (j * 3 + 2) * mapWidth;
 
-            int offset = 1 << ((i % 8) * 4);
-            if(data[index] == 'S')
+            uint32_t *line0 = (uint32_t *) line08;
+            uint32_t *line1 = (uint32_t *) line18;
+            uint32_t *line2 = (uint32_t *) line28;
+
+            for (int i = 0; i < width; ++i)
             {
-                *line0 |= 0b0100 * offset;
-                *line1 |= 0b1111 * offset;
-                *line2 |= 0b0100 * offset;
-            }
-            else if (map[index].flags & HasPipe)
-            {
-                switch (data[index])
+                int index = i + j * width;
+
+                uint32_t offset = 1 << ((i % 8) * 4);
+                if (data[index] == 'S')
                 {
-                    case 'F':
-                        *line0 |= 0b0000 * offset;
-                        *line1 |= 0b1100 * offset;
-                        *line2 |= 0b0100 * offset;
-                        break;
-                    case 'L':
-                        *line0 |= 0b0100 * offset;
-                        *line1 |= 0b1100 * offset;
-                        *line2 |= 0b0000 * offset;
-                        break;
-                    case '7':
-                        *line0 |= 0b0000 * offset;
-                        *line1 |= 0b0111 * offset;
-                        *line2 |= 0b0100 * offset;
-                        break;
-                    case 'J':
-                        *line0 |= 0b0100 * offset;
-                        *line1 |= 0b0111 * offset;
-                        *line2 |= 0b0000 * offset;
-                        break;
-                    case '|':
-                        *line0 |= 0b0100 * offset;
-                        *line1 |= 0b0100 * offset;
-                        *line2 |= 0b0100 * offset;
-                        break;
-                    case '-':
-                        *line0 |= 0b0000 * offset;
-                        *line1 |= 0b1111 * offset;
-                        *line2 |= 0b0000 * offset;
-                        break;
+                    *line0 |= 0b0100 * offset;
+                    *line1 |= 0b1111 * offset;
+                    *line2 |= 0b0100 * offset;
+                } else if (map[index].flags & HasPipe)
+                {
+                    switch (data[index])
+                    {
+                        case 'F':
+                            *line0 |= uint32_t(0b0000) * offset;
+                            *line1 |= uint32_t(0b1100) * offset;
+                            *line2 |= uint32_t(0b0100) * offset;
+                            break;
+                        case 'L':
+                            *line0 |= uint32_t(0b0100) * offset;
+                            *line1 |= uint32_t(0b1100) * offset;
+                            *line2 |= uint32_t(0b0000) * offset;
+                            break;
+                        case '7':
+                            *line0 |= uint32_t(0b0000) * offset;
+                            *line1 |= uint32_t(0b0111) * offset;
+                            *line2 |= uint32_t(0b0100) * offset;
+                            break;
+                        case 'J':
+                            *line0 |= uint32_t(0b0100) * offset;
+                            *line1 |= uint32_t(0b0111) * offset;
+                            *line2 |= uint32_t(0b0000) * offset;
+                            break;
+                        case '|':
+                            *line0 |= uint32_t(0b0100) * offset;
+                            *line1 |= uint32_t(0b0100) * offset;
+                            *line2 |= uint32_t(0b0100) * offset;
+                            break;
+                        case '-':
+                            *line0 |= uint32_t(0b0000) * offset;
+                            *line1 |= uint32_t(0b1111) * offset;
+                            *line2 |= uint32_t(0b0000) * offset;
+                            break;
+                    }
+                } else
+                {
+                    *line0 |= uint32_t(0b0000) * offset;
+                    *line1 |= uint32_t(0b0000) * offset;
+                    *line2 |= uint32_t(0b0000) * offset;
+                }
+
+                if ((i % 8) == 7)
+                {
+                    line0++;
+                    line1++;
+                    line2++;
                 }
             }
 
-            else
-            {
-                *line0 |= 0b0000 * offset;
-                *line1 |= 0b0000 * offset;
-                *line2 |= 0b0000 * offset;
-            }
-
-            if((i % 8) == 7)
-            {
-                line0++;
-                line1++;
-                line2++;
-
-                *line0 = 0;
-                *line1 = 0;
-                *line2 = 0;
-            }
+            //sDrawMap(map4x3.data(), mapWidth, mapHeight);
+            //printf("\n");
         }
-//        int shiftAmount = ((8 - (width % 8)) % 8) * 4;
-//        *line0 <<= shiftAmount;
-//        *line1 <<= shiftAmount;
-//        *line2 <<= shiftAmount;
-
-
-        //sDrawMap(map3x3.data(), mapWidth, mapHeight);
-        //printf("\n");
     }
     /*
     for(size_t i = 0; i < map.size(); ++i)
@@ -477,67 +471,81 @@ static int64_t sParse10B(const char* data)
     //sDrawMap(map4x4MaskCurrent, mapWidth, mapHeight);
     //printf("\n\n");
 
-    uint32_t mask = 1; // could be 0
-    while(mask)
+
     {
-        mask = 0;
-        uint8_t* walls = map3x3.data();
-        uint8_t* nextMask = map4x4MaskOther;
-
-        uint8_t* currentMask = map4x4MaskCurrent;
-
-        uint8_t* currentStart = map4x4MaskCurrent;
-        uint8_t* currentEnd = map4x4MaskCurrent + mapWidth * mapHeight;
-
-        for(int j = 0; j < mapHeight; ++j)
+        TIMEDSCOPE("Fill map");
+        uint64_t mask = 1; // could be 0
+        while (mask)
         {
-            uint8_t prevOne = 0;
+            mask = 0;
+            const uint64_t* __restrict__ walls = (const uint64_t* __restrict__) map4x3.data();
 
-            for (int i = 0; i < mapWidth; ++i)
+            uint64_t* __restrict__ currentMask = (uint64_t * __restrict__) map4x3MaskCurrent;
+
+            //uint64_t* currentStart = (uint64_t*)map4x3MaskCurrent;
+            //uint8_t *currentEnd8 = map4x3MaskCurrent + mapWidth * mapHeight;
+            //uint64_t *currentEnd = (uint64_t *) (currentEnd8);
+
+            for (int j = 0; j < mapHeight; ++j)
             {
-                uint8_t old = *currentMask;
-
-                *nextMask = *currentMask;
-                *nextMask |= (*currentMask) >> 1;
-                *nextMask |= (*currentMask) << 1;
-
-                if (currentMask - mapWidth >= currentStart)
+                uint64_t prevOne = 0;
+                int64_t mapWidthOffset = mapWidth / 8;
+                for (int i = 0; i < mapWidthOffset; ++i)
                 {
-                    *nextMask |= *(currentMask - mapWidth);
+                    uint64_t old = *currentMask;
+                    uint64_t wallMask = ~(*walls);
+
+                    if (j > 0)
+                    {
+                        *currentMask |= *(currentMask - mapWidthOffset);
+                    }
+
+                    if (j < mapHeight - 1)
+                    {
+                        *currentMask |= *(currentMask + mapWidthOffset);
+                    }
+
+                    *currentMask |= prevOne >> 63;
+
+                    if (i < mapWidth - 1)
+                    {
+                        uint64_t nextRead = *(currentMask + 1);
+                        nextRead <<= 63;
+                        *currentMask |= nextRead;
+                    }
+                    *currentMask &= wallMask;
+
+                    //*nextMask |= (*currentMask) >> 1;
+                    //*nextMask |= (*currentMask) << 1;
+
+                    {
+                        uint64_t miniMask = 1;
+                        while (miniMask)
+                        {
+                            miniMask = 0;
+                            uint64_t startValue = *currentMask;
+
+                            *currentMask |= (*currentMask) >> 1;
+                            *currentMask |= (*currentMask) << 1;
+
+                            *currentMask &= wallMask;
+                            miniMask = startValue ^ *currentMask;
+                        }
+                    }
+                    // Do not set the walls
+                    //*nextMask &= wallMask;
+                    // Check the mask
+                    mask |= old ^ *currentMask;
+                    prevOne = *currentMask;
+
+                    ++currentMask;
+                    ++walls;
                 }
-
-                if (currentMask + mapWidth < currentEnd)
-                {
-                    *nextMask |= *(currentMask + mapWidth);
-                }
-
-                prevOne >>= 7;
-                *nextMask |= prevOne;
-
-                if (i < mapWidth - 1)
-                {
-                    uint8_t nextRead = *(currentMask + 1);
-                    nextRead <<= 7;
-                    *nextMask |= nextRead;
-                }
-                // Do not set the walls
-                *nextMask &= ~(*walls);
-
-                // Check the mask
-                mask |= old ^ *nextMask;
-                prevOne = *currentMask;
-
-                ++nextMask;
-                ++walls;
-                ++currentMask;
             }
+            //sDrawMap(map4x3MaskCurrent, mapWidth, mapHeight);
+            //printf("\n\n");
         }
-        std::swap(map4x4MaskCurrent, map4x4MaskOther);
-
-        //sDrawMap(map4x4MaskCurrent, mapWidth, mapHeight);
-        //printf("\n\n");
     }
-
 
 
 
@@ -548,9 +556,9 @@ static int64_t sParse10B(const char* data)
         {
             uint8_t mapMask = 0;
 
-            mapMask |= map4x4MaskCurrent[i + (j * 3 + 0) * mapWidth];
-            mapMask |= map4x4MaskCurrent[i + (j * 3 + 1) * mapWidth];
-            mapMask |= map4x4MaskCurrent[i + (j * 3 + 2) * mapWidth];
+            mapMask |= map4x3MaskCurrent[i + (j * 3 + 0) * mapWidth];
+            mapMask |= map4x3MaskCurrent[i + (j * 3 + 1) * mapWidth];
+            mapMask |= map4x3MaskCurrent[i + (j * 3 + 2) * mapWidth];
 
             if((mapMask & 0xf) == 0)
                 emptySpots++;
