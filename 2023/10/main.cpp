@@ -146,6 +146,36 @@ static void sGetMapSize(const char* data, int& width, int& height)
     }
 }
 
+
+/*
+static void sDrawMap(const uint8_t* map, int width, int height)
+{
+    for (int j = 0; j < height; ++j)
+    {
+        for (int i = 0; i < width; ++i)
+        {
+            uint8_t c = map[j * width + i];
+            for (int k = 0; k < 8; ++k)
+            {
+                if (c & 1)
+                {
+                    printf("*");
+                }
+                else
+                {
+                    printf(".");
+
+                }
+                c >>= 1;
+            }
+        }
+        printf("\n");
+
+    }
+}
+*/
+
+
 template<typename T>
 static int64_t sMarkEdge(const char* data, int width, T&& lambdaFn)
 {
@@ -290,33 +320,6 @@ static int64_t sParse10A(const char* data)
     return steps;
 }
 
-/*
-static void sDrawMap(const uint8_t* map, int width, int height)
-{
-    for (int j = 0; j < height; ++j)
-    {
-        for (int i = 0; i < width; ++i)
-        {
-            uint8_t c = map[j * width + i];
-            for (int k = 0; k < 8; ++k)
-            {
-                if (c & 128)
-                {
-                    printf("*");
-                } else
-                {
-                    printf(".");
-
-                }
-                c <<= 1;
-            }
-        }
-        printf("\n");
-
-    }
-}
-*/
-
 static int64_t sParse10B(const char* data)
 {
     int width = 0;
@@ -356,76 +359,74 @@ static int64_t sParse10B(const char* data)
 
     for(int j = 0; j < height; j++)
     {
-        uint8_t* line0 = (map3x3.data() + (j * 3 + 0) * mapWidth);
-        uint8_t* line1 = (map3x3.data() + (j * 3 + 1) * mapWidth);
-        uint8_t* line2 = (map3x3.data() + (j * 3 + 2) * mapWidth);
+        uint32_t* line0 = (uint32_t*)(map3x3.data() + (j * 3 + 0) * mapWidth);
+        uint32_t* line1 = (uint32_t*)(map3x3.data() + (j * 3 + 1) * mapWidth);
+        uint32_t* line2 = (uint32_t*)(map3x3.data() + (j * 3 + 2) * mapWidth);
 
         //*line08 = 0;
         //*line18 = 0;
         //*line28 = 0;
 
-        *line0 = 0;
-        *line1 = 0;
-        *line2 = 0;
+        //*line0 = 0;
+        //*line1 = 0;
+        //*line2 = 0;
 
         for(int i = 0; i < width; ++i)
         {
             int index = i + j * width;
-            *line0 <<= 4;
-            *line1 <<= 4;
-            *line2 <<= 4;
 
+            int offset = 1 << ((i % 8) * 4);
             if(data[index] == 'S')
             {
-                *line0 |= 0b0100;
-                *line1 |= 0b1111;
-                *line2 |= 0b0100;
+                *line0 |= 0b0100 * offset;
+                *line1 |= 0b1111 * offset;
+                *line2 |= 0b0100 * offset;
             }
             else if (map[index].flags & HasPipe)
             {
                 switch (data[index])
                 {
                     case 'F':
-                        *line0 |= 0b0000;
-                        *line1 |= 0b0111;
-                        *line2 |= 0b0100;
+                        *line0 |= 0b0000 * offset;
+                        *line1 |= 0b1100 * offset;
+                        *line2 |= 0b0100 * offset;
                         break;
                     case 'L':
-                        *line0 |= 0b0100;
-                        *line1 |= 0b0111;
-                        *line2 |= 0b0000;
+                        *line0 |= 0b0100 * offset;
+                        *line1 |= 0b1100 * offset;
+                        *line2 |= 0b0000 * offset;
                         break;
                     case '7':
-                        *line0 |= 0b0000;
-                        *line1 |= 0b1100;
-                        *line2 |= 0b0100;
+                        *line0 |= 0b0000 * offset;
+                        *line1 |= 0b0111 * offset;
+                        *line2 |= 0b0100 * offset;
                         break;
                     case 'J':
-                        *line0 |= 0b0100;
-                        *line1 |= 0b1100;
-                        *line2 |= 0b0000;
+                        *line0 |= 0b0100 * offset;
+                        *line1 |= 0b0111 * offset;
+                        *line2 |= 0b0000 * offset;
                         break;
                     case '|':
-                        *line0 |= 0b0100;
-                        *line1 |= 0b0100;
-                        *line2 |= 0b0100;
+                        *line0 |= 0b0100 * offset;
+                        *line1 |= 0b0100 * offset;
+                        *line2 |= 0b0100 * offset;
                         break;
                     case '-':
-                        *line0 |= 0b0000;
-                        *line1 |= 0b1111;
-                        *line2 |= 0b0000;
+                        *line0 |= 0b0000 * offset;
+                        *line1 |= 0b1111 * offset;
+                        *line2 |= 0b0000 * offset;
                         break;
                 }
             }
 
             else
             {
-                *line0 |= 0b0000;
-                *line1 |= 0b0000;
-                *line2 |= 0b0000;
+                *line0 |= 0b0000 * offset;
+                *line1 |= 0b0000 * offset;
+                *line2 |= 0b0000 * offset;
             }
 
-            if((i % 2) == 1)
+            if((i % 8) == 7)
             {
                 line0++;
                 line1++;
@@ -436,9 +437,10 @@ static int64_t sParse10B(const char* data)
                 *line2 = 0;
             }
         }
-        *line0 <<= (width & 1 * 4);
-        *line1 <<= (width & 1 * 4);
-        *line2 <<= (width & 1 * 4);
+//        int shiftAmount = ((8 - (width % 8)) % 8) * 4;
+//        *line0 <<= shiftAmount;
+//        *line1 <<= shiftAmount;
+//        *line2 <<= shiftAmount;
 
 
         //sDrawMap(map3x3.data(), mapWidth, mapHeight);
@@ -509,13 +511,13 @@ static int64_t sParse10B(const char* data)
                     *nextMask |= *(currentMask + mapWidth);
                 }
 
-                prevOne <<= 7;
+                prevOne >>= 7;
                 *nextMask |= prevOne;
 
                 if (i < mapWidth - 1)
                 {
                     uint8_t nextRead = *(currentMask + 1);
-                    nextRead >>= 7;
+                    nextRead <<= 7;
                     *nextMask |= nextRead;
                 }
                 // Do not set the walls
