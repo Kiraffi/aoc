@@ -87,57 +87,21 @@ struct Map
     char flags;
 };
 
-struct MapTile
-{
-    //int position;
-    char tile;
-    //int fromPos;
-    //char canSpreadDir;
-};
 
+static const uint8_t HasPipe = 0xff;
 
-
-static const char Visited = 1;
-static const char IsNotValid = 2;
-static const char IsValid = 4;
-static const char HasPipe = 8;
-
-static const char LeftDir = 1;
-static const char RightDir = 2;
-static const char UpDir = 4;
-static const char DownDir = 8;
-static const char AllDirs = LeftDir | RightDir | UpDir | DownDir;
+static const uint8_t LeftDir = 1;
+static const uint8_t RightDir = 2;
+static const uint8_t UpDir = 4;
+static const uint8_t DownDir = 8;
+static const uint8_t AllDirs = LeftDir | RightDir | UpDir | DownDir;
 
 static int sCalculatePosition(const char* pos, const char* start)
 {
     intptr_t diff = pos - start;
     return int(diff);
 }
-/*
-static void sSet3x3Pattern(
-    std::vector<char>& map3x3,
-    size_t i,
-    const char* row1,
-    const char* row2,
-    const char* row3,
-    int width)
-{
-    size_t x = i % width;
-    size_t y = i / width;
-    x *= 3;
-    y *= 3;
-    const char* rows[3] = {row1, row2, row3};
-    for(size_t jj = 0; jj < 3; ++jj)
-    {
-        const char* row = rows[jj];
-        for (size_t j = 0; j < 3; ++j)
-        {
-            size_t index = x + j + (y + jj) * width * 3;
-            map3x3[index] = row[j];
-        }
-    }
-}
-*/
+
 static void sGetMapSize(const char* data, int& width, int& height)
 {
     width = 1;
@@ -324,6 +288,83 @@ static int64_t sParse10A(const char* data)
     return steps;
 }
 
+static void sWiggleBits(uint64_t* currentMask, uint64_t wallMask)
+{
+    {
+        uint64_t miniMask = 0;
+        do
+        {
+            miniMask = 0;
+            uint64_t startValue = *currentMask;
+
+            *currentMask |= (*currentMask) >> 1;
+            *currentMask |= (*currentMask) << 1;
+
+            *currentMask &= wallMask;
+            miniMask = startValue ^ *currentMask;
+        } while (miniMask);
+    }
+}
+
+static uint64_t sFillMap(uint8_t* __restrict__ map, const uint8_t* __restrict__ wallMap, int row, int mapWidth)
+{
+    uint64_t mask = 0;
+
+    uint64_t prevOne = 0;
+    int64_t mapWidthOffset = mapWidth / 8;
+
+    const uint64_t* __restrict__ walls = (const uint64_t * __restrict__) (wallMap + row * mapWidth);
+    uint64_t* __restrict__ currentMask = (uint64_t* __restrict__ )(map + row * mapWidth);
+
+    for (int i = 0; i < mapWidthOffset - 1; ++i)
+    {
+        uint64_t old = *currentMask;
+        uint64_t wallMask = ~(*walls);
+
+        *currentMask |= *(currentMask - mapWidthOffset);
+        *currentMask |= *(currentMask + mapWidthOffset);
+
+        *currentMask |= prevOne >> 63;
+
+        // reading next byte.
+        uint64_t nextRead = *(currentMask + 1);
+        *currentMask |= nextRead << 63;
+
+        *currentMask &= wallMask;
+
+        sWiggleBits(currentMask, wallMask);
+        // Do not set the walls
+        //*nextMask &= wallMask;
+        // Check the mask
+        mask |= old ^ *currentMask;
+
+        prevOne = *currentMask;
+
+        ++currentMask;
+        ++walls;
+    }
+
+    {
+        uint64_t old = *currentMask;
+        uint64_t wallMask = ~(*walls);
+
+        *currentMask |= *(currentMask - mapWidthOffset);
+        *currentMask |= *(currentMask + mapWidthOffset);
+
+        *currentMask |= prevOne << 63;
+        // cannot read next on last 8 bytes.
+
+        *currentMask &= wallMask;
+
+        sWiggleBits(currentMask, wallMask);
+        // Do not set the walls
+        //*nextMask &= wallMask;
+        // Check the mask
+        mask |= old ^ *currentMask;
+    }
+    return mask;
+}
+
 static int64_t sParse10B(const char* data)
 {
     int width = 0;
@@ -349,19 +390,10 @@ static int64_t sParse10B(const char* data)
     std::vector<uint8_t> map4x3Mask;
     map4x3Mask.resize(mapWidth * mapHeight);
     for(int i = 0; i < mapWidth; ++i)
-        map4x3Mask[i] = 0xff;
-
-    std::vector<uint8_t> map4x3Mask2;
-    map4x3Mask2.resize(mapWidth * mapHeight);
-    for(int i = 0; i < mapWidth; ++i)
     {
-        map4x3Mask2[i] = 0xff;
-        map4x3Mask2[i + (mapHeight - 1) * mapWidth] = 0xff;
+        map4x3Mask[i] = 0xff;
+        map4x3Mask[i + (mapHeight - 1) * mapWidth] = 0xff;
     }
-
-    uint8_t* map4x3MaskCurrent = map4x3Mask.data();
-    //uint8_t* map4x3MaskOther = map4x3Mask2.data();
-
     // Zoom map by 4x3.
 
     {
@@ -386,7 +418,8 @@ static int64_t sParse10B(const char* data)
                     *line0 |= 0b0100 * offset;
                     *line1 |= 0b1111 * offset;
                     *line2 |= 0b0100 * offset;
-                } else if (map[index].flags & HasPipe)
+                }
+                else if (map[index].flags & HasPipe)
                 {
                     switch (data[index])
                     {
@@ -421,7 +454,8 @@ static int64_t sParse10B(const char* data)
                             *line2 |= uint32_t(0b0000) * offset;
                             break;
                     }
-                } else
+                }
+                else
                 {
                     *line0 |= uint32_t(0b0000) * offset;
                     *line1 |= uint32_t(0b0000) * offset;
@@ -440,33 +474,6 @@ static int64_t sParse10B(const char* data)
             //printf("\n");
         }
     }
-    /*
-    for(size_t i = 0; i < map.size(); ++i)
-    {
-        if (map[i].flags & HasPipe)
-        {
-            switch (data[i])
-            {
-                case 'F': sSet3x3Pattern(map3x3, i, "...", ".**", ".*.", width); break;
-                case 'L': sSet3x3Pattern(map3x3, i, ".*.", ".**", "...", width); break;
-                case '7': sSet3x3Pattern(map3x3, i, "...", "**.", ".*.", width); break;
-                case 'J': sSet3x3Pattern(map3x3, i, ".*.", "**.", "...", width); break;
-                case '|': sSet3x3Pattern(map3x3, i, ".*.", ".*.", ".*.", width); break;
-                case '-': sSet3x3Pattern(map3x3, i, "...", "***", "...", width); break;
-            }
-        }
-        else if(data[i] == 'S')
-        {
-            sSet3x3Pattern(map3x3, i, ".*.", "***", ".*.", width);
-        }
-        else
-        {
-            sSet3x3Pattern(map3x3, i, "...", "...", "...", width);
-        }
-    }
-     */
-
-    //sDrawMap(map3x3.data(), mapWidth, mapHeight);
 
     //sDrawMap(map4x4MaskCurrent, mapWidth, mapHeight);
     //printf("\n\n");
@@ -474,168 +481,67 @@ static int64_t sParse10B(const char* data)
 
     {
         TIMEDSCOPE("Fill map");
-        uint64_t mask = 1; // could be 0
-        while (mask)
+        uint64_t mask = 0;
+        do
         {
             mask = 0;
-            const uint64_t* __restrict__ walls = (const uint64_t* __restrict__) map4x3.data();
-
-            uint64_t* __restrict__ currentMask = (uint64_t * __restrict__) map4x3MaskCurrent;
-
-            //uint64_t* currentStart = (uint64_t*)map4x3MaskCurrent;
-            //uint8_t *currentEnd8 = map4x3MaskCurrent + mapWidth * mapHeight;
-            //uint64_t *currentEnd = (uint64_t *) (currentEnd8);
-
-            for (int j = 0; j < mapHeight; ++j)
+            for (int j = 1; j < mapHeight - 1; ++j)
             {
-                uint64_t prevOne = 0;
-                int64_t mapWidthOffset = mapWidth / 8;
-                for (int i = 0; i < mapWidthOffset; ++i)
-                {
-                    uint64_t old = *currentMask;
-                    uint64_t wallMask = ~(*walls);
-
-                    if (j > 0)
-                    {
-                        *currentMask |= *(currentMask - mapWidthOffset);
-                    }
-
-                    if (j < mapHeight - 1)
-                    {
-                        *currentMask |= *(currentMask + mapWidthOffset);
-                    }
-
-                    *currentMask |= prevOne >> 63;
-
-                    if (i < mapWidth - 1)
-                    {
-                        uint64_t nextRead = *(currentMask + 1);
-                        nextRead <<= 63;
-                        *currentMask |= nextRead;
-                    }
-                    *currentMask &= wallMask;
-
-                    //*nextMask |= (*currentMask) >> 1;
-                    //*nextMask |= (*currentMask) << 1;
-
-                    {
-                        uint64_t miniMask = 1;
-                        while (miniMask)
-                        {
-                            miniMask = 0;
-                            uint64_t startValue = *currentMask;
-
-                            *currentMask |= (*currentMask) >> 1;
-                            *currentMask |= (*currentMask) << 1;
-
-                            *currentMask &= wallMask;
-                            miniMask = startValue ^ *currentMask;
-                        }
-                    }
-                    // Do not set the walls
-                    //*nextMask &= wallMask;
-                    // Check the mask
-                    mask |= old ^ *currentMask;
-                    prevOne = *currentMask;
-
-                    ++currentMask;
-                    ++walls;
-                }
+                mask |= sFillMap(map4x3Mask.data(), map4x3.data(), j, mapWidth);
+            }
+            for (int j = mapHeight - 2; j > 0; --j)
+            {
+                mask |= sFillMap(map4x3Mask.data(), map4x3.data(), j, mapWidth);
             }
             //sDrawMap(map4x3MaskCurrent, mapWidth, mapHeight);
             //printf("\n\n");
-        }
+        }  while (mask);
     }
+    //sDrawMap(map4x3.data(), mapWidth, mapHeight);
+    //printf("\n\n");
 
+    //sDrawMap(map4x3Mask.data(), mapWidth, mapHeight);
+    //printf("\n\n");
 
 
     int emptySpots = 0;
-    for(int j = 0; j < height; ++j)
     {
-        for(int i = 0; i < mapWidth; ++i)
+        TIMEDSCOPE("Calculate empties");
+        //printf("\n");
+        //printf("\n");
+
+        for (int j = 0; j < height; ++j)
         {
-            uint8_t mapMask = 0;
-
-            mapMask |= map4x3MaskCurrent[i + (j * 3 + 0) * mapWidth];
-            mapMask |= map4x3MaskCurrent[i + (j * 3 + 1) * mapWidth];
-            mapMask |= map4x3MaskCurrent[i + (j * 3 + 2) * mapWidth];
-
-            if((mapMask & 0xf) == 0)
-                emptySpots++;
-            if((mapMask & 0xf0) == 0)
-                emptySpots++;
-        }
-    }
-    /*
-    for(size_t i = 0; i < map3x3.size(); ++i)
-    {
-        uint8_t walls = map3x3[i] | map4x4Mask[i];
-        walls = ~walls;
-        emptySpots += std::popcount(walls);
-    }
-*/
-
-/*
-    std::vector<int> tiles;
-    std::vector<int> newTiles;
-    tiles.reserve(256);
-    newTiles.reserve(256);
-
-    std::vector<int>* currentTiles = &tiles;
-    std::vector<int>* otherTiles = &newTiles;
-
-    tiles.push_back(0);
-    while(!(*currentTiles).empty())
-    {
-        otherTiles->clear();
-        for (int tileIndex: *currentTiles)
-        {
-            if (tileIndex < 0 || tileIndex >= (int)map3x3.size())
-                continue;
-            char& tile = map3x3[tileIndex];
-            if (tile == '.')
+            for (int i = 0; i < mapWidth; ++i)
             {
-                tile = '-';
-                otherTiles->push_back(tileIndex - 1);
-                otherTiles->push_back(tileIndex + 1);
-                otherTiles->push_back(tileIndex - width * 3);
-                otherTiles->push_back(tileIndex + width * 3);
-            }
-        }
-        std::swap(currentTiles, otherTiles);
-        // * print map
-        for(int tmp = 0; tmp < (int)map3x3.size(); ++tmp)
-        {
-            printf("%c", map3x3[tmp]);
-            if((tmp % (width * 3)) >= width * 3 - 1)
-            {
-                printf("\n");
-            }
-        }
-        printf("\n\n");
-    }
-        */
+                uint8_t mapMask = 0;
 
-    /*
-    int emptySpots = 0;
-    for(int y = 0; y < height; y++)
-    {
-        for(int x = 0; x < width - 1; x++)
-        {
-            static constexpr int tripleDot = '.' * 0x10101;
-            bool isEmpty = true;
-            int index = y * 9 * width + x * 3;
-            // Does some unaligned memory read.
-            isEmpty &= ((*(int*)(&map3x3[index + 0 * width * 3])) & 0xffffff) == tripleDot;
-            isEmpty &= ((*(int*)(&map3x3[index + 1 * width * 3])) & 0xffffff) == tripleDot;
-            isEmpty &= ((*(int*)(&map3x3[index + 2 * width * 3])) & 0xffffff) == tripleDot;
-            if(isEmpty)
-            {
-                emptySpots++;
+                mapMask |= map4x3Mask[i + (j * 3 + 0) * mapWidth];
+                mapMask |= map4x3Mask[i + (j * 3 + 1) * mapWidth];
+                mapMask |= map4x3Mask[i + (j * 3 + 2) * mapWidth];
+
+                if ((mapMask & 0xf) == 0)
+                {
+                    emptySpots++;
+                    //printf("O");
+                }
+                else
+                {
+                    //printf("*");
+                }
+                if ((mapMask & 0xf0) == 0)
+                {
+                    emptySpots++;
+                    //printf("O");
+                }
+                else
+                {
+                    //printf("*");
+                }
             }
+            //printf("\n");
         }
     }
-     */
     return emptySpots;
 }
 
