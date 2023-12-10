@@ -136,7 +136,7 @@ static void sSet3x3Pattern(
 
 static void sGetMapSize(const char* data, int& width, int& height)
 {
-    width = 0;
+    width = 1;
     height = 1;
     while(*data++ != '\n') width++;
     while(*data)
@@ -286,134 +286,7 @@ static int64_t sParse10A(const char* data)
 
     sGetMapSize(data, width, height);
     int64_t steps = sMarkEdge(data, width, [&](int){});
-#if 0
-    const char* start = data;
-    int tmpWidth = 0;
-    while(*data != 'S')
-    {
-        tmpWidth++;
-        if(*data == '\n')
-        {
-            width = width == 0 ? tmpWidth : width;
-            tmpWidth = 0;
-            ++height;
-        }
-        ++data;
-    }
-    std::vector<Dir> positions;
-    std::vector<Dir> positions2;
-    positions.push_back(Dir{.pos = data, .prev = data, .canGoDir = AllDirs});
 
-    while(*data)
-    {
-        if(*data == '\n')
-        {
-            ++height;
-        }
-        data++;
-    }
-
-    std::vector<Dir>* current = &positions;
-    std::vector<Dir>* other = &positions2;
-
-    int64_t moves = 0;
-    bool found = false;
-    while(!found)
-    {
-        other->clear();
-        for(Dir& pos : *current)
-        {
-            //bool wasLeft = pos.prev == (pos.pos - 1);
-            //bool wasRight = pos.prev == (pos.pos + 1);
-            //bool wasUp = pos.prev == (pos.pos + width);
-            //bool wasDown = pos.prev == (pos.pos + width);
-            if(pos.canGoDir & RightDir)
-            {
-                const char *right = (pos.pos + 1);
-
-                if (*right == 'J')
-                {
-                    other->push_back(Dir{.pos = right, .canGoDir = UpDir});
-                }
-                else if (*right == '7')
-                {
-                    other->push_back(Dir{.pos = right, .canGoDir = DownDir});
-                }
-                else if (*right == '-')
-                {
-                    other->push_back(Dir{.pos = right, .canGoDir = RightDir});
-                }
-            }
-
-            if(pos.canGoDir & LeftDir)
-            {
-                const char *left = (pos.pos - 1);
-                if (*left == 'L')
-                {
-                    other->push_back(Dir{.pos = left, .canGoDir = UpDir});
-                }
-                else if (*left == 'F')
-                {
-                    other->push_back(Dir{.pos = left, .canGoDir = DownDir});
-                }
-                else if (*left == '-')
-                {
-                    other->push_back(Dir{.pos = left, .canGoDir = LeftDir});
-                }
-            }
-
-            if((pos.pos - width) >= start && (pos.canGoDir & UpDir))
-            {
-                const char *up = (pos.pos - width - 0);
-                if (*up == 'F')
-                {
-                    other->push_back(Dir{.pos = up, .canGoDir = RightDir});
-                }
-                else if (*up == '7')
-                {
-                    other->push_back(Dir{.pos = up, .canGoDir = LeftDir});
-                }
-                else if (*up == '|')
-                {
-                    other->push_back(Dir{.pos = up, .canGoDir = UpDir});
-                }
-            }
-
-            if((pos.pos + width) < data && (pos.canGoDir & DownDir))
-            {
-                const char *down = (pos.pos + width + 0);
-                if (*down == 'L')
-                {
-                    other->push_back(Dir{.pos = down, .canGoDir = RightDir});
-                }
-                else if (*down == 'J')
-                {
-                    other->push_back(Dir{.pos = down, .canGoDir = LeftDir});
-                }
-                else if (*down == '|')
-                {
-                    other->push_back(Dir{.pos = down, .canGoDir = DownDir});
-                }
-            }
-        }
-
-        ++moves;
-        for(size_t i = 0; i < other->size() && !found; ++i)
-        {
-            const char* search = other->at(i).pos;
-            for(size_t j = i + 1; j < other->size(); ++j)
-            {
-                if(other->at(j).pos == search)
-                {
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        std::swap(current, other);
-    }
-#endif
     return steps;
 }
 
@@ -429,141 +302,7 @@ static int64_t sParse10B(const char* data)
     sMarkEdge(data, width, [&](int mapPos){
         map[mapPos].flags |= HasPipe;
     });
-#if 0
-    const char* start = data;
-    const char* startPos = data;
-    int width = 0;
-    int height = 0;
-    int tmpWidth = 0;
-    while(*data)
-    {
-        tmpWidth++;
-        if(*data == 'S')
-            startPos = data;
-        if(*data == '\n')
-        {
-            width = width == 0 ? tmpWidth : width;
-            tmpWidth = 0;
-            ++height;
-        }
-        ++data;
-    }
-    std::vector<Dir> positions;
-    std::vector<Dir> positions2;
-    positions.push_back(Dir{.pos = startPos, .prev = data, .canGoDir = AllDirs});
 
-    std::vector<Map> map(width * height, Map{});
-
-    std::vector<Dir>* current = &positions;
-    std::vector<Dir>* other = &positions2;
-
-    bool found = false;
-    while(!found)
-    {
-        other->clear();
-        for(Dir& pos : *current)
-        {
-            if(pos.canGoDir & RightDir)
-            {
-                const char *right = (pos.pos + 1);
-                int mapPos = sCalculatePosition(right, start);
-                if (*right == 'J')
-                {
-                    other->push_back(Dir{.pos = right, .canGoDir = UpDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*right == '7')
-                {
-                    other->push_back(Dir{.pos = right, .canGoDir = DownDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*right == '-')
-                {
-                    other->push_back(Dir{.pos = right, .canGoDir = RightDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-            }
-
-            if(pos.canGoDir & LeftDir)
-            {
-                const char *left = (pos.pos - 1);
-                int mapPos = sCalculatePosition(left, start);
-                if (*left == 'L')
-                {
-                    other->push_back(Dir{.pos = left, .canGoDir = UpDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*left == 'F')
-                {
-                    other->push_back(Dir{.pos = left, .canGoDir = DownDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*left == '-')
-                {
-                    other->push_back(Dir{.pos = left, .canGoDir = LeftDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-            }
-
-            if((pos.pos - width) >= start && (pos.canGoDir & UpDir))
-            {
-                const char *up = (pos.pos - width - 0);
-                int mapPos = sCalculatePosition(up, start);
-                if (*up == 'F')
-                {
-                    other->push_back(Dir{.pos = up, .canGoDir = RightDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*up == '7')
-                {
-                    other->push_back(Dir{.pos = up, .canGoDir = LeftDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*up == '|')
-                {
-                    other->push_back(Dir{.pos = up, .canGoDir = UpDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-            }
-
-            if((pos.pos + width) < data && (pos.canGoDir & DownDir))
-            {
-                const char *down = (pos.pos + width + 0);
-                int mapPos = sCalculatePosition(down, start);
-                if (*down == 'L')
-                {
-                    other->push_back(Dir{.pos = down, .canGoDir = RightDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*down == 'J')
-                {
-                    other->push_back(Dir{.pos = down, .canGoDir = LeftDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-                else if (*down == '|')
-                {
-                    other->push_back(Dir{.pos = down, .canGoDir = DownDir});
-                    map[mapPos].flags |= HasPipe;
-                }
-            }
-        }
-
-        for(size_t i = 0; i < other->size() && !found; ++i)
-        {
-            const char* search = other->at(i).pos;
-            for(size_t j = i + 1; j < other->size(); ++j)
-            {
-                if(other->at(j).pos == search)
-                {
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        std::swap(current, other);
-    }
-#endif
     std::vector<char> map3x3;
     map3x3.resize(map.size() * 9);
     // Zoom map by 3x3.
@@ -653,8 +392,8 @@ static int64_t sParse10B(const char* data)
 #ifndef RUNNER
 int main()
 {
-    printf("10A: Value: %" PRIi64 "\n", sParse10A(data10A));
-    printf("10B: Value: %" PRIi64 "\n", sParse10B(data10A));
+    printf("10A: Steps: %" PRIi64 "\n", sParse10A(data10A));
+    printf("10B: Area: %" PRIi64 "\n", sParse10B(data10A));
     return 0;
 }
 #endif
@@ -665,7 +404,7 @@ int run10A(bool printOut, char* buffer)
     int64_t aResult = sParse10A(data10A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "10A: Value: %" PRIi64, aResult);
+        charsAdded = sprintf(buffer, "10A: Steps: %" PRIi64, aResult);
     return charsAdded;
 }
 
@@ -675,7 +414,7 @@ int run10B(bool printOut, char* buffer)
     int64_t resultB = sParse10B(data10A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "10B: Value: %" PRIi64, resultB);
+        charsAdded = sprintf(buffer, "10B: Area: %" PRIi64, resultB);
 
     return charsAdded;
 }
