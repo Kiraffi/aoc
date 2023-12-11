@@ -209,130 +209,122 @@ static int64_t sMarkEdge(const char* data, int width, T&& lambdaFn)
         }
 
     }
-    int startPos = sCalculatePosition(startChar, begin);
+
     if(canGoDir == (LeftDir | UpDir))
-        lambdaFn(startPos, 'J');
+        lambdaFn(startChar, 'J');
     else if(canGoDir == (LeftDir | DownDir))
-        lambdaFn(startPos, '7');
+        lambdaFn(startChar, '7');
     else if(canGoDir == (RightDir | UpDir))
-        lambdaFn(startPos, 'L');
+        lambdaFn(startChar, 'L');
     else if(canGoDir == (RightDir | DownDir))
-        lambdaFn(startPos, 'F');
+        lambdaFn(startChar, 'F');
     else if(canGoDir == (LeftDir | RightDir))
-        lambdaFn(startPos, '-');
+        lambdaFn(startChar, '-');
     else if(canGoDir == (UpDir | DownDir))
-        lambdaFn(startPos, '|');
+        lambdaFn(startChar, '|');
 
     bool found = false;
     while(!found)
     {
         for(Dir& pos : positions)
         {
-            if(pos.canGoDir & RightDir)
-            {
-                const char *right = (pos.pos + 1);
-                int mapPos = sCalculatePosition(right, begin);
-                if (*right == 'J')
-                {
-                    pos.pos = right;
-                    pos.canGoDir = UpDir;
-                    lambdaFn(mapPos, *right);
-                    continue;
-                }
-                else if (*right == '7')
-                {
-                    pos.pos = right;
-                    pos.canGoDir = DownDir;
-                    lambdaFn(mapPos, *right);
-                    continue;
-                }
-                else if (*right == '-')
-                {
-                    pos.pos = right;
-                    pos.canGoDir = RightDir;
-                    lambdaFn(mapPos, *right);
-                    continue;
-                }
-            }
+            const char *right = (pos.pos + 1);
+            const char *left = (pos.pos - 1);
+            const char *down = pos.pos + width;
+            const char *up = pos.pos - width;
 
-            if(pos.canGoDir & LeftDir)
+            switch(pos.canGoDir)
             {
-                const char *left = (pos.pos - 1);
-                int mapPos = sCalculatePosition(left, begin);
-                if (*left == 'L')
+                case RightDir:
                 {
-                    pos.pos = left;
-                    pos.canGoDir = UpDir;
-                    lambdaFn(mapPos, *left);
-                    continue;
+                    if (*right == 'J')
+                    {
+                        pos.pos = right;
+                        pos.canGoDir = UpDir;
+                        lambdaFn(right, *right);
+                    }
+                    else if (*right == '7')
+                    {
+                        pos.pos = right;
+                        pos.canGoDir = DownDir;
+                        lambdaFn(right, *right);
+                    }
+                    else if (*right == '-')
+                    {
+                        pos.pos = right;
+                        pos.canGoDir = RightDir;
+                        lambdaFn(right, *right);
+                    }
+                    break;
                 }
-                else if (*left == 'F')
-                {
-                    pos.pos = left;
-                    pos.canGoDir = DownDir;
-                    lambdaFn(mapPos, *left);
-                    continue;
-                }
-                else if (*left == '-')
-                {
-                    pos.pos = left;
-                    pos.canGoDir = LeftDir;
-                    lambdaFn(mapPos, *left);
-                    continue;
-                }
-            }
 
-            if((pos.pos - width) >= begin && (pos.canGoDir & UpDir))
-            {
-                const char *up = pos.pos - width;
-                int mapPos = sCalculatePosition(up, begin);
-                if (*up == 'F')
+                case LeftDir:
                 {
-                    pos.pos = up;
-                    pos.canGoDir = RightDir;
-                    lambdaFn(mapPos, *up);
-                    continue;
+                    if (*left == 'L')
+                    {
+                        pos.pos = left;
+                        pos.canGoDir = UpDir;
+                        lambdaFn(left, *left);
+                    }
+                    else if (*left == 'F')
+                    {
+                        pos.pos = left;
+                        pos.canGoDir = DownDir;
+                        lambdaFn(left, *left);
+                    }
+                    else if (*left == '-')
+                    {
+                        pos.pos = left;
+                        pos.canGoDir = LeftDir;
+                        lambdaFn(left, *left);
+                    }
+                    break;
                 }
-                else if (*up == '7')
-                {
-                    pos.pos = up;
-                    pos.canGoDir = LeftDir;
-                    lambdaFn(mapPos, *up);
-                    continue;
-                }
-                else if (*up == '|')
-                {
-                    pos.pos = up;
-                    pos.canGoDir = UpDir;
-                    lambdaFn(mapPos, *up);
-                    continue;
-                }
-            }
 
-            if((pos.pos + width) < data && (pos.canGoDir & DownDir))
-            {
-                const char *down = pos.pos + width;
-                int mapPos = sCalculatePosition(down, begin);
-                if (*down == 'L')
+                case UpDir:
                 {
-                    pos.pos = down;
-                    pos.canGoDir = RightDir;
-                    lambdaFn(mapPos, *down);
-                    continue;
+                    if (*up == 'F')
+                    {
+                        pos.pos = up;
+                        pos.canGoDir = RightDir;
+                        lambdaFn(up, *up);
+                    }
+                    else if (*up == '7')
+                    {
+                        pos.pos = up;
+                        pos.canGoDir = LeftDir;
+                        lambdaFn(up, *up);
+                    }
+                    else if (*up == '|')
+                    {
+                        pos.pos = up;
+                        pos.canGoDir = UpDir;
+                        lambdaFn(up, *up);
+                    }
+                    break;
                 }
-                else if (*down == 'J')
+
+                case DownDir:
                 {
-                    pos.pos = down;
-                    pos.canGoDir = LeftDir;
-                    lambdaFn(mapPos, *down);
-                    continue;
-                }
-                else if (*down == '|')
-                {
-                    pos.pos = down;
-                    pos.canGoDir = DownDir;
-                    lambdaFn(mapPos, *down);
-                    continue;
+                    if (*down == 'L')
+                    {
+                        pos.pos = down;
+                        pos.canGoDir = RightDir;
+                        lambdaFn(down, *down);
+                    }
+                    else if (*down == 'J')
+                    {
+                        pos.pos = down;
+                        pos.canGoDir = LeftDir;
+                        lambdaFn(down, *down);
+                    }
+                    else if (*down == '|')
+                    {
+                        pos.pos = down;
+                        pos.canGoDir = DownDir;
+                        lambdaFn(down, *down);
+                    }
+                    break;
                 }
             }
         }
@@ -429,7 +421,7 @@ static int64_t sParse10A(const char* data)
     int height = 0;
 
     sGetMapSize(data, width, height);
-    int64_t steps = sMarkEdge(data, width, [&](int, char){});
+    int64_t steps = sMarkEdge(data, width, [&](const char*, char){});
 
     return steps;
 }
@@ -452,22 +444,22 @@ static int64_t sParse10BLine(const char* data)
     std::vector<uint8_t> straightsMap;
     std::vector<uint8_t> leftMap;
     std::vector<uint8_t> rightMap;
-    std::vector<uint8_t> foundMap;
+    //std::vector<uint8_t> foundMap;
 
     sGetMapSize(data, width, height);
 
     mapWidth = ((width + 127) / 128) * 128 / 8;
 
-    map.resize(mapWidth * height, 0);
     pipeMap.resize(mapWidth * height, 0);
     straightsMap.resize(mapWidth * height, 0);
     leftMap.resize(mapWidth * height, 0);
     rightMap.resize(mapWidth * height, 0);
 
-    foundMap.resize(mapWidth * height, 0);
+    //foundMap.resize(mapWidth * height, 0);
     {
         TIMEDSCOPE("A part");
-        sMarkEdge(data, width, [&](int mapPos, char c) {
+        sMarkEdge(data, width, [&](const char* pos, char c) {
+            int mapPos = sCalculatePosition(pos, data);
             int x = mapPos % width;
             int y = mapPos / width;
 
@@ -477,10 +469,7 @@ static int64_t sParse10BLine(const char* data)
 
             int index = y * mapWidth + mapX;
             if(c == '-')
-
                 straightsMap[index] |= addBit;
-            if(c == '|')
-                map[index] |= addBit;
             switch(c)
             {
                 case 'F':
@@ -514,7 +503,6 @@ static int64_t sParse10BLine(const char* data)
         uint64_t goingLefts = 0;
         for(int j = 0; j < height; ++j)
         {
-            uint64_t walls = *(uint64_t*)(&map[i + j * mapWidth]);
             uint64_t pipes = *(uint64_t*)(&pipeMap[i + j * mapWidth]);
 
             uint64_t lefts = *(uint64_t*)(&leftMap[i + j * mapWidth]);
@@ -524,8 +512,8 @@ static int64_t sParse10BLine(const char* data)
             inside = inside ^ (rights & goingLefts);
             inside = inside ^ (lefts & goingRights);
 
-            goingLefts = (lefts ^ (goingLefts & (~walls))) | (goingLefts & walls);
-            goingRights = (rights ^ (goingRights & (~walls))) | (goingRights & walls);
+            goingLefts = (lefts ^ goingLefts);
+            goingRights = (rights ^ goingRights);
 
 
             uint64_t straights = *(uint64_t*)(&straightsMap[i + j * mapWidth]);
@@ -533,7 +521,6 @@ static int64_t sParse10BLine(const char* data)
 
             uint64_t insidePoints = (~pipes) & inside;
 
-            *(uint64_t*)(&foundMap[i + j * mapWidth]) = insidePoints;
             area += std::popcount(insidePoints);
         }
     }
@@ -559,7 +546,8 @@ static int64_t sParse10B(const char* data)
         sGetMapSize(data, width, height);
 
         map.resize(width * height, Map{});
-        sMarkEdge(data, width, [&](int mapPos, char) {
+        sMarkEdge(data, width, [&](const char* pos, char) {
+            int mapPos = sCalculatePosition(pos, data);
             map[mapPos].flags |= HasPipe;
         });
     }

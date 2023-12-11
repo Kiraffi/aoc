@@ -1,34 +1,37 @@
-Parsing 01: 11.035000us
-Sum of lines 1A: 55123 | Running 01A: duration 20.045000us
-Sum of lines 1B: 55260 | Running 01B: duration 33.453999us
+Parsing 01: 12.362000us
+Sum of lines 1A: 55123 | Running 01A: duration 22.280001us
+Sum of lines 1B: 55260 | Running 01B: duration 33.384998us
 
-2A: Sum of valid Ids: 2913 | Running 02A: duration 17.531000us
-2B: Sum of min multiplies Ids: 55593 | Running 02B: duration 17.739000us
+2A: Sum of valid Ids: 2913 | Running 02A: duration 18.018999us
+2B: Sum of min multiplies Ids: 55593 | Running 02B: duration 18.159000us
 
-3A: Sum of valid digits: 535078 | Running 03A: duration 34.780998us
-3B: Sum of gear ratios: 75312571 | Running 03B: duration 21.372000us
+3A: Sum of valid digits: 535078 | Running 03A: duration 36.737000us
+3B: Sum of gear ratios: 75312571 | Running 03B: duration 21.021999us
 
-4A: Card points: 20829 | Running 04A: duration 26.680000us
-4B: Cards: 12648035 | Running 04B: duration 24.724001us
+4A: Card points: 20829 | Running 04A: duration 27.797001us
+4B: Cards: 12648035 | Running 04B: duration 24.375000us
 
-Parsing 05: 21.511000us
-5A: Smallest seed: 525792406 | Running 05A: duration 3.282000us
-5B: Smallest seed: 79004094 | Running 05B: duration 9.149000us
+Parsing 05: 21.232000us
+5A: Smallest seed: 525792406 | Running 05A: duration 3.771000us
+5B: Smallest seed: 79004094 | Running 05B: duration 9.079000us
 
-6A: Potential records: 588588 | Running 06A: duration 1.466000us
-6B: Potential records: 34655848 | Running 06B: duration 1.397000us
+6A: Potential records: 588588 | Running 06A: duration 1.397000us
+6B: Potential records: 34655848 | Running 06B: duration 1.816000us
 
-7A: winnings: 253866470 | Running 07A: duration 82.483002us
-7B: winnings: 254494947 | Running 07B: duration 64.393997us
+7A: winnings: 253866470 | Running 07A: duration 81.575996us
+7B: winnings: 254494947 | Running 07B: duration 64.883003us
 
-Parsing 08: 41.556000us
-8A: Steps: 14257 | Running 08A: duration 25.283001us
-8B: Steps: 16187743689077 | Running 08B: duration 87.163002us
+Parsing 08: 35.758999us
+8A: Steps: 14257 | Running 08A: duration 25.353001us
+8B: Steps: 16187743689077 | Running 08B: duration 87.722000us
 
-9A: Value: 1641934234 | Running 09A: duration 54.686001us
-9B: Value: 975 | Running 09B: duration 49.867001us
+9A: Value: 1641934234 | Running 09A: duration 51.963001us
+9B: Value: 975 | Running 09B: duration 50.705002us
 
-10A: Steps: 6823 | Running 10A: duration 110.000000us
-10B: Area: 415 | Running 10B - line inside out: duration 154.630005us
+10A: Steps: 6823 | Running 10A: duration 103.295998us
+10B: Area: 415 | Running 10B - line inside out: duration 140.173004us
 
- | Running all avg 1 times: duration 984.491028us
+11A: Distances: 9769724 | Running 11A: duration 54.266998us
+11B: Distances: 60309763700 | Running 11B: duration 57.201000us
+
+ | Running all avg 1 times: duration 1077.312988us
