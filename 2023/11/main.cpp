@@ -36,26 +36,26 @@ alignas(16) static constexpr char test11A[] =
 
 struct Point
 {
-    int64_t x;
-    int64_t y;
+    int32_t x;
+    int32_t y;
 };
 static const int Width = 256 / 64;
 
 
-int64_t sAddPoints(const uint64_t* bits, int64_t pos, int64_t gapMultiplier)
+int32_t sAddPoints(const uint64_t* bits, int32_t pos, int32_t gapMultiplier)
 {
     int index = 0;
 
-    int64_t returnValue = pos;
+    int32_t returnValue = pos;
     while(pos >= 64)
     {
-        returnValue += ((int64_t)std::popcount(bits[index])) * gapMultiplier;
+        returnValue += ((int32_t)std::popcount(bits[index])) * gapMultiplier;
         pos -= 64;
         index++;
     }
     if(pos)
     {
-        returnValue += ((int64_t) std::popcount(bits[index] & ((uint64_t(1) << (pos)) - uint64_t(1)))) * gapMultiplier;
+        returnValue += ((int32_t) std::popcount(bits[index] & ((uint64_t(1) << (pos)) - uint64_t(1)))) * gapMultiplier;
     }
     return returnValue;
 }
@@ -64,8 +64,9 @@ int64_t sAddPoints(const uint64_t* bits, int64_t pos, int64_t gapMultiplier)
 static int sParseData(const char* data, Point* points, uint64_t* colsBits, uint64_t* rowsBits)
 {
     TIMEDSCOPE("Parsing");
-    int64_t x = 0;
-    int64_t y = 0;
+    int32_t x = 0;
+    int32_t y = 0;
+
     int pointCount = 0;
 
     while(*data)
@@ -102,12 +103,10 @@ static int64_t sGetDistanceSum(const Point* points, int pointCount)
 
     for(int j = 0; j < pointCount - 1; ++j)
     {
-        int64_t offsetX = int64_t(points[j].x);
-        int64_t offsetY = int64_t(points[j].y);
         for (int i = j + 1; i < pointCount; ++i)
         {
-            int64_t diffX = int64_t(points[i].x) - offsetX;
-            int64_t diffY = int64_t(points[i].y) - offsetY;
+            int32_t diffX = int32_t(points[i].x) - int32_t(points[j].x);
+            int32_t diffY = int32_t(points[i].y) - int32_t(points[j].y);
             diffX = diffX > 0 ? diffX : -diffX;
             diffY = diffY > 0 ? diffY : -diffY;
             sumOfPaths += diffX + diffY;
