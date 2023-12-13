@@ -54,25 +54,39 @@ static int64_t sParse12A(const char* data)
 {
     TIMEDSCOPE("12A Total");
     int64_t combos = 0;
+    int lineNumber = 1;
+    struct State
+    {
+        uint8_t index;
+        uint8_t continuous;
+        uint8_t number;
+        char choice;
+    };
+    std::vector<State> states;
 
     while(*data)
     {
+        //TIMEDSCOPE("12A Loop");
+
+    //printf("\n\n------\nLine: %i\n", lineNumber);
         //const char* lineStart = data;
         //const char* end = data;
         uint8_t numbers[32] = {};
         int numberCount = 0;
 
-        uint8_t unknownPositions[128] = {};
+        //uint8_t unknownPositions[128] = {};
         int unknowns = 0;
 
-        int found = 0;
+        int64_t found = 0;
         int position = 0;
 
-        char line[128] = {};
-        int lineLen = 0;
+        char line[256] = {};
+        uint8_t lineLen = 0;
+
+        states.clear();
 
         const char* start = data;
-        for(int i = 0; i < 5; ++i)
+        for(int i = 0; i < 1; ++i)
         {
             data = start;
             while (*data != '\n')
@@ -86,7 +100,8 @@ static int64_t sParse12A(const char* data)
                 }
                 else if (c == '?')
                 {
-                    unknownPositions[unknowns++] = position;
+                    ++unknowns;
+                    //unknownPositions[unknowns++] = position;
                     line[position] = c;
                 }
                 else if (c == ' ')
@@ -102,10 +117,90 @@ static int64_t sParse12A(const char* data)
                 position++;
             }
             position = lineLen - 1;
-            unknownPositions[unknowns++] = position;
+            //unknownPositions[unknowns++] = position;
             line[position++] = '?';
 
         }
+        //printf("unknowns: %i, line len: %i\n", unknowns, lineLen);
+
+        if(line[0] == '?')
+        {
+            states.push_back({.index = 0, .continuous = 0,.number = 0,.choice = '#'});
+            states.push_back({.index = 0, .continuous = 0,.number = 0,.choice = '.'});
+        }
+        else
+        {
+            states.push_back({.index = 0, .continuous = 0,.number = 0,.choice = '.'});
+        }
+
+        while(!states.empty())
+        {
+
+            const State& state = states.back();
+            states.pop_back();
+            //for(const State& state : *currentStates)
+            {
+                uint8_t continuous = state.continuous;
+                uint8_t number = state.number;
+                for(uint8_t i = state.index; i < lineLen; ++i)
+                {
+                    char c = line[i];
+                    if(c == '?')
+                    {
+                        if(i == state.index)
+                        {
+                            c = state.choice;
+                        }
+                        else
+                        {
+                            states.push_back(State{.index = i,  .continuous = continuous, .number = number, .choice = '.' });
+                            c = '#';
+                        }
+                    }
+
+                    if(c == '#')
+                    {
+                        ++continuous;
+                        if(continuous > numbers[number])
+                        {
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        if(continuous)
+                        {
+                            if(numbers[number] != continuous)
+                            {
+                                break;
+                            }
+                            ++number;
+                            if(number == numberCount)
+                            {
+                                while(i < lineLen)
+                                {
+                                    if(line[i] == '#')
+                                        break;
+                                    ++i;
+                                }
+                                if(i != lineLen)
+                                    break;
+                                found++;
+                                combos++;
+                                break;
+                            }
+                        }
+                        continuous = 0;
+                    }
+
+                }
+
+            }
+
+            //std::swap(currentStates, otherStates);
+        }
+#if 0
+
         for(int i = 0; i < (1 << unknowns); ++i)
         {
             //const char* ptr = lineStart;
@@ -140,6 +235,8 @@ static int64_t sParse12A(const char* data)
                 ptr++;
             }
              */
+
+            /*
             int number = 0;
             int continuous = 0;
             bool isRight = true;
@@ -173,23 +270,29 @@ static int64_t sParse12A(const char* data)
                 combos++;
                 found++;
             }
+             */
         }
-
-        printf("found: %i\n", found);
+#endif
+        //printf("Rec Line: %i, found: %" PRIu64 "\n", lineNumber, found);
         assert(found);
 
         ++data;
+        ++lineNumber;
     }
     return combos;
 }
 
 
+struct HashOne
+{
+    uint8_t number;
 
+};
 static int64_t sParse12B(const char* data)
 {
     TIMEDSCOPE("12B Total");
     int64_t combos = 0;
-
+    //int lineNumber = 0;
     while(*data)
     {
         const char* lineStart = data;
@@ -200,7 +303,7 @@ static int64_t sParse12B(const char* data)
         //uint8_t unknownPositions[8] = {};
         int unknowns = 0;
 
-        int found = 0;
+        int64_t found = 0;
         int position = 0;
 
         char line[24] = {};
@@ -250,26 +353,26 @@ static int64_t sParse12B(const char* data)
                 ptr++;
             }
             int number = 0;
-            int continous = 0;
+            int continuous = 0;
             bool isRight = true;
             for(int k = 0; k < j; k++)
             {
                 if(line[k] == '#')
                 {
-                    ++continous;
+                    ++continuous;
                 }
                 else
                 {
-                    if(continous)
+                    if(continuous)
                     {
-                        if(numbers[number] != continous)
+                        if(numbers[number] != continuous)
                         {
                             isRight = false;
                             break;
                         }
                         ++number;
                     }
-                    continous = 0;
+                    continuous = 0;
                 }
             }
             if(isRight && number == numberCount)
@@ -278,6 +381,7 @@ static int64_t sParse12B(const char* data)
                 found++;
             }
         }
+        //printf("Other Line: %i, found: %" PRIu64 "\n", lineNumber++, found);
 
         assert(found);
 
@@ -289,7 +393,7 @@ static int64_t sParse12B(const char* data)
 #ifndef RUNNER
 int main()
 {
-    printf("12A: Distances: %" PRIi64 "\n", sParse12A(test12A));
+    printf("12A: Distances: %" PRIi64 "\n", sParse12A(data12A));
     printf("12B: Distances: %" PRIi64 "\n", sParse12B(data12A));
     return 0;
 }

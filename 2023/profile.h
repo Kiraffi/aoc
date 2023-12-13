@@ -24,7 +24,7 @@ struct ScopeProfile
     const char* name;
 };
 
-#define TIMEDSCOPE(name) ScopeProfile profile##LINE(name)
+#define TIMEDSCOPE(name) ScopeProfile profile##__LINE__ (name)
 
 
 #else
