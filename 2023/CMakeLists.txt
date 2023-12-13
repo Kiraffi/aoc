@@ -19,6 +19,7 @@ add_executable(09exec "09/main.cpp")
 add_executable(10exec "10/main.cpp")
 add_executable(11exec "11/main.cpp")
 add_executable(12exec "12/main.cpp")
+add_executable(13exec "13/main.cpp")
 
 
 add_executable(runall "mainrunner.cpp"
