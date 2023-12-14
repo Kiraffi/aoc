@@ -37,6 +37,10 @@ int run11A(bool printOut, char* buffer);
 int run11B(bool printOut, char* buffer);
 int run12A(bool printOut, char* buffer);
 int run12B(bool printOut, char* buffer);
+int run13A(bool printOut, char* buffer);
+int run13B(bool printOut, char* buffer);
+int run14A(bool printOut, char* buffer);
+int run14B(bool printOut, char* buffer);
 
 using RunFunc = int (*)(bool, char*);
 using ParseFunc = void (*)();
@@ -119,7 +123,13 @@ int runAll(bool, char*)
     measureRun(sParseAmount, "11B", run11B);
     sAddLineBreak();
     measureRun(sParseAmount, "12A", run12A);
-    measureRun(sParseAmount, "12B", run12B);
+    measureRun(sParseAmount, "12B WRONG ANSWER", run12B);
+    sAddLineBreak();
+    measureRun(sParseAmount, "13A", run13A);
+    measureRun(sParseAmount, "13B", run13B);
+    sAddLineBreak();
+    measureRun(sParseAmount, "14A", run14A);
+    measureRun(sParseAmount, "14B", run14B);
     sAddLineBreak();
     return 0;
 }
