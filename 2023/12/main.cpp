@@ -18,7 +18,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(16) static constexpr char test12A[] =
@@ -283,27 +283,180 @@ static int64_t sParse12A(const char* data)
 }
 
 
+
+// 10 5 bit numbers,
+// left and right
 struct HashOne
 {
-    uint8_t number;
+    static constexpr int getLeftContinuousBitAmount() { return 5; }
+    static constexpr int getRightContinuousBitAmount() { return 5; }
+    static constexpr int getNumberCountBitAmount() { return 4; }
+    static constexpr int getNumbersBitAmount() { return 50; }
+    static constexpr int getNumbersSingleBitAmount() { return 5; }
 
+    static constexpr int getNumbersStartBit() { return 0; }
+    static constexpr int getLeftContinuousStartBit() { return getNumbersStartBit() + getNumbersBitAmount(); }
+    static constexpr int getRightContinuousStartBit() { return getLeftContinuousStartBit() + getLeftContinuousBitAmount(); }
+    static constexpr int getNumberCountStartBit() { return getRightContinuousStartBit() + getRightContinuousBitAmount(); }
+
+    /*
+    uint64_t numbers : 50;
+    uint64_t numberCount : 4;
+    uint64_t leftContinuous : 5;
+    uint64_t rightContinuous : 5;
+     */
+    uint64_t value;
 };
+
+static_assert(HashOne::getNumbersStartBit() + HashOne::getNumbersBitAmount() <= 64);
+static const size_t HashSize = sizeof(HashOne);
+static_assert(HashSize == 8);
+
+static uint64_t sGetState(const char* line, int lineLen)
+{
+    bool isBeginning = true;
+    uint64_t beginningContinuous = 0;
+    uint64_t continuous = 0;
+    uint64_t numbers = 0;
+    uint64_t numbersBits = 0;
+    uint64_t hash = 0;
+    for(int i = 0; i < lineLen; ++i)
+    {
+        char c = line[i];
+        if(c == '#')
+        {
+            continuous++;
+        }
+        else if(continuous)
+        {
+            assert(continuous < 32);
+            if(isBeginning)
+            {
+                beginningContinuous = continuous;
+            }
+            else
+            {
+                numbersBits |= continuous << (numbers * HashOne::getNumbersSingleBitAmount());
+                numbers++;
+            }
+            isBeginning = false;
+            continuous = 0;
+        }
+        else
+        {
+            isBeginning = false;
+        }
+
+    }
+    assert(numbers < 10);
+    if(isBeginning && continuous > 0)
+    {
+        beginningContinuous = continuous;
+    }
+    hash |= numbersBits << HashOne::getNumbersStartBit();
+    hash |= beginningContinuous << HashOne::getLeftContinuousStartBit();
+    hash |= continuous << HashOne::getRightContinuousStartBit();
+    hash |= numbers << HashOne::getNumberCountStartBit();
+    return hash;
+}
+
+
+static int64_t  sGetValidArrangements(
+    const std::unordered_map<uint64_t, int> &hashCounts,
+    const uint8_t* numbers,
+    int numberCount,
+    int numberIndex,
+    int continuous,
+    int recursionLevel)
+{
+    int64_t result = 0;
+    if(numberIndex >= numberCount)
+        return 0;
+    int nextNumber = numbers[numberIndex];
+
+    for(auto iter : hashCounts)
+    {
+        int nextNumberIndex = numberIndex;
+        int hashContinous = iter.first >> HashOne::getLeftContinuousStartBit();
+        hashContinous &= (1 << HashOne::getLeftContinuousBitAmount()) - 1;
+
+        bool canContinue = false;
+
+        if(continuous + hashContinous == nextNumber)
+        {
+            nextNumberIndex = numberIndex + 1;
+            canContinue = true;
+        }
+        else if(continuous == 0 && hashContinous == 0)
+        {
+            canContinue = true;
+        }
+        if(canContinue)
+        {
+            int hashNumberCount = iter.first >> HashOne::getNumberCountStartBit();
+            hashNumberCount &= (1 << HashOne::getNumberCountBitAmount()) - 1;
+            uint64_t hashNumbers64 = iter.first >> HashOne::getNumbersStartBit();
+            hashNumbers64 &= (uint64_t(1) << HashOne::getNumbersBitAmount()) - uint64_t(1);
+
+            uint8_t hashRightContinuous = iter.first >> HashOne::getRightContinuousStartBit();
+            hashRightContinuous &= (1 << (HashOne::getRightContinuousBitAmount())) - 1;
+
+            bool legitNumbers = true;
+            for(int i = 0; i < hashNumberCount; ++i)
+            {
+                if(nextNumberIndex >= numberCount)
+                {
+                    legitNumbers = false;
+                    break;
+                }
+                uint64_t numberFromHash = hashNumbers64 & ((1 << HashOne::getNumbersSingleBitAmount()) - 1);
+                if(numbers[nextNumberIndex++] != numberFromHash)
+                {
+                    legitNumbers = false;
+                    break;
+                }
+                hashNumbers64 >>= HashOne::getNumbersSingleBitAmount();
+            }
+            if(legitNumbers)
+            {
+                if(recursionLevel == 4 && (hashRightContinuous == 0 && nextNumberIndex == numberCount)
+                    && (nextNumberIndex == numberCount - 1 && hashRightContinuous == numbers[nextNumberIndex]))
+                {
+                    result += iter.second;
+                }
+                else
+                {
+                    result += iter.second * sGetValidArrangements(hashCounts, numbers, numberCount, nextNumberIndex,
+                            hashRightContinuous, recursionLevel + 1);
+                }
+            }
+        }
+    }
+    return result;
+}
+
+
 static int64_t sParse12B(const char* data)
 {
     TIMEDSCOPE("12B Total");
+
+
+    std::unordered_map<uint64_t, int> hashCounts;
+    uint8_t unknownPositions[32] = {};
+    uint8_t numbers[256] = {};
+
     int64_t combos = 0;
+    int64_t found = 0;
     //int lineNumber = 0;
     while(*data)
     {
-        const char* lineStart = data;
-        const char* end = data;
-        uint8_t numbers[8] = {};
+        //const char* lineStart = data;
+        //const char* end = data;
         int numberCount = 0;
 
-        //uint8_t unknownPositions[8] = {};
         int unknowns = 0;
 
-        int64_t found = 0;
+        //int64_t found = 0;
         int position = 0;
 
         char line[24] = {};
@@ -320,17 +473,62 @@ static int64_t sParse12B(const char* data)
             }
             else if(c == '?')
             {
-                ++unknowns;
-                //unknownPositions[unknowns++] = position;
+                line[position] = c;
+                unknownPositions[unknowns++] = position;
+                position++;
             }
             else if(c == ' ')
             {
-                end = data + 1;
+                //end = data + 1;
+            }
+            else if(c == '#' || c == '.')
+            {
+                line[position] = c;
+                position++;
             }
             data++;
-            position++;
         }
 
+        {
+            for(int j = 0; j < (1 << unknowns); ++j)
+            {
+                for(int k = 0; k < unknowns; ++k)
+                {
+                    char c = ((j >> k) & 1) ? '#' : '.';
+                    line[unknownPositions[k]] = c;
+                }
+                uint64_t hash = sGetState(line, position);
+                hashCounts[hash]++;
+
+            }
+
+            for(int i = 1; i < 5; ++i)
+            {
+                for(int j = 0; j < numberCount; ++j)
+                {
+                    numbers[i * numberCount + j] = numbers[j];
+                }
+            }
+            numberCount *= 5;
+
+            //printf("amount: %i\n", (int)hashCounts.size());
+            assert(hashCounts.size() < 16384);
+            /*
+            for(const auto iter : hashCounts)
+            {
+                printf("%" PRIu64 ": counts: %i\n", iter.first, iter.second);
+            }
+            */
+            found = sGetValidArrangements(hashCounts, numbers, numberCount, 0, 0, 0);
+            combos += found;
+            printf("Found: %" PRIi64 " ones\n", found);
+
+
+            hashCounts.clear();
+            //printf("\n\n");
+
+        }
+/*
         for(int i = 0; i < (1 << unknowns); ++i)
         {
             const char* ptr = lineStart;
@@ -381,9 +579,10 @@ static int64_t sParse12B(const char* data)
                 found++;
             }
         }
+        */
         //printf("Other Line: %i, found: %" PRIu64 "\n", lineNumber++, found);
 
-        assert(found);
+        //assert(found);
 
         ++data;
     }
@@ -394,7 +593,7 @@ static int64_t sParse12B(const char* data)
 int main()
 {
     printf("12A: Distances: %" PRIi64 "\n", sParse12A(data12A));
-    printf("12B: Distances: %" PRIi64 "\n", sParse12B(data12A));
+    printf("12B: Distances: %" PRIi64 "\n", sParse12B(test12A));
     return 0;
 }
 #endif
