@@ -18,7 +18,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(16) static constexpr char test12A[] =
@@ -274,7 +274,7 @@ static int64_t sParse12A(const char* data)
         }
 #endif
         //printf("Rec Line: %i, found: %" PRIu64 "\n", lineNumber, found);
-        assert(found);
+        //assert(found);
 
         ++data;
         ++lineNumber;
@@ -288,16 +288,24 @@ static int64_t sParse12A(const char* data)
 // left and right
 struct HashOne
 {
-    static constexpr int getLeftContinuousBitAmount() { return 5; }
-    static constexpr int getRightContinuousBitAmount() { return 5; }
-    static constexpr int getNumberCountBitAmount() { return 4; }
-    static constexpr int getNumbersBitAmount() { return 50; }
-    static constexpr int getNumbersSingleBitAmount() { return 5; }
+    static constexpr uint64_t NumbersSingleBitsAmount = 5;
+    static constexpr uint64_t NumbersSingleCount = 10;
 
-    static constexpr int getNumbersStartBit() { return 0; }
-    static constexpr int getLeftContinuousStartBit() { return getNumbersStartBit() + getNumbersBitAmount(); }
-    static constexpr int getRightContinuousStartBit() { return getLeftContinuousStartBit() + getLeftContinuousBitAmount(); }
-    static constexpr int getNumberCountStartBit() { return getRightContinuousStartBit() + getRightContinuousBitAmount(); }
+    static constexpr uint64_t NumbersBitAmount = NumbersSingleCount * NumbersSingleBitsAmount;
+    static constexpr uint64_t LeftContinuousBitAmount = 5;
+    static constexpr uint64_t RightContinuousBitAmount = 5;
+    static constexpr uint64_t NumberCountBitAmount = 4;
+
+    static constexpr uint64_t NumbersStartBit = 0;
+    static constexpr uint64_t LeftContinuousStartBit = NumbersStartBit + NumbersBitAmount;
+    static constexpr uint64_t RightContinuousStartBit = LeftContinuousStartBit + LeftContinuousBitAmount;
+    static constexpr uint64_t NumbersCountStartBit = RightContinuousStartBit + RightContinuousBitAmount;
+
+    static constexpr uint64_t NumbersMask = ((uint64_t(1) << uint64_t(NumbersBitAmount)) - 1) << NumbersStartBit;
+    static constexpr uint64_t LeftContinuousMask = ((uint64_t(1) << uint64_t(LeftContinuousBitAmount)) - 1) << LeftContinuousStartBit;
+    static constexpr uint64_t RightContinuousMask = ((uint64_t(1) << uint64_t(RightContinuousBitAmount)) - 1) << RightContinuousStartBit;
+    static constexpr uint64_t NumbersCountMask = ((uint64_t(1) << uint64_t(NumberCountBitAmount)) - 1) << NumbersCountStartBit;
+    static constexpr uint64_t NumbersSingleMask = ((uint64_t(1) << uint64_t(NumbersSingleBitsAmount)) - 1);
 
     /*
     uint64_t numbers : 50;
@@ -307,124 +315,138 @@ struct HashOne
      */
     uint64_t value;
 };
-
-static_assert(HashOne::getNumbersStartBit() + HashOne::getNumbersBitAmount() <= 64);
+static_assert(HashOne::NumbersSingleCount <= (1 << HashOne::NumberCountBitAmount));
+static_assert(HashOne::NumbersStartBit + HashOne::NumbersBitAmount <= 64);
 static const size_t HashSize = sizeof(HashOne);
 static_assert(HashSize == 8);
 
-static uint64_t sGetState(const char* line, int lineLen)
+
+static constexpr int MaxNumberCount = 13;
+
+struct State
 {
-    bool isBeginning = true;
+    uint8_t numbers[MaxNumberCount];
+    uint8_t startBits;
+    uint8_t endBits;
+    uint8_t numberCount;
+};
+
+
+static uint64_t sGetState(const char* line, int lineLen, uint64_t& hashIndex)
+{
+    bool beginningFound = false;
     uint64_t beginningContinuous = 0;
     uint64_t continuous = 0;
     uint64_t numbers = 0;
     uint64_t numbersBits = 0;
     uint64_t hash = 0;
+    uint64_t firstNumber = 0;
     for(int i = 0; i < lineLen; ++i)
     {
         char c = line[i];
         if(c == '#')
         {
             continuous++;
+            assert(continuous < 32);
         }
         else if(continuous)
         {
-            assert(continuous < 32);
-            if(isBeginning)
+            if(!beginningFound)
             {
                 beginningContinuous = continuous;
+                beginningFound = true;
             }
             else
             {
-                numbersBits |= continuous << (numbers * HashOne::getNumbersSingleBitAmount());
+                firstNumber = firstNumber == 0 ? continuous : firstNumber;
+                numbersBits |= continuous << (numbers * HashOne::NumbersSingleBitsAmount);
                 numbers++;
             }
-            isBeginning = false;
             continuous = 0;
         }
-        else
-        {
-            isBeginning = false;
-        }
-
     }
-    assert(numbers < 10);
-    if(isBeginning && continuous > 0)
+    assert(numbers < HashOne::NumbersSingleCount);
+    if(!beginningFound)
     {
         beginningContinuous = continuous;
     }
-    hash |= numbersBits << HashOne::getNumbersStartBit();
-    hash |= beginningContinuous << HashOne::getLeftContinuousStartBit();
-    hash |= continuous << HashOne::getRightContinuousStartBit();
-    hash |= numbers << HashOne::getNumberCountStartBit();
+
+    hashIndex = beginningContinuous != 0
+        ? beginningContinuous
+        : numbers != 0 ? firstNumber : continuous;
+
+    hash |= numbersBits << HashOne::NumbersStartBit;
+    hash |= beginningContinuous << HashOne::LeftContinuousStartBit;
+    hash |= continuous << HashOne::RightContinuousStartBit;
+    hash |= numbers << HashOne::NumbersCountStartBit;
     return hash;
 }
 
 
 static int64_t  sGetValidArrangements(
-    const std::unordered_map<uint64_t, int> &hashCounts,
+    const std::unordered_map<uint64_t, uint64_t> *hashCounts,
     const uint8_t* numbers,
-    int numberCount,
-    int numberIndex,
-    int continuous,
+    uint64_t numberCount,
+    uint64_t numberIndex,
+    uint64_t continuous,
     int recursionLevel)
 {
     int64_t result = 0;
     if(numberIndex >= numberCount)
         return 0;
-    int nextNumber = numbers[numberIndex];
+    uint64_t nextNumber = numbers[numberIndex];
+    if(nextNumber < continuous)
+        return 0;
 
-    for(auto iter : hashCounts)
+    uint64_t searchNumberIndex = nextNumber - continuous;
+    for(auto iter : hashCounts[searchNumberIndex])
     {
-        int nextNumberIndex = numberIndex;
-        int hashContinous = iter.first >> HashOne::getLeftContinuousStartBit();
-        hashContinous &= (1 << HashOne::getLeftContinuousBitAmount()) - 1;
-
+        uint64_t nextNumberIndex = numberIndex;
+        uint64_t hashContinuous = (iter.first & HashOne::LeftContinuousMask) >> HashOne::LeftContinuousStartBit;
+        hashContinuous = continuous + hashContinuous;
         bool canContinue = false;
 
-        if(continuous + hashContinous == nextNumber)
+        if(hashContinuous == nextNumber)
         {
             nextNumberIndex = numberIndex + 1;
             canContinue = true;
         }
-        else if(continuous == 0 && hashContinous == 0)
+        else if(continuous == 0 && hashContinuous == 0)
         {
             canContinue = true;
         }
         if(canContinue)
         {
-            int hashNumberCount = iter.first >> HashOne::getNumberCountStartBit();
-            hashNumberCount &= (1 << HashOne::getNumberCountBitAmount()) - 1;
-            uint64_t hashNumbers64 = iter.first >> HashOne::getNumbersStartBit();
-            hashNumbers64 &= (uint64_t(1) << HashOne::getNumbersBitAmount()) - uint64_t(1);
-
-            uint8_t hashRightContinuous = iter.first >> HashOne::getRightContinuousStartBit();
-            hashRightContinuous &= (1 << (HashOne::getRightContinuousBitAmount())) - 1;
+            uint64_t hashNumberCount = (iter.first & HashOne::NumbersCountMask)  >> HashOne::NumbersCountStartBit;
+            uint64_t hashNumbers64 = (iter.first & HashOne::NumbersMask) >> HashOne::NumbersStartBit;
+            uint8_t hashRightContinuous = (iter.first & HashOne::RightContinuousMask) >> HashOne::RightContinuousStartBit;
 
             bool legitNumbers = true;
-            for(int i = 0; i < hashNumberCount; ++i)
+            for(uint64_t i = 0; i < hashNumberCount; ++i)
             {
                 if(nextNumberIndex >= numberCount)
                 {
                     legitNumbers = false;
                     break;
                 }
-                uint64_t numberFromHash = hashNumbers64 & ((1 << HashOne::getNumbersSingleBitAmount()) - 1);
-                if(numbers[nextNumberIndex++] != numberFromHash)
+                uint64_t nextNumberFromHash = hashNumbers64 & HashOne::NumbersSingleMask;
+                if(numbers[nextNumberIndex++] != nextNumberFromHash)
                 {
                     legitNumbers = false;
                     break;
                 }
-                hashNumbers64 >>= HashOne::getNumbersSingleBitAmount();
+                hashNumbers64 >>= HashOne::NumbersSingleBitsAmount;
             }
             if(legitNumbers)
             {
-                if(recursionLevel == 4 && (hashRightContinuous == 0 && nextNumberIndex == numberCount)
-                    && (nextNumberIndex == numberCount - 1 && hashRightContinuous == numbers[nextNumberIndex]))
+                if(recursionLevel == 4 &&
+                    (
+                        (hashRightContinuous == 0 && nextNumberIndex == numberCount)
+                        || (nextNumberIndex == numberCount - 1 && hashRightContinuous == numbers[nextNumberIndex])))
                 {
                     result += iter.second;
                 }
-                else
+                else if(recursionLevel < 4)
                 {
                     result += iter.second * sGetValidArrangements(hashCounts, numbers, numberCount, nextNumberIndex,
                             hashRightContinuous, recursionLevel + 1);
@@ -441,7 +463,7 @@ static int64_t sParse12B(const char* data)
     TIMEDSCOPE("12B Total");
 
 
-    std::unordered_map<uint64_t, int> hashCounts;
+    std::unordered_map<uint64_t, uint64_t> hashCounts[32];
     uint8_t unknownPositions[32] = {};
     uint8_t numbers[256] = {};
 
@@ -497,8 +519,9 @@ static int64_t sParse12B(const char* data)
                     char c = ((j >> k) & 1) ? '#' : '.';
                     line[unknownPositions[k]] = c;
                 }
-                uint64_t hash = sGetState(line, position);
-                hashCounts[hash]++;
+                uint64_t hashIndex = 0;
+                uint64_t hash = sGetState(line, position, hashIndex);
+                hashCounts[hashIndex][hash]++;
 
             }
 
@@ -512,7 +535,8 @@ static int64_t sParse12B(const char* data)
             numberCount *= 5;
 
             //printf("amount: %i\n", (int)hashCounts.size());
-            assert(hashCounts.size() < 16384);
+            //for(const auto& hashCount : hashCounts)
+            //    assert(hashCount.size() < 16384);
             /*
             for(const auto iter : hashCounts)
             {
@@ -524,7 +548,8 @@ static int64_t sParse12B(const char* data)
             printf("Found: %" PRIi64 " ones\n", found);
 
 
-            hashCounts.clear();
+            for(auto& hashCount : hashCounts)
+                hashCount.clear();
             //printf("\n\n");
 
         }
