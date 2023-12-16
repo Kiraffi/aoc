@@ -24,7 +24,6 @@
 alignas(32) static constexpr char test15A[] =
     R"(rn=1,cm-,qp=3,cm=2,qp-,pc=4,ot=9,ab=5,pc-,pc=6,ot=7)";
 
-/*
 static int64_t sParserNumber(int64_t startNumber, const char** data)
 {
     int64_t number = startNumber;
@@ -43,7 +42,6 @@ static int64_t sParserNumber(int64_t startNumber, const char** data)
     while(**data == ' ') ++*data;
     return neg ? -number : number;
 }
-*/
 
 /*
 static void sBitShiftRightOne(__m128i* value)
@@ -107,38 +105,34 @@ struct StrNum
 {
     const char* str;
     int strLen;
+    int number;
 };
 
-static std::vector<StrNum>::iterator findObject(std::vector<StrNum> &hashMap, const char* str, int strLen)
+static int findObject(const std::vector<StrNum> &hashMap, const char* str, int strLen)
 {
-    std::vector<StrNum>::iterator iter = hashMap.begin();
-    while(iter != hashMap.end())
+    for(int index = 0; index < (int)hashMap.size(); ++index)
     {
-        if(iter->strLen != strLen)
+        const StrNum& item = hashMap[index];
+        if(item.strLen != strLen)
         {
-            iter++;
             continue;
         }
-        if(memcmp(str, iter.base(), strLen) == 0)
+        if(memcmp(str, item.str, strLen) == 0)
         {
-            return iter;
+            return index;
         }
-        iter++;
     }
-    return iter;
+    return -1;
 }
 
 
 static int64_t sParseB(const char* data)
 {
     TIMEDSCOPE("15B Total");
-    int64_t sum = 0;
-    int64_t curr = 0;
-
-    std::vector<StrNum> hashMaps[256];
+    static const int HASHMAP_SIZE = 256;
+    std::vector<StrNum> hashMaps[HASHMAP_SIZE];
     int64_t currHash = 0;
-    int strCurrLen = 0;
-    bool assign = true;
+
     const char* start = data;
     int strLen = 0;
 
@@ -146,55 +140,59 @@ static int64_t sParseB(const char* data)
     {
         if(*data == '=')
         {
-            assign = true;
-            currHash = curr;
-            curr = 0;
-            strLen = strCurrLen;
+            ++data;
+            int64_t number = sParserNumber(0, &data);
+            --data;
+
+            int index = findObject(hashMaps[currHash], start, strLen);
+            if(index >= 0)
+            {
+                hashMaps[currHash][index].str = start;
+                hashMaps[currHash][index].number = int(number);
+
+            }
+            else
+            {
+                hashMaps[currHash].push_back({.str = start, .strLen = strLen, .number = int(number) });
+            }
+
         }
         else if(*data == '-')
         {
-            strLen = strCurrLen;
-            std::vector<StrNum>::iterator found = findObject(hashMaps[currHash], start, strLen);
-            if(found != hashMaps[currHash].end())
+            int index = findObject(hashMaps[currHash], start, strLen);
+            if(index >= 0)
             {
-                hashMaps[currHash].erase(found);
+                hashMaps[currHash].erase(hashMaps[currHash].begin() + index);
 
             }
-            currHash = 0;
-            curr = 0;
         }
         else if(*data == ',')
         {
-            if(assign)
-            {
-                std::vector<StrNum>::iterator found = findObject(hashMaps[currHash], start, strLen);
-                if(found != hashMaps[currHash].end())
-                {
-                    found->str = start;
-                }
-                else
-                {
-                    hashMaps[currHash].push_back({.str = start, .strLen = strLen });
-                }
-            }
             start = data + 1;
-            assign = false;
             currHash = 0;
-            curr = 0;
-            strCurrLen = 0;
+            strLen = 0;
         }
 
         else
         {
-            curr += *data;
-            curr *= 17;
-            curr %= 256;
-            strCurrLen++;
+            currHash += *data;
+            currHash *= 17;
+            currHash %= 256;
+            strLen++;
         }
         ++data;
     }
+    int64_t sum = 0;
+
+    for(int i = 0; i < HASHMAP_SIZE; ++i)
+    {
+        for(int j = 0; j < (int)hashMaps[i].size(); ++j)
+        {
+            sum += (i + 1) * (j + 1) * hashMaps[i][j].number;
+        }
+    }
     
-    return sum + curr;
+    return sum;
 }
 
 static int sPrintA(char* buffer, int64_t value)
@@ -204,7 +202,7 @@ static int sPrintA(char* buffer, int64_t value)
 
 static int sPrintB(char* buffer, int64_t value)
 {
-    return sprintf(buffer, "15B: Sum of pressure: %" PRIi64, value);
+    return sprintf(buffer, "15B: Focusing power: %" PRIi64, value);
 }
 
 #ifndef RUNNER
@@ -215,7 +213,7 @@ int main()
     sPrintA(printBuffer, sParseA(data15A));
     printf("%s\n", printBuffer);
 
-    sPrintB(printBuffer, sParseB(test15A));
+    sPrintB(printBuffer, sParseB(data15A));
     printf("%s\n", printBuffer);
     return 0;
 }
