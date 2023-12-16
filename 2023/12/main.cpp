@@ -53,11 +53,10 @@ union alignas(4) Day12State
 {
     struct Values
     {
-        uint8_t index;
+        uint8_t questionMarkCount;
         uint8_t continuous;
         uint8_t number;
-        char choice;
-
+        uint8_t padding;
     } values;
     uint32_t hash;
 };
@@ -65,34 +64,32 @@ union alignas(4) Day12State
 static_assert(sizeof(Day12State) == 4);
 static_assert(sizeof(Day12State::hash) == sizeof(Day12State::Values));
 
-
 static int64_t visit(
-    Day12State stateStart,
+    Day12State state,
     char* line,
     uint8_t lineLen,
+    uint8_t linePos,
     uint8_t* numbers,
     int numberCount,
     std::unordered_map<uint32_t, int64_t>& visited
 )
 {
-    auto iter = visited.find(stateStart.hash);
+    uint32_t hash = state.hash;
+    auto iter = visited.find(hash);
     if(iter != visited.end())
         return iter->second;
-    Day12State state = stateStart;
 
     int64_t visitNumbers = 0;
-    visited[stateStart.hash] = visitNumbers;
 
-    for(uint8_t i = state.values.index; i < lineLen; ++i)
+    for(uint8_t i = linePos; i < lineLen; ++i)
     {
         char c = line[i];
         if(c == '?')
         {
+            ++state.values.questionMarkCount;
             Day12State newState = state;
-            newState.values.choice = '.';
-            newState.values.index = i;
             line[i] = '.';
-            visitNumbers += visit(newState, line, lineLen, numbers, numberCount, visited);
+            visitNumbers += visit(newState, line, lineLen, i, numbers, numberCount, visited);
             line[i] = '?';
 
             c = '#';
@@ -128,69 +125,61 @@ static int64_t visit(
             }
         }
     }
-    visited[stateStart.hash] = visitNumbers;
+    visited[hash] = visitNumbers;
     return visitNumbers;
 }
-
 
 static int64_t sGetArrangementsCount(const char* data, int multiplier)
 {
     int64_t combos = 0;
 
     uint8_t numbers[32] = {};
+    char line[256] = {};
 
     std::unordered_map<uint32_t, int64_t> visited;
     while(*data)
     {
-        int numberCount = 0;
+        uint8_t numberCount = 0;
 
-        int unknowns = 0;
-
-        int position = 0;
-
-        char line[256] = {};
-        uint8_t lineLen = 0;
+        uint8_t position = 0;
 
         visited.clear();
-        const char* start = data;
-        for(int i = 0; i < multiplier; ++i)
         {
-            data = start;
-            while (*data != '\n')
+            //TIMEDSCOPE("Parsing");
+
+            while (*data != ' ')
             {
-                char c = *data;
-                if (isdigit(c))
-                {
-                    numbers[numberCount++] = sParserNumber(0, &data);
-                    if (*data == '\n')
-                        break;
-                }
-                else if (c == '?')
-                {
-                    ++unknowns;
-                    line[position] = c;
-                }
-                else if (c == ' ')
-                {
-                    lineLen = position + 1;
-                }
-                else if (c == '#' || c == '.')
-                {
-                    line[position] = c;
-                }
-                data++;
-                position++;
+                line[position++] = *data++;
             }
-            position = lineLen - 1;
+            data++;
+            while(true)
+            {
+                numbers[numberCount++] = sParserNumber(0, &data);
+                if (*data == '\n')
+                    break;
+                data++;
+            }
+
             line[position++] = '?';
+            for (int i = 1; i < multiplier; ++i)
+            {
+                memcpy(line + position * i, line, position);
+                memcpy(numbers + numberCount * i, numbers, numberCount);
+            }
+            position *= multiplier;
+            numberCount *= multiplier;
+
+            line[position - 1] = '\0';
 
         }
-        Day12State state = { .values{ .index = 0, .continuous = 0, .number = 0, .choice = '#'}};
-        combos += visit(state, line, lineLen, numbers, numberCount, visited);
+        {
+            //TIMEDSCOPE("Counting");
+            Day12State state = {};
+            combos += visit(state, line, position, 0, numbers, numberCount, visited);
+        }
         ++data;
     }
     return combos;
-
 }
 
 static int64_t sParse12A(const char* data)
@@ -204,7 +193,8 @@ static int64_t sParse12A(const char* data)
 static int64_t sParse12B(const char* data)
 {
     TIMEDSCOPE("12B Total");
-    return sGetArrangementsCount(data, 5);
+    int64_t value = sGetArrangementsCount(data, 5);
+    return value;
 }
 
 
