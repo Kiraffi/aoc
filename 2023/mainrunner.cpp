@@ -127,7 +127,7 @@ int runAll(bool, char*)
     measureRun(sParseAmount, "11B", run11B);
     sAddLineBreak();
     measureRun(sParseAmount, "12A", run12A);
-    //measureRun(sParseAmount, "12B WRONG ANSWER", run12B);
+    measureRun(sParseAmount, "12B", run12B);
     sAddLineBreak();
     measureRun(sParseAmount, "13A", run13A);
     measureRun(sParseAmount, "13B", run13B);
@@ -136,7 +136,7 @@ int runAll(bool, char*)
     measureRun(sParseAmount, "14B", run14B);
     sAddLineBreak();
     measureRun(sParseAmount, "15A", run15A);
-    //measureRun(sParseAmount, "15B", run15B);
+    measureRun(sParseAmount, "15B", run15B);
     sAddLineBreak();
     measureRun(sParseAmount, "16A", run16A);
     measureRun(sParseAmount, "16B", run16B);
