@@ -284,6 +284,252 @@ static int64_t sParse12A(const char* data)
 
 
 
+union alignas(4) NewState
+{
+    struct Values
+    {
+        uint8_t index;
+        uint8_t continuous;
+        uint8_t number;
+        char choice;
+
+    } values;
+    uint32_t hash;
+};
+
+static_assert(sizeof(NewState) == 4);
+static_assert(sizeof(NewState::hash) == sizeof(NewState::Values));
+
+
+static int64_t visit(
+    NewState stateStart,
+    char* line,
+    uint8_t lineLen,
+    uint8_t* numbers,
+    int numberCount,
+    std::unordered_map<uint32_t, int64_t>& visited
+)
+{
+    auto iter = visited.find(stateStart.hash);
+    if(iter != visited.end())
+        return iter->second;
+    NewState state = stateStart;
+
+    int64_t visitNumbers = 0;
+    visited[stateStart.hash] = visitNumbers;
+
+    for(uint8_t i = state.values.index; i < lineLen; ++i)
+    {
+        char c = line[i];
+        if(c == '?')
+        {
+            NewState newState = state;
+            newState.values.choice = '.';
+            newState.values.index = i;
+            line[i] = '.';
+            visitNumbers += visit(newState, line, lineLen, numbers, numberCount, visited);
+            line[i] = '?';
+
+            c = '#';
+        }
+
+        if(c == '#')
+        {
+            ++state.values.continuous;
+            if(state.values.continuous > numbers[state.values.number])
+            {
+                break;
+            }
+        }
+        if(state.values.continuous && (c == '.'))// || i + 1 == lineLen))
+        {
+            if(numbers[state.values.number] != state.values.continuous)
+            {
+                break;
+            }
+            ++state.values.number;
+            state.values.continuous = 0;
+            if(state.values.number == numberCount)
+            {
+                while(i < lineLen && line[i] != '#')
+                {
+                    ++i;
+                }
+                if(i == lineLen)
+                {
+                    visitNumbers++;
+                }
+                break;
+            }
+        }
+    }
+    //visited.insert({state.hash, visitNumbers});
+    //visited.insert({state.hash, visitNumbers});
+    visited[stateStart.hash] = visitNumbers;
+    return visitNumbers;
+}
+
+static int64_t sParse12B(const char* data)
+{
+    TIMEDSCOPE("12B Total");
+    int64_t combos = 0;
+    int lineNumber = 1;
+
+    std::vector<NewState> states;
+    // 8 bits current line character index
+    // 8 bits number index
+
+    std::unordered_map<uint32_t, int64_t> visited;
+    while(*data)
+    {
+        //TIMEDSCOPE("12A Loop");
+
+        //printf("\n\n------\nLine: %i\n", lineNumber);
+        //const char* lineStart = data;
+        //const char* end = data;
+        uint8_t numbers[32] = {};
+        int numberCount = 0;
+
+        //uint8_t unknownPositions[128] = {};
+        int unknowns = 0;
+
+        //int64_t found = 0;
+        int position = 0;
+
+        char line[256] = {};
+        uint8_t lineLen = 0;
+
+        states.clear();
+        visited.clear();
+        const char* start = data;
+        for(int i = 0; i < 5; ++i)
+        {
+            data = start;
+            while (*data != '\n')
+            {
+                char c = *data;
+                if (isdigit(c))
+                {
+                    numbers[numberCount++] = sParserNumber(0, &data);
+                    if (*data == '\n')
+                        break;
+                }
+                else if (c == '?')
+                {
+                    ++unknowns;
+                    //unknownPositions[unknowns++] = position;
+                    line[position] = c;
+                }
+                else if (c == ' ')
+                {
+                    lineLen = position + 1;
+                    //end = data + 1;
+                }
+                else if (c == '#' || c == '.')
+                {
+                    line[position] = c;
+                }
+                data++;
+                position++;
+            }
+            position = lineLen - 1;
+            //unknownPositions[unknowns++] = position;
+            line[position++] = '?';
+
+        }
+        //printf("unknowns: %i, line len: %i\n", unknowns, lineLen);
+        int64_t found = 0;
+        //NewState a = { .values{ .index = 0, .continuous = 0, .number = 0, .choice = '.'}};
+        NewState b = { .values{ .index = 0, .continuous = 0, .number = 0, .choice = '#'}};
+
+        found += visit(b, line, lineLen, numbers, numberCount, visited);
+        printf("Found: %" PRIi64 "\n", found);
+        combos += found;
+#if 0
+        while(!states.empty())
+        {
+
+            const NewState& state = states.back();
+            states.pop_back();
+            //for(const State& state : *currentStates)
+            {
+                uint8_t continuous = state.values.continuous;
+                uint8_t number = state.values.number;
+                for(uint8_t i = state.values.index; i < lineLen; ++i)
+                {
+                    char c = line[i];
+                    if(c == '?')
+                    {
+                        if(i == state.values.index)
+                        {
+                            c = state.values.choice;
+                        }
+                        else
+                        {
+                            states.push_back(NewState{.values {.index = i,  .continuous = continuous, .number = number, .choice = '.' }});
+                            c = '#';
+                        }
+                    }
+
+                    if(c == '#')
+                    {
+                        ++continuous;
+                        if(continuous > numbers[number])
+                        {
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        uint16_t index = i | (number << 8);
+                        if(visited.contains(index))
+                        {
+                            break;
+                        }
+                        visited.insert({index, 0});
+                        if(continuous)
+                        {
+                            if(numbers[number] != continuous)
+                            {
+                                break;
+                            }
+                            ++number;
+                            if(number == numberCount)
+                            {
+                                while(i < lineLen)
+                                {
+                                    if(line[i] == '#')
+                                        break;
+                                    ++i;
+                                }
+                                if(i != lineLen)
+                                    break;
+                                found++;
+                                combos++;
+                                break;
+                            }
+                        }
+                        continuous = 0;
+                    }
+
+                }
+
+            }
+
+            //std::swap(currentStates, otherStates);
+        }
+        //printf("Rec Line: %i, found: %" PRIu64 "\n", lineNumber, found);
+        //assert(found);
+#endif
+
+        ++data;
+        ++lineNumber;
+    }
+    return combos;
+}
+
+
+
 // 10 5 bit numbers,
 // left and right
 struct HashOne
@@ -458,7 +704,7 @@ static int64_t  sGetValidArrangements(
 }
 
 
-static int64_t sParse12B(const char* data)
+int64_t sParse12BA(const char* data)
 {
     TIMEDSCOPE("12B Total");
 
@@ -617,8 +863,8 @@ static int64_t sParse12B(const char* data)
 #ifndef RUNNER
 int main()
 {
-    printf("12A: Distances: %" PRIi64 "\n", sParse12A(data12A));
-    printf("12B: Distances: %" PRIi64 "\n", sParse12B(test12A));
+    printf("12A: Counts: %" PRIi64 "\n", sParse12A(data12A));
+    printf("12B: Counts: %" PRIi64 "\n", sParse12B(data12A));
     return 0;
 }
 #endif
@@ -629,7 +875,7 @@ int run12A(bool printOut, char* buffer)
     int64_t aResult = sParse12A(data12A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "12A: Distances: %" PRIi64, aResult);
+        charsAdded = sprintf(buffer, "12A: Counts: %" PRIi64, aResult);
     return charsAdded;
 }
 
@@ -639,7 +885,7 @@ int run12B(bool printOut, char* buffer)
     int64_t resultB = sParse12B(data12A);
 
     if(printOut)
-        charsAdded = sprintf(buffer, "12B: Distances: %" PRIi64, resultB);
+        charsAdded = sprintf(buffer, "12B: Counts: %" PRIi64, resultB);
 
     return charsAdded;
 }
