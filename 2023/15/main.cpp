@@ -18,7 +18,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
 alignas(32) static constexpr char test15A[] =

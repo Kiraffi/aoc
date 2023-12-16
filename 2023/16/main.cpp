@@ -18,7 +18,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
 alignas(32) static constexpr char test16A[] =
@@ -259,33 +259,42 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
         const __m128i* ptr = (const __m128i*) visitedMap;
 
         __m128i sumValues = _mm_setzero_si128();
-        for(int i = 0; i < 128 * 128 / 16; i += 128)
+        for(int i = 0; i < 128 * 128 / 16; ++i)
         {
-            for (int j = 0; j < 128; ++j)
-            {
-                // Since we have based on direction bits set, can be more than 1,
-                // we need to reduct the bits, doing bitshift right by 2 and or them,
-                // then bitshift right by 1 and or them.
-                // Then to reduce storing the values, we sum them up to make them 16bit values.
-                __m128i values = _mm_loadu_si128(ptr);
-                __m128i values1 = _mm_srli_epi16(values, 2);
-                values = _mm_or_si128(values, values1);
-                __m128i values2 = _mm_srli_epi16(values, 1);
-                values = _mm_or_si128(values, values2);
-                values = _mm_and_si128(values, ones8);
+            // Since we have based on direction bits set, can be more than 1,
+            // we need to reduct the bits, doing bitshift right by 2 and or them,
+            // then bitshift right by 1 and or them.
+            // Then to reduce storing the values, we sum them up to make them 16bit values.
+            __m128i values = _mm_loadu_si128(ptr);
+            __m128i values1 = _mm_srli_epi16(values, 2);
+            values = _mm_or_si128(values, values1);
+            __m128i values2 = _mm_srli_epi16(values, 1);
+            values = _mm_or_si128(values, values2);
+            values = _mm_and_si128(values, ones8);
 
-                __m128i values3 = _mm_srli_epi16(values, 8);
-                values = _mm_add_epi16(values, values3);
-                values = _mm_and_si128(values, ones16);
+            __m128i values3 = _mm_srli_epi16(values, 8);
+            values = _mm_add_epi16(values, values3);
+            values = _mm_and_si128(values, ones16);
 
-                sumValues = _mm_add_epi16(values, sumValues);
-                ++ptr;
-            }
+            sumValues = _mm_add_epi16(values, sumValues);
+            ++ptr;
         }
-        alignas(16) uint16_t storeValues[8] = {};
+
+#if 0
+        alignas(16) uint64_t storeValues[2] = {};
+        _mm_storeu_si128((__m128i*)storeValues, sumValues);
+        uint64_t v = storeValues[0] +=storeValues[1];
+        v += v >> 16;
+        v &= 0x0000ffff0000ffffu;
+        v += v >> 32;
+        v &= 0xffffu;
+        energy += v;
+#else
+        alignas(16) uint8_t storeValues[16] = {};
         _mm_storeu_si128((__m128i*)storeValues, sumValues);
         for(uint16_t v : storeValues)
             energy += v;
+#endif
 #else
         for (uint8_t v: visitedMap)
             energy += v ? 1 : 0;

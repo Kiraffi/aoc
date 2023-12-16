@@ -134,7 +134,7 @@ void sDrawMaps14(__m128i* wallMap, __m128i* rockMap, int height)
         __m128i bitShift = _mm_set_epi32(0, 0, 0, 1);
         for(int i = 0; i < 128; ++i)
         {
-            //assert(_mm_test_all_ones(~((rockMap[j] & wallMap[j]) & bitShift)));
+            assert(_mm_test_all_ones(~((rockMap[j] & wallMap[j]) & bitShift)));
             if(!_mm_test_all_ones(~(rockMap[j] & bitShift)))
             {
                 printf("O");
@@ -157,12 +157,12 @@ void sDrawMaps14(__m128i* wallMap, __m128i* rockMap, int height)
     printf("\n");
 }
 
-
 static bool sMoveRocksUpDown(const __m128i* __restrict__ wallMap,
     __m128i* rockMap,
     int startIndex,
     int moveDir)
 {
+
     __m128i changed = _mm_setzero_si128();
     __m128i row = rockMap[startIndex];
     rockMap[startIndex] = _mm_setzero_si128();
@@ -206,19 +206,16 @@ static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
     __m128i row = rockMap[rowIndex];
     __m128i collisions = wallMap[rowIndex];
     sBitShift(&collisions, -moveDir);
-
     while(!_mm_test_all_ones(~row))
     {
-        __m128i collided;
-        do
+        __m128i collided = _mm_and_si128(collisions, row);
+        while(!_mm_test_all_ones(~collided))
         {
-            collided = _mm_and_si128(collisions, row);
-            __m128i movedCollision = collided;
-            sBitShift(&movedCollision, -moveDir);
-            collisions = _mm_or_si128(collisions, movedCollision);
-            row = _mm_xor_si128(collided, row);
-
-        } while(!_mm_test_all_ones(~collided));
+            collided = _mm_and_si128(collided, row);
+            sBitShift(&collided, -moveDir);
+            collisions = _mm_or_si128(collided, collisions);
+        }
+        row = _mm_and_si128(~collisions, row);
         sBitShift(&row, moveDir);
     }
     sBitShift(&collisions, moveDir);
@@ -252,7 +249,7 @@ static int64_t sParseB(const char* data)
     __m128i rockMap[128] = {};
     __m128i wallMap[128] = {};
     __m128i one = _mm_set_epi32(0, 0, 0, 1);;
-    __m128i minusOne = _mm_set_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff);
+    __m128i minusOne = _mm_set1_epi32(-1);
 
     int8_t width = 0;
     int8_t height = 0;
@@ -320,6 +317,8 @@ static int64_t sParseB(const char* data)
     static const int64_t LoopCounts = 1000000000;
     for(int64_t j = 0; j < LoopCounts; ++j)
     {
+        //TIMEDSCOPE("14 Loop");
+
         for(int i = 2; i <= height; ++i)
         {
             sMoveRocksUpDown(wallMap, rockMap, i, -1);
