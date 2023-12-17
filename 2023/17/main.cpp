@@ -18,10 +18,15 @@
 
 #include "input.cpp"
 
+// 141 + 16 + 16 u16 rounded up by 32 = 320 bytes
+static constexpr int Padding = 16;
+static_assert((Padding % 16) == 0);
+static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 31) / 32 * 32;
+static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
+static constexpr int MaxHeight = 160;
+
 #define PROFILE 0
 #include "../profile.h"
-
-static uint32_t sGlobalLowest = ~0u;
 
 alignas(32) static constexpr char test17A[] =
     R"(2413432311323
@@ -129,165 +134,142 @@ static void sBitShift(__m128i* value, int dir)
     }
 }
  */
-enum Dir : uint8_t
-{
-    None = 0,
-    Right = 1,
-    Left = 2,
-    Up = 4,
-    Down = 8,
-};
 
-union Day17State
+template <typename T>
+static void sMemset(T* arr, T value, int amount)
 {
-    struct Values
+    const T* end = arr + amount;
+    while(arr < end)
     {
-        uint32_t energy;
-        uint8_t x;
-        uint8_t y;
-        Dir dir;
-        uint8_t howManyInRow;
-    } values;
-    struct Hash
-    {
-        uint32_t energy;
-        uint32_t hash;
-    } hash;
-};
-static_assert(sizeof(Day17State) == 8);
-static_assert(sizeof(Day17State::Values) == 8);
-static_assert(sizeof(Day17State::Hash) == 8);
+        *arr++ = value;
+    }
+}
 
-static bool sCanMove(const Day17State& state,
-    const char* mapData,
-    Dir dir,
-    std::unordered_map<uint32_t, Day17State>& visited,
+static __m128i sWriteMin(__m128i newValue, uint16_t* map, int offset)
+{
+    __m128i_u* address = (__m128i*) (map + offset);
+    __m128i out = _mm_loadu_si128(address);
+    __m128i prev = out;
+    out = _mm_min_epu16(newValue, out);
+    _mm_storeu_si128(address, out);
+    return prev = _mm_xor_si128(prev, out);
+}
+
+__m128i sUpdateDir(const uint16_t* numberMap,
+    const uint16_t* sourceMap, // can be left, right, up or down. The dest are always the others
+    uint16_t* destMap1, // basically left map if sourceMap is up or down
+    uint16_t* destMap2, // basically right map if sourceMap is up or down
     int width,
     int height,
-    int minimumDir,
-    Day17State& newState)
+    int xDirection,
+    int yDirection,
+    int minimumSameDir,
+    int maximumSameDir)
 {
-    int xOffset = 0;
-    int yOffset = 0;
-    switch(dir)
+    __m128i changed = _mm_setzero_si128();
+    for(int y = 0; y < height; ++y)
     {
-        case None: return false;
-        case Up: yOffset = -1; break;
-        case Down: yOffset = 1; break;
-        case Left: xOffset = -1; break;
-        case Right: xOffset = 1; break;
+        int x = Padding;
+        while(x < width + Padding)
+        {
+            int offset = y * MaxWidthU16 + x;
+            __m128i values = _mm_loadu_si128((const __m128i *) (sourceMap + offset));
+            int moves = 1;
+            while (moves <= maximumSameDir)
+            {
+                if((y + moves * yDirection < 0) | (y + moves * yDirection >= height))
+                {
+                    break;
+                }
+                int loopOffset = offset + moves * (xDirection + yDirection * MaxWidthU16);
+                __m128i numbers = _mm_loadu_si128((const __m128i*) (numberMap + loopOffset));
+                values = _mm_adds_epu16(values, numbers);
+                if (moves >= minimumSameDir)
+                {
+                    changed = _mm_or_si128(sWriteMin(values, destMap2, loopOffset), changed);
+                    changed = _mm_or_si128(sWriteMin(values, destMap1, loopOffset), changed);
+                }
+                moves++;
+            }
+            x += 8;
+        }
     }
-
-    int x = state.values.x + xOffset;
-    int y = state.values.y + yOffset;
-
-    if(x < 0 || x >= width || y < 0 || y >= height)
-    {
-        return false;
-    }
-    uint32_t lowest = ~0u;
-
-    uint32_t energy = (mapData[x + y * (width + 1)] - '0') + state.values.energy;
-    if(energy >= sGlobalLowest)
-        return false;
-    newState.values.x = x;
-    newState.values.y = y;
-    newState.values.dir = dir;
-    newState.values.howManyInRow = uint8_t(state.values.dir == dir ? state.values.howManyInRow + 1u : 1u);
-    if(x == width - 1 && y == height - 1 && newState.values.howManyInRow >= minimumDir && newState.values.howManyInRow)
-    {
-        sGlobalLowest = energy;
-        return false;
-    }
-
-    auto found = visited.find(newState.hash.hash);
-    if(found != visited.end())
-    {
-        lowest = found->second.values.energy;
-    }
-
-    if(energy < lowest)
-    {
-        newState.values.energy = energy;
-        visited[newState.hash.hash] = newState;
-        return true;
-    }
-    return false;
+    return changed;
 }
 
 static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maximumSameDir)
 {
-    sGlobalLowest = ~0u;
-
     int width = 0;
     int height = 0;
+
     sGetSize(data, width, height);
 
-    std::vector<Day17State> states1;
-    std::vector<Day17State> states2;
+    assert(minimumSameDir <= maximumSameDir);
+    assert(maximumSameDir < Padding);
+    assert(width <= MaxWidthU16);
+    assert(height <= MaxHeight);
 
-    std::unordered_map<uint32_t, Day17State> visited;
-    //uint32_t mapLowest[256 * 256] = {};
-    //mapLowest[0] = 1;
-    states1.push_back(Day17State{.values{.energy = 1, .x = 0, .y = 0, .dir = Right, .howManyInRow = 0}});
-    states1.push_back(Day17State{.values{.energy = 1, .x = 0, .y = 0, .dir = Down, .howManyInRow = 0}});
+    alignas(32) uint16_t numberMap[MaxWidthU16 * MaxHeight] = {};
 
-    std::vector<Day17State>* states = &states1;
-    std::vector<Day17State>* newStates = &states2;
+    alignas(32) uint16_t leftMap[MaxWidthU16 * MaxHeight] = {};
+    alignas(32) uint16_t rightMap[MaxWidthU16 * MaxHeight] = {};
+    alignas(32) uint16_t upMap[MaxWidthU16 * MaxHeight] = {};
+    alignas(32) uint16_t downMap[MaxWidthU16 * MaxHeight] = {};
 
-    while(!states->empty())
+    sMemset(leftMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+    sMemset(rightMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+    sMemset(upMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+    sMemset(downMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+    sMemset(numberMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+
     {
-        newStates->clear();
-        Day17State newState = {};
-
-        for (const Day17State& state : *states)
+        const char* tmp = data;
+        int index = Padding;
+        while(*tmp)
         {
-            uint8_t dir = 0xf;
-            if (state.values.howManyInRow == maximumSameDir)
-                dir &= ~state.values.dir;
+            if(*tmp != '\n')
+            {
+                numberMap[index++] = *tmp - '0';
+            }
+            else
+            {
+                index /= MaxWidthU16;
+                index = (index + 1) * MaxWidthU16 + Padding;
+            }
+            tmp++;
+        }
+    }
+    leftMap[Padding] = 0;
+    rightMap[Padding] = 0;
+    upMap[Padding] = 0;
+    downMap[Padding] = 0;
 
-            if (state.values.howManyInRow < minimumSameDir)
-                dir &= state.values.dir;
+    uint16_t lowest = ~0;
+    {
+        TIMEDSCOPE("17 Update maps");
+        __m128i changed = _mm_set1_epi32(1);
 
-            switch (state.values.dir)
-            {
-                case None:
-                    break;
-                case Up:
-                    dir &= ~Down;
-                    break;
-                case Down:
-                    dir &= ~Up;
-                    break;
-                case Left:
-                    dir &= ~Right;
-                    break;
-                case Right:
-                    dir &= ~Left;
-                    break;
-            }
+        while (!(_mm_test_all_ones(~changed)))
+        {
+            changed = _mm_setzero_si128();
+            changed = _mm_or_si128(sUpdateDir(numberMap, rightMap, upMap, downMap, width, height, 1, 0, minimumSameDir,
+                maximumSameDir), changed);
+            changed = _mm_or_si128(sUpdateDir(numberMap, leftMap, upMap, downMap, width, height, -1, 0, minimumSameDir,
+                maximumSameDir), changed);
 
-            if (sCanMove(state, data, Dir(dir & Left), visited, width, height, minimumSameDir, newState))
-            {
-                newStates->push_back(newState);
-            }
-            if (sCanMove(state, data, Dir(dir & Right), visited, width, height, minimumSameDir, newState))
-            {
-                newStates->push_back(newState);
-            }
-            if (sCanMove(state, data, Dir(dir & Up), visited, width, height, minimumSameDir, newState))
-            {
-                newStates->push_back(newState);
-            }
-            if (sCanMove(state, data, Dir(dir & Down), visited, width, height, minimumSameDir, newState))
-            {
-                newStates->push_back(newState);
-            }
+            changed = _mm_or_si128(sUpdateDir(numberMap, upMap, leftMap, rightMap, width, height, 0, -1, minimumSameDir,
+                maximumSameDir), changed);
+            changed = _mm_or_si128(sUpdateDir(numberMap, downMap, leftMap, rightMap, width, height, 0, 1, minimumSameDir,
+                    maximumSameDir), changed);
 
         }
-        std::swap(states, newStates);
+        lowest = sMin(lowest, leftMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
+        lowest = sMin(lowest, rightMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
+        lowest = sMin(lowest, upMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
+        lowest = sMin(lowest, downMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
     }
-    return sGlobalLowest - 1;
+
+    return lowest;
 }
 
 static int64_t sParseA(const char* data)
