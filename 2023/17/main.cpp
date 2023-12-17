@@ -145,17 +145,17 @@ static void sMemset(T* arr, T value, int amount)
     }
 }
 
-static __m128i sWriteMin(__m128i newValue, uint16_t* map, int offset)
+static __m256i sWriteMin(__m256i newValue, uint16_t* map, int offset)
 {
-    __m128i_u* address = (__m128i*) (map + offset);
-    __m128i out = _mm_loadu_si128(address);
-    __m128i prev = out;
-    out = _mm_min_epu16(newValue, out);
-    _mm_storeu_si128(address, out);
-    return prev = _mm_xor_si128(prev, out);
+    __m256i_u* address = (__m256i*) (map + offset);
+    __m256i out = _mm256_loadu_si256(address);
+    __m256i prev = out;
+    out = _mm256_min_epu16(newValue, out);
+    _mm256_storeu_si256(address, out);
+    return prev = _mm256_xor_si256(prev, out);
 }
 
-__m128i sUpdateDir(const uint16_t* numberMap,
+__m256i sUpdateDir(const uint16_t* numberMap,
     const uint16_t* sourceMap, // can be left, right, up or down. The dest are always the others
     uint16_t* destMap1, // basically left map if sourceMap is up or down
     uint16_t* destMap2, // basically right map if sourceMap is up or down
@@ -166,14 +166,14 @@ __m128i sUpdateDir(const uint16_t* numberMap,
     int minimumSameDir,
     int maximumSameDir)
 {
-    __m128i changed = _mm_setzero_si128();
+    __m256i changed = _mm256_setzero_si256();
     for(int y = 0; y < height; ++y)
     {
         int x = Padding;
         while(x < width + Padding)
         {
             int offset = y * MaxWidthU16 + x;
-            __m128i values = _mm_loadu_si128((const __m128i *) (sourceMap + offset));
+            __m256i values = _mm256_loadu_si256((const __m256i *) (sourceMap + offset));
             int moves = 1;
             while (moves <= maximumSameDir)
             {
@@ -182,16 +182,16 @@ __m128i sUpdateDir(const uint16_t* numberMap,
                     break;
                 }
                 int loopOffset = offset + moves * (xDirection + yDirection * MaxWidthU16);
-                __m128i numbers = _mm_loadu_si128((const __m128i*) (numberMap + loopOffset));
-                values = _mm_adds_epu16(values, numbers);
+                __m256i numbers = _mm256_loadu_si256((const __m256i*) (numberMap + loopOffset));
+                values = _mm256_adds_epu16(values, numbers);
                 if (moves >= minimumSameDir)
                 {
-                    changed = _mm_or_si128(sWriteMin(values, destMap2, loopOffset), changed);
-                    changed = _mm_or_si128(sWriteMin(values, destMap1, loopOffset), changed);
+                    changed = _mm256_or_si256(sWriteMin(values, destMap2, loopOffset), changed);
+                    changed = _mm256_or_si256(sWriteMin(values, destMap1, loopOffset), changed);
                 }
                 moves++;
             }
-            x += 8;
+            x += 16;
         }
     }
     return changed;
@@ -247,19 +247,19 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
     uint16_t lowest = ~0;
     {
         TIMEDSCOPE("17 Update maps");
-        __m128i changed = _mm_set1_epi32(1);
+        __m256i changed = _mm256_set1_epi32(1);
 
-        while (!(_mm_test_all_ones(~changed)))
+        while (!(_mm256_testz_si256(changed, changed)))
         {
-            changed = _mm_setzero_si128();
-            changed = _mm_or_si128(sUpdateDir(numberMap, rightMap, upMap, downMap, width, height, 1, 0, minimumSameDir,
+            changed = _mm256_setzero_si256();
+            changed = _mm256_or_si256(sUpdateDir(numberMap, rightMap, upMap, downMap, width, height, 1, 0, minimumSameDir,
                 maximumSameDir), changed);
-            changed = _mm_or_si128(sUpdateDir(numberMap, leftMap, upMap, downMap, width, height, -1, 0, minimumSameDir,
+            changed = _mm256_or_si256(sUpdateDir(numberMap, leftMap, upMap, downMap, width, height, -1, 0, minimumSameDir,
                 maximumSameDir), changed);
 
-            changed = _mm_or_si128(sUpdateDir(numberMap, upMap, leftMap, rightMap, width, height, 0, -1, minimumSameDir,
+            changed = _mm256_or_si256(sUpdateDir(numberMap, upMap, leftMap, rightMap, width, height, 0, -1, minimumSameDir,
                 maximumSameDir), changed);
-            changed = _mm_or_si128(sUpdateDir(numberMap, downMap, leftMap, rightMap, width, height, 0, 1, minimumSameDir,
+            changed = _mm256_or_si256(sUpdateDir(numberMap, downMap, leftMap, rightMap, width, height, 0, 1, minimumSameDir,
                     maximumSameDir), changed);
 
         }
