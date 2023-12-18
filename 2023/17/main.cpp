@@ -274,6 +274,8 @@ static bool sUpdateDir(const uint16_t* numberMap,
         __m128i writeValue2 = ~_mm_setzero_si128();
         __m128i writeValue3 = ~_mm_setzero_si128();
         __m128i writeValue4 = ~_mm_setzero_si128();
+        __m128i writeValue5 = ~_mm_setzero_si128();
+        __m128i writeValue6 = ~_mm_setzero_si128();
 
         while(x < width)
         {
@@ -285,24 +287,29 @@ static bool sUpdateDir(const uint16_t* numberMap,
             }
             else
             {
-                offset += (Padding + width - x + 15) / 16 * 16;
+                offset += (Padding + width - x - 1) / 32 * 32;
+                //offset += Padding + width - x;
             }
-            __m128i values1 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 0 * xDirection * 8));
-            __m128i values2 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 1 * xDirection * 8));
-
-            __m128i v1 = values1;
-            __m128i v2 = values2;
-            __m128i v3 = ~_mm_setzero_si128();
-            __m128i v4 = ~_mm_setzero_si128();
+            __m128i v1 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 0 * xDirection * 8));
+            __m128i v2 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 1 * xDirection * 8));
+            __m128i v3 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 2 * xDirection * 8));
+            __m128i v4 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 3 * xDirection * 8));
+            __m128i v5 = ~_mm_setzero_si128();
+            __m128i v6 = ~_mm_setzero_si128();
 
             __m128i numbers1 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 0 * xDirection * 8));
             __m128i numbers2 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 1 * xDirection * 8));
             __m128i numbers3 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 2 * xDirection * 8));
             __m128i numbers4 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 3 * xDirection * 8));
+            __m128i numbers5 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 4 * xDirection * 8));
+            __m128i numbers6 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 5 * xDirection * 8));
+
             if(xDirection > 0 )
             {
                 for (int i = 1; i <= maximumSameDir; ++i)
                 {
+                    v6 = _mm_or_si128(_mm_slli_si128(v6, 2), _mm_srli_si128(v5, 14));
+                    v5 = _mm_or_si128(_mm_slli_si128(v5, 2), _mm_srli_si128(v4, 14));
                     v4 = _mm_or_si128(_mm_slli_si128(v4, 2), _mm_srli_si128(v3, 14));
                     v3 = _mm_or_si128(_mm_slli_si128(v3, 2), _mm_srli_si128(v2, 14));
                     v2 = _mm_or_si128(_mm_slli_si128(v2, 2), _mm_srli_si128(v1, 14));
@@ -312,6 +319,8 @@ static bool sUpdateDir(const uint16_t* numberMap,
                     v2 = _mm_adds_epu16(numbers2, v2);
                     v3 = _mm_adds_epu16(numbers3, v3);
                     v4 = _mm_adds_epu16(numbers4, v4);
+                    v5 = _mm_adds_epu16(numbers5, v5);
+                    v6 = _mm_adds_epu16(numbers6, v6);
 
                     v1 = _mm_or_si128(LowBits, v1);
 
@@ -321,6 +330,8 @@ static bool sUpdateDir(const uint16_t* numberMap,
                         writeValue2 = _mm_min_epu16(writeValue2, v2);
                         writeValue3 = _mm_min_epu16(writeValue3, v3);
                         writeValue4 = _mm_min_epu16(writeValue4, v4);
+                        writeValue5 = _mm_min_epu16(writeValue5, v5);
+                        writeValue6 = _mm_min_epu16(writeValue6, v6);
                     }
                 }
             }
@@ -328,6 +339,8 @@ static bool sUpdateDir(const uint16_t* numberMap,
             {
                 for (int i = 1; i <= maximumSameDir; ++i)
                 {
+                    v6 = _mm_or_si128(_mm_srli_si128(v6, 2), _mm_slli_si128(v5, 14));
+                    v5 = _mm_or_si128(_mm_srli_si128(v5, 2), _mm_slli_si128(v4, 14));
                     v4 = _mm_or_si128(_mm_srli_si128(v4, 2), _mm_slli_si128(v3, 14));
                     v3 = _mm_or_si128(_mm_srli_si128(v3, 2), _mm_slli_si128(v2, 14));
                     v2 = _mm_or_si128(_mm_srli_si128(v2, 2), _mm_slli_si128(v1, 14));
@@ -337,6 +350,8 @@ static bool sUpdateDir(const uint16_t* numberMap,
                     v2 = _mm_adds_epu16(numbers2, v2);
                     v3 = _mm_adds_epu16(numbers3, v3);
                     v4 = _mm_adds_epu16(numbers4, v4);
+                    v5 = _mm_adds_epu16(numbers5, v5);
+                    v6 = _mm_adds_epu16(numbers6, v6);
 
                     v1 = _mm_or_si128(HighBits, v1);
 
@@ -346,18 +361,24 @@ static bool sUpdateDir(const uint16_t* numberMap,
                         writeValue2 = _mm_min_epu16(writeValue2, v2);
                         writeValue3 = _mm_min_epu16(writeValue3, v3);
                         writeValue4 = _mm_min_epu16(writeValue4, v4);
+                        writeValue5 = _mm_min_epu16(writeValue5, v5);
+                        writeValue6 = _mm_min_epu16(writeValue6, v6);
                     }
                 }
             }
 
-            changed1 = _mm_or_si128(sWriteMin128(writeValue1, destMap1, offset + 0x00 * xDirection), changed1);
-            changed1 = _mm_or_si128(sWriteMin128(writeValue2, destMap1, offset + 0x08 * xDirection), changed1);
+            changed1 = _mm_or_si128(sWriteMin128(writeValue1, destMap1, offset + 8 * 0 * xDirection), changed1);
+            changed1 = _mm_or_si128(sWriteMin128(writeValue2, destMap1, offset + 8 * 1 * xDirection), changed1);
+            changed1 = _mm_or_si128(sWriteMin128(writeValue3, destMap1, offset + 8 * 2 * xDirection), changed1);
+            changed1 = _mm_or_si128(sWriteMin128(writeValue4, destMap1, offset + 8 * 3 * xDirection), changed1);
 
-            writeValue1 = writeValue3;
-            writeValue2 = writeValue4;
+            writeValue1 = writeValue5;
+            writeValue2 = writeValue6;
             writeValue3 = ~_mm_setzero_si128();
             writeValue4 = ~_mm_setzero_si128();
-            x += 16;
+            writeValue5 = ~_mm_setzero_si128();
+            writeValue6 = ~_mm_setzero_si128();
+            x += 32;
         }
 
         {
