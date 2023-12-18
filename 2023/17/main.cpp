@@ -19,7 +19,7 @@
 #include "input.cpp"
 
 // 141 + 16 + 16 u16 rounded up by 32 = 320 bytes
-static constexpr int Padding = 32;
+static constexpr int Padding = 16;
 static_assert((Padding % 16) == 0);
 static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 31) / 32 * 32;
 static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
@@ -289,7 +289,7 @@ static bool sUpdateDir(const uint16_t* numberMap,
             }
             else
             {
-                offset += Padding + width - x;
+                offset += (Padding + width - x + 15) / 16 * 16;
             }
             if(true)
             {
