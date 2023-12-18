@@ -151,7 +151,7 @@ int runAll(bool, char*)
 
 int main()
 {
-    measureRun(1, "all avg 1 times", runAll);
+    measureRun(100, "all avg 1 times", runAll);
     printf("%s\n", charBuffer);
     return 0;
 }
