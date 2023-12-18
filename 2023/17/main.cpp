@@ -25,7 +25,7 @@ static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 31) / 32 * 32;
 static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
 static constexpr int MaxHeight = 160;
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test17A[] =
@@ -171,9 +171,9 @@ static bool sUpdateDir(const uint16_t* numberMap,
     const uint16_t* sourceMap, // can be left, right, up or down. The dest are always the others
     uint8_t* changedRowsSource,
     uint16_t* destMap1, // basically left map if sourceMap is up or down
-    uint16_t* destMap2, // basically right map if sourceMap is up or down
+    //uint16_t* destMap2, // basically right map if sourceMap is up or down
     uint8_t* changedRowsDst1,
-    uint8_t* changedRowsDst2,
+    //uint8_t* changedRowsDst2,
     int width,
     int height,
     int xDirection,
@@ -192,7 +192,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
         }
         int x = Padding;
         __m256i changed1[16] = {};
-        __m256i changed2[16] = {};
 
         while(x < width + Padding)
         {
@@ -212,8 +211,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
                 {
                     changed1[moves] = _mm256_or_si256(sWriteMin256(values, destMap1, loopOffset),
                         changed1[moves]);
-                    changed2[moves] = _mm256_or_si256(sWriteMin256(values, destMap2, loopOffset),
-                        changed2[moves]);
                 }
                 moves++;
             }
@@ -226,34 +223,25 @@ static bool sUpdateDir(const uint16_t* numberMap,
             {
                 changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
             }
-            if (!(_mm256_testz_si256(changed2[i], changed2[i])))
-            {
-                changedRowsDst2[(index) / 8] |= 1 << ((index) % 8);
-            }
         }
         for (int i = 0; i < 8; ++i)
         {
             changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
-            changed2[i] = _mm256_or_si256(changed2[2 * i], changed2[2 * i + 1]);
         }
 
         for (int i = 0; i < 4; ++i)
         {
             changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
-            changed2[i] = _mm256_or_si256(changed2[2 * i], changed2[2 * i + 1]);
         }
 
         for (int i = 0; i < 2; ++i)
         {
             changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
-            changed2[i] = _mm256_or_si256(changed2[2 * i], changed2[2 * i + 1]);
         }
 
         changed1[0] = _mm256_or_si256(changed1[0], changed1[1]);
-        changed2[0] = _mm256_or_si256(changed2[0], changed2[1]);
-        changed = _mm256_or_si256(changed, changed2[0]);
+        changed = _mm256_or_si256(changed, changed1[0]);
     }
-    memset(changedRowsSource, 0, 32);
     return !_mm256_testz_si256(changed, changed);
 }
 
@@ -262,9 +250,9 @@ static bool sUpdateDir(const uint16_t* numberMap,
     const uint16_t* sourceMap, // can be left, right, up or down. The dest are always the others
     uint8_t* changedRowsSource,
     uint16_t* destMap1, // basically left map if sourceMap is up or down
-    uint16_t* destMap2, // basically right map if sourceMap is up or down
+    //uint16_t* destMap2, // basically right map if sourceMap is up or down
     uint8_t* changedRowsDst1,
-    uint8_t* changedRowsDst2,
+    //uint8_t* changedRowsDst2,
     int width,
     int height,
     int xDirection,
@@ -285,7 +273,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
         }
         int x = 0;
         __m128i changed1 = _mm_setzero_si128();
-        __m128i changed2 = _mm_setzero_si128();
 
         __m128i writeValue1 = ~_mm_setzero_si128();
         __m128i writeValue2 = ~_mm_setzero_si128();
@@ -304,7 +291,7 @@ static bool sUpdateDir(const uint16_t* numberMap,
             {
                 offset += Padding + width - x;
             }
-            if(true) //xDirection < 0)
+            if(true)
             {
                 //__m256i values0 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset - 1 * xDirection * 16));
                 __m128i values1 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 0 * xDirection * 8));
@@ -314,9 +301,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
                 __m128i v2 = values2;
                 __m128i v3 = ~_mm_setzero_si128();
                 __m128i v4 = ~_mm_setzero_si128();
-
-                //__m128i values = values1;
-
 
                 __m128i numbers1 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 0 * xDirection * 8));
                 __m128i numbers2 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 1 * xDirection * 8));
@@ -347,7 +331,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
                         }
                     }
                 }
-                //__m128i HighBitsMask = HighBits;
                 else
                 {
                     for (int i = 1; i <= maximumSameDir; ++i)
@@ -377,17 +360,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
                 changed1 = _mm_or_si128(sWriteMin128(writeValue1, destMap1, offset + 0x00 * xDirection), changed1);
                 changed1 = _mm_or_si128(sWriteMin128(writeValue2, destMap1, offset + 0x08 * xDirection), changed1);
 
-                changed2 = _mm_or_si128(sWriteMin128(writeValue1, destMap2, offset + 0x00 * xDirection), changed2);
-                changed2 = _mm_or_si128(sWriteMin128(writeValue2, destMap2, offset + 0x08 * xDirection), changed2);
-                if(x >= width - 16)
-                {
-                    //changed1 = _mm_or_si128(sWriteMin128(writeValue3, destMap1, offset + 0x10 * xDirection), changed1);
-                    //changed1 = _mm_or_si128(sWriteMin128(writeValue4, destMap1, offset + 0x18 * xDirection), changed1);
-
-                    //changed2 = _mm_or_si128(sWriteMin128(writeValue3, destMap2, offset + 0x10 * xDirection), changed2);
-                    //changed2 = _mm_or_si128(sWriteMin128(writeValue4, destMap2, offset + 0x18 * xDirection), changed2);
-                }
-
                 writeValue1 = writeValue3;
                 writeValue2 = writeValue4;
                 writeValue3 = ~_mm_setzero_si128();
@@ -411,7 +383,7 @@ static bool sUpdateDir(const uint16_t* numberMap,
                     if (moves >= minimumSameDir)
                     {
                         changed1 = _mm_or_si128(sWriteMin128(values, destMap1, loopOffset), changed1);
-                        changed2 = _mm_or_si128(sWriteMin128(values, destMap2, loopOffset), changed2);
+                        //changed2 = _mm_or_si128(sWriteMin128(values, destMap2, loopOffset), changed2);
                     }
                     moves++;
 
@@ -421,21 +393,13 @@ static bool sUpdateDir(const uint16_t* numberMap,
         }
 
         {
-            int index = y;
             if ((!_mm_test_all_ones(~changed1)))
             {
-                changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
-            }
-            if ((!_mm_test_all_ones(~changed2)))
-            {
-                changedRowsDst2[(index) / 8] |= 1 << ((index) % 8);
-
+                changedRowsDst1[(y) / 8] |= 1 << ((y) % 8);
             }
         }
         changed = _mm_or_si128(changed, changed1);
-        changed = _mm_or_si128(changed, changed2);
     }
-    memset(changedRowsSource, 0, 32);
     return !_mm_test_all_ones(~changed);
 }
 
@@ -454,20 +418,14 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
 
     alignas(32) uint16_t numberMap[MaxWidthU16 * MaxHeight] = {};
 
-    alignas(32) uint16_t leftMap[MaxWidthU16 * MaxHeight] = {};
-    alignas(32) uint16_t rightMap[MaxWidthU16 * MaxHeight] = {};
-    alignas(32) uint16_t upMap[MaxWidthU16 * MaxHeight] = {};
-    alignas(32) uint16_t downMap[MaxWidthU16 * MaxHeight] = {};
+    alignas(32) uint16_t leftRightMap[MaxWidthU16 * MaxHeight] = {};
+    alignas(32) uint16_t upDownMap[MaxWidthU16 * MaxHeight] = {};
 
-    alignas(32) uint8_t changedRowsLeft[32] = {};
-    alignas(32) uint8_t changedRowsRight[32] = {};
-    alignas(32) uint8_t changedRowsUp[32] = {};
-    alignas(32) uint8_t changedRowsDown[32] = {};
+    alignas(32) uint8_t changedRowsLeftRight[32] = {};
+    alignas(32) uint8_t changedRowsUpDown[32] = {};
 
-    sMemset(leftMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
-    sMemset(rightMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
-    sMemset(upMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
-    sMemset(downMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+    sMemset(leftRightMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
+    sMemset(upDownMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
     sMemset(numberMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
 
     {
@@ -487,15 +445,11 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
             tmp++;
         }
     }
-    leftMap[Padding] = 0;
-    rightMap[Padding] = 0;
-    upMap[Padding] = 0;
-    downMap[Padding] = 0;
+    leftRightMap[Padding] = 0;
+    upDownMap[Padding] = 0;
 
-    changedRowsLeft[0] = 1;
-    changedRowsRight[0] = 1;
-    changedRowsUp[0] = 1;
-    changedRowsDown[0] = 1;
+    changedRowsLeftRight[0] = 1;
+    changedRowsUpDown[0] = 1;
 
     uint16_t lowest = ~0;
     {
@@ -505,32 +459,31 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
         while (changed)
         {
             changed = false;
-            changed |= sUpdateDir2(numberMap, rightMap, changedRowsRight,
-                upMap, downMap, changedRowsUp, changedRowsDown,
+            changed |= sUpdateDir2(numberMap, leftRightMap, changedRowsLeftRight,
+                upDownMap, changedRowsUpDown,
                 width, height, 1, minimumSameDir,
                 maximumSameDir);
 
-            changed |= sUpdateDir2(numberMap, leftMap, changedRowsLeft,
-                upMap, downMap, changedRowsUp, changedRowsDown,
+            changed |= sUpdateDir2(numberMap, leftRightMap, changedRowsLeftRight,
+                upDownMap,  changedRowsUpDown,
                 width, height, -1, minimumSameDir,
                 maximumSameDir);
+            memset(changedRowsLeftRight, 0, 32);
 
-            changed |= sUpdateDir(numberMap, upMap, changedRowsUp,
-                leftMap, rightMap,
-                changedRowsLeft, changedRowsRight,
+            changed |= sUpdateDir(numberMap, upDownMap, changedRowsUpDown,
+                leftRightMap, changedRowsLeftRight,
                 width, height, 0, -1, minimumSameDir,
                 maximumSameDir);
 
-            changed |= sUpdateDir(numberMap, downMap, changedRowsDown,
-                leftMap, rightMap, changedRowsLeft, changedRowsRight,
+            changed |= sUpdateDir(numberMap, upDownMap, changedRowsUpDown,
+                leftRightMap, changedRowsLeftRight,
                 width, height, 0, 1, minimumSameDir,
                 maximumSameDir);
+            memset(changedRowsUpDown, 0, 32);
 
         }
-        lowest = sMin(lowest, leftMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
-        lowest = sMin(lowest, rightMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
-        lowest = sMin(lowest, upMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
-        lowest = sMin(lowest, downMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
+        lowest = leftRightMap[Padding + width - 1 + (height - 1) * MaxWidthU16];
+        lowest = sMin(lowest, upDownMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
     }
 
     return lowest;
