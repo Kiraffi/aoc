@@ -49,6 +49,8 @@ add_executable(runall "mainrunner.cpp"
         "16/main.cpp"
         "17/main.cpp"
         "18/main.cpp"
+        "19/main.cpp"
+        "20/main.cpp"
 
 )
 target_compile_definitions(runall PRIVATE RUNNER=1 )

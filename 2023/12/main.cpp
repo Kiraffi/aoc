@@ -87,11 +87,13 @@ static int64_t visit(
         if(c == '?')
         {
             ++state.values.questionMarkCount;
-            Day12State newState = state;
-            line[i] = '.';
-            visitNumbers += visit(newState, line, lineLen, i, numbers, numberCount, visited);
-            line[i] = '?';
-
+            if(state.values.continuous == 0 || numbers[state.values.number] == state.values.continuous)
+            {
+                Day12State newState = state;
+                line[i] = '.';
+                visitNumbers += visit(newState, line, lineLen, i, numbers, numberCount, visited);
+                line[i] = '?';
+            }
             c = '#';
         }
 

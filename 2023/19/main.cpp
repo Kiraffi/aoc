@@ -19,7 +19,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
 alignas(32) static constexpr char test19A[] =
@@ -136,7 +136,7 @@ static void sMemset(T* arr, T value, int amount)
 
 }
 */
-int sGetOrAdd(std::unordered_map<std::string, int>& stringMap, const char** data)
+static int sGetOrAdd(std::unordered_map<std::string, int>& stringMap, const char** data)
 {
     const char* tmp = *data;
     while(isalpha(*tmp)) tmp++;
