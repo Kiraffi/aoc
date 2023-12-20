@@ -136,111 +136,6 @@ static void sMemset(T* arr, T value, int amount)
 }
 */
 
-static void sMove(int& x, int& y, char dir, int amount, char* map)
-{
-    int xMove = 0;
-    int yMove = 0;
-    switch(dir)
-    {
-        case 'R': xMove += amount; break;
-        case 'L': xMove -= amount; break;
-        case 'U': yMove -= amount; break;
-        case 'D': yMove += amount; break;
-    }
-    while(xMove != 0 || yMove != 0)
-    {
-        if(xMove > 0)
-        {
-            x++;
-            xMove--;
-        }
-        else if(xMove < 0)
-        {
-            x--;
-            xMove++;
-        }
-        if(yMove > 0)
-        {
-            y++;
-            yMove--;
-        }
-        else if(yMove < 0)
-        {
-            y--;
-            yMove++;
-        }
-        assert(x < MapWidth && x >= 0 && y < MapHeight && y >= 0);
-        map[x + y * MapWidth] = '#';
-    }
-}
-
-
-
-static int64_t sParseA(const char* data)
-{
-    TIMEDSCOPE("18A Total");
-    char map[MapWidth * MapHeight] = {};
-    int x = 256;
-    int y = 128;
-    int xMin = x;
-    int xMax = x;
-    int yMin = y;
-    int yMax = y;
-    while(*data)
-    {
-        char dir = *data++;
-        int amount = sParserNumber(0, &data);
-        sMove(x, y, dir, amount, map);
-        xMin = sMin(x, xMin);
-        xMax = sMax(x, xMax);
-        yMin = sMin(y, yMin);
-        yMax = sMax(y, yMax);
-
-        while (*data++ != '\n');
-    }
-    /*
-    for(int i = 0; i < MapWidth * MapHeight; ++i )
-    {
-        if(map[i] == '#')
-            printf("#");
-        else
-        {
-            printf(" ");
-        }
-        if((i % MapWidth) ==MapWidth - 1)
-        {
-            printf("\n");
-        }
-    }*/
-    printf("x min: %i, max: %i, y min: %i, max: %i\n", xMin, xMax, yMin, yMax);
-    int64_t area = 0;
-    bool isInside = false;
-    for(int yp = 0; yp < MapHeight; ++yp)
-    {
-        for(int xp = 0; xp < MapWidth; ++xp)
-        {
-            bool wasUp = false;
-            bool wasDown = false;
-            while(map[xp + yp * MapWidth] == '#')
-            {
-                area++;
-                wasUp   |= map[xp + (yp - 1) * MapWidth];
-                wasDown |= map[xp + (yp + 1) * MapWidth];
-                xp++;
-            }
-            if(wasUp && wasDown)
-            {
-                isInside = !isInside;
-            }
-            if(isInside)
-            {
-                area++;
-            }
-        }
-    }
-
-    return area;
-}
 
 struct Point
 {
@@ -248,182 +143,59 @@ struct Point
     int y;
 };
 
-struct FindNext
+struct Line
 {
-    int64_t area;
-    int newPointIndex;
+    Point top;
+    Point bot;
 };
 
-static FindNext sFindNext(const Point* points, int pointCount, int pIndex, int dir)
+static int64_t sGetArea(const char* data, bool bPart)
 {
-    int currY = points[pIndex].y;
-    int currX = points[pIndex].x;
-    int yMin = currY;
-    int xMin = currX;
-    int topLeftPoint = pIndex;
-    int nextIndex = (pIndex + dir + pointCount) % pointCount;
+    Line lines[1024];
+    int lineCount = 0;
     int64_t area = 0;
-    bool hasGoneDown = false;
-    int prevY = currY;
-
-    while(points[nextIndex].y < currY)
-    {
-        int x = points[nextIndex].x;
-        int y = points[nextIndex].y;
-
-        if(prevY > y && hasGoneDown)
-        {
-            nextIndex = (nextIndex - dir + pointCount) % pointCount;
-            break;
-        }
-        if(y > prevY)
-        {
-            hasGoneDown = true;
-        }
-        if(y < yMin || (y == yMin && x < xMin))
-        {
-            yMin = y;
-            xMin = x;
-            topLeftPoint = nextIndex;
-        }
-        prevY = y;
-        nextIndex = (nextIndex + dir + pointCount) % pointCount;
-    }
-    int lp = topLeftPoint;
-    {
-        const Point& p1 = points[lp];
-        const Point& p2 = points[(lp + dir + pointCount) % pointCount];
-        int x = p1.x;
-        if(p2.x != x)
-            dir = points[(lp + dir + pointCount) % pointCount].x > x ? dir : -dir;
-        else
-            dir = -dir;
-    }
-    int rp = (lp + dir + pointCount) % pointCount;
-    Point lPoint = points[lp];
-    Point rPoint = points[rp];
-
-    while(rp != lp && ((lp != nextIndex && lp != pIndex) || (rp != nextIndex && rp != pIndex)))
-    {
-        assert(lPoint.x < rPoint.x);
-        Point lPoint1 = points[(lp - dir + pointCount) % pointCount];
-        Point rPoint1 = points[(rp + dir + pointCount) % pointCount];
-        assert(lPoint1.x < rPoint1.x);
-
-        lPoint1.y = sMin(lPoint1.y, currY);
-        rPoint1.y = sMin(rPoint1.y, currY);
-
-        if(lPoint.x != lPoint1.x)
-        {
-            lPoint = lPoint1;
-            if(lp != pIndex && lp != nextIndex)
-                lp = (lp - dir + pointCount) % pointCount;
-        }
-        else if(rPoint.x != rPoint1.x)
-        {
-            rPoint = rPoint1;
-            if(rp != pIndex && rp != nextIndex)
-                rp = (rp + dir + pointCount) % pointCount;
-        }
-        else if(lPoint.y > lPoint1.y)
-        {
-            int curr = lp;
-            while(points[curr].x != 0) curr += dir;
-            int64_t multiplier = points[curr].x < 0 ? 1 : -1;
-            FindNext next = sFindNext(points, pointCount, lp, -dir);
-            area += multiplier * next.area;
-            lp = next.newPointIndex;
-        }
-        else if(rPoint.y > rPoint1.y)
-        {
-            int curr = rp;
-            while(points[curr].x != 0) curr -= dir;
-            int64_t multiplier = points[curr].x > 0 ? 1 : -1;
-            FindNext next = sFindNext(points, pointCount, rp, +dir);
-            area += multiplier * next.area;
-            rp = next.newPointIndex;
-        }
-
-        else if(lPoint1.y < rPoint1.y)
-        {
-            assert(lPoint.x == lPoint1.x);
-            int diffY = lPoint1.y - lPoint.y;
-            if(lp == pIndex || lp == nextIndex)
-            {
-                diffY = currY - lPoint.y;
-                area += diffY * (rPoint.x - lPoint.x);
-                lPoint.y = currY;
-                //rPoint.y = currY;
-            }
-            else
-            {
-                area += diffY * (rPoint.x - lPoint.x);
-                lPoint = lPoint1;
-                //rPoint.y = lPoint1.y;
-                lp = (lp - dir + pointCount) % pointCount;
-            }
-        }
-        else if(lPoint1.y > rPoint1.y)
-        {
-            assert(rPoint.x == rPoint1.x);
-            int diffY = rPoint1.y - rPoint.y;
-            if(rp == pIndex || rp == nextIndex)
-            {
-                diffY = currY - rPoint.y;
-                area += diffY * (rPoint.x - lPoint.x);
-                rPoint.y = currY;
-                //lPoint.y = currY;
-            }
-            else
-            {
-                area += diffY * (rPoint.x - lPoint.x);
-                rPoint = rPoint1;
-                //lPoint.y = rPoint.y;
-                rp = (rp + dir + pointCount) % pointCount;
-            }
-
-        }
-        else
-        {
-            if(rp != nextIndex && rp != pIndex)
-            {
-                rp = (rp + dir + pointCount) % pointCount;
-            }
-            else if(lp != nextIndex && lp != pIndex)
-            {
-                lp = (lp - dir + pointCount) % pointCount;
-            }
-            else
-            {
-                assert(false);
-            }
-        }
-    }
-    return {.area = area, .newPointIndex = nextIndex };
-}
-
-
-static int64_t sParseB(const char* data)
-{
-    TIMEDSCOPE("18B Total");
 
     int x = 0;
     int y = 0;
-    //int xMin = x;
-    int xMax = x;
-    //int yMin = y;
-    int yMax = y;
 
-    Point points[1024] = {};
-
-    int pointCount = 1;
-    //int topLeftPoint = 0;
-    int botRightPoint = 0;
-    char lastDir = '\0';
     while(*data)
     {
         char dir = *data++;
         int amount = sParserNumber(0, &data);
+
+        if(bPart)
+        {
+            data += 2;
+            amount = 0;
+            for (int i = 0; i < 5; ++i)
+            {
+                if (isdigit(*data))
+                    amount = amount * 16 + (*data) - '0';
+                else
+                    amount = amount * 16 + ((*data) - 'a') + 10;
+                data++;
+            }
+            dir = *data;
+        }
+        switch(dir)
+        {
+            case '0': dir = 'R'; break;
+            case '1': dir = 'D'; break;
+            case '2': dir = 'L'; break;
+            case '3': dir = 'U'; break;
+        }
+        // add outer
+        area += amount;
+
+        if(dir == 'U')
+        {
+            lines[lineCount++] = {.top = {.x = x, .y = y - amount}, .bot = {.x = x, .y = y}  };
+        }
+        else if(dir == 'D')
+        {
+            lines[lineCount++] = {.top = {.x = x, .y = y}, .bot = {.x = x, .y = y + amount}  };
+        }
+
         switch(dir)
         {
             case 'R': x += amount; break;
@@ -431,93 +203,89 @@ static int64_t sParseB(const char* data)
             case 'U': y -= amount; break;
             case 'D': y += amount; break;
         }
-        if(lastDir == dir)
-            --pointCount;
-        points[pointCount++] = {.x = x, .y = y};
-        lastDir = dir;
-        //if(x <= xMin && y <= yMin)
-        //{
-        //    yMin = y;
-        //    xMin = x;
-        //    topLeftPoint = pointCount - 1;
-        //}
-        if(y > yMax || (y == yMax && x > xMax))
-        {
-            yMax = y;
-            xMax = x;
-            botRightPoint = pointCount - 1;
-        }
+
         while (*data++ != '\n');
     }
-    assert(points[0].x == points[pointCount - 1].x && points[0].y == points[pointCount - 1].y);
-    --pointCount;
-    //int lp = topLeftPoint;
-    //int dir = points[(lp + 1) % pointCount].x > xMin ? 1 : -1;
-    //int64_t area = sFindNext(points, pointCount, topLeftPoint, dir).area;
-    int lp = botRightPoint;
-    int dir = points[(lp + 1) % pointCount].y < yMax ? 1 : -1;
-    int64_t area = sFindNext(points, pointCount, botRightPoint, dir).area;
-    /*
-    int rp = (lp + dir + pointCount) % pointCount;
-    int64_t width = points[rp].x - points[lp].x;
-    while(lp != rp)
+
+    std::sort(lines, lines + lineCount, [](const Line& a, const Line& b){
+        if(a.top.y == b.top.y)
+            return a.top.x < b.top.x;
+        return a.top.y < b.top.y;
+    });
+    // divide outer area by 2, adding only half a block
+   area /= 2;
+
+    y = lines[0].top.y;
+    Line lines2[1024] = {};
+    int lineCount2 = 2;
+    int nextLineCount = 2;
+    lines2[0] = lines[0];
+    lines2[1] = lines[1];
+    while(lineCount2)
     {
-        const Point& lPoint0 = points[lp];
-        const Point& rPoint0 = points[rp];
-
-        const Point& lPoint1 = points[(lp - dir + pointCount) % pointCount];
-        const Point& rPoint1 = points[(rp + dir + pointCount) % pointCount];
-
-        if(lPoint1.y < lPoint0.y)
+        assert((lineCount2 % 2) == 0);
+        int topLow = lines2[0].bot.y;
+        for(int i = 0; i < lineCount2; ++i)
         {
-            int newLp =
+            topLow = sMin(topLow, lines2[i].bot.y);
+        }
+        if(nextLineCount < lineCount)
+        {
+            topLow = sMin(lines[nextLineCount].top.y, topLow);
+        }
+
+        int64_t width = 0;
+        for(int i = 0; i < lineCount2; ++i)
+        {
+            if((i % 2) == 1)
+            {
+                int64_t change = lines2[i].top.x - lines2[i - 1].top.x;
+                assert(change >= 0);
+                width += change;
+            }
+        }
+        int64_t height = topLow - y;
+        area += width * height;
+        y = topLow;
+
+        // add new
+        while(lines[nextLineCount].top.y == topLow)
+        {
+            lines2[lineCount2++] = lines[nextLineCount++];
+        }
+        // remove old ones
+        for(int i = lineCount2 - 1; i >= 0; --i)
+        {
+            if (topLow == lines2[i].bot.y)
+            {
+                lines2[i] = lines2[lineCount2 - 1];
+                lineCount2--;
+            }
+        }
+        if(lineCount2 > 0)
+        {
+            std::sort(lines2, lines2 + lineCount2, [](const Line &a, const Line &b) {
+                return a.top.x < b.top.x;
+            });
         }
     }
-*/
-    /*
-    for(int i = 0; i < MapWidth * MapHeight; ++i )
-    {
-        if(map[i] == '#')
-            printf("#");
-        else
-        {
-            printf(" ");
-        }
-        if((i % MapWidth) ==MapWidth - 1)
-        {
-            printf("\n");
-        }
-    }*/
-    /*
-    printf("x min: %i, max: %i, y min: %i, max: %i\n", xMin, xMax, yMin, yMax);
-    int64_t area = 0;
-    bool isInside = false;
-    for(int yp = 0; yp < MapHeight; ++yp)
-    {
-        for(int xp = 0; xp < MapWidth; ++xp)
-        {
-            bool wasUp = false;
-            bool wasDown = false;
-            while(map[xp + yp * MapWidth] == '#')
-            {
-                area++;
-                wasUp   |= map[xp + (yp - 1) * MapWidth];
-                wasDown |= map[xp + (yp + 1) * MapWidth];
-                xp++;
-            }
-            if(wasUp && wasDown)
-            {
-                isInside = !isInside;
-            }
-            if(isInside)
-            {
-                area++;
-            }
-        }
-    }
-*/
+    // add one block for some reason. Probably since it would otherwise miss 4 x 1/4 corner blocks.
+    return area + 1;
+}
 
-    return area;
+
+static int64_t sParseA(const char* data)
+{
+    TIMEDSCOPE("18A Total");
+    return sGetArea(data, false);
+}
+
+
+static int64_t sParseB(const char* data)
+{
+    TIMEDSCOPE("18B Total");
+
+    return sGetArea(data, true);
 }
 
 static int sPrintA(char* buffer, int64_t value)
