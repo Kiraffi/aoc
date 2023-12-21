@@ -19,7 +19,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
 alignas(32) static constexpr char test20A[] =
@@ -209,14 +209,117 @@ static int64_t sParseA(const char* data)
 {
     TIMEDSCOPE("20A Total");
     std::unordered_map<std::string, int> stringMap;
-    //int indexA = stringMap["A"];
-    //int indexR = stringMap["R"];
-    //int indexIn = stringMap["in"];
-    //int64_t accepted = 0;
+    Device devices[64] = {};
+
+    while(*data)
+    {
+        Op op = {};
+        if(*data == '%')
+        {
+            op = FlipFlop;
+            data++;
+        }
+        else if(*data == '&')
+        {
+            op = Conj;
+            data++;
+        }
+        else
+        {
+            op = BroadCast;
+        }
+        uint8_t index = sGetOrAdd(stringMap, &data);
+        Device& device = devices[index];
+        device.op = op;
+        data += 2;
+        while(*data != '\n')
+        {
+            data += 2;
+            uint8_t targetIndex = sGetOrAdd(stringMap, &data);
+            assert(device.targetCount <= 15);
+            assert(devices[targetIndex].sourceCount <= 15);
+            device.targetStateIndices[device.targetCount] = devices[targetIndex].sourceCount++;
+            device.targetIndices[device.targetCount++] = targetIndex;
+        }
+        data++;
+    }
+    int startIndex = stringMap["broadcaster"];
+
+    Pulse pulses1[256] = {};
+    Pulse pulses2[256] = {};
+    Pulse* currP = pulses1;
+    Pulse* otherP = pulses2;
+
+    int pulseCount1 = 1;
+    int pulseCount2 = 0;
+    int* currPC = &pulseCount1;
+    int* otherPC = &pulseCount2;
+
+    int64_t highs = 0;
+    int64_t lows = 0;
+
+    for(int k = 0; k < 1000; ++k)
+    {
+        currP[0].index = startIndex;
+        currP[0].enable = 0;
+        *currPC = 1;
+        lows++;
+        while (*currPC)
+        {
+            *otherPC = 0;
+            for (int i = 0; i < *currPC; ++i)
+            {
+                const Pulse &pulse = currP[i];
+
+                Device &device = devices[pulse.index];
+                switch (device.op)
+                {
+                    case None:
+                        break;
+                    case FlipFlop:
+                        if (!pulse.enable)
+                        {
+                            uint8_t b = device.states == 0 ? 1 : 0;
+                            device.states = b;
+                            sBroadcast(device, otherP, otherPC, b, lows, highs);
+                        }
+                        break;
+                    case Conj:
+                    {
+                        uint16_t state = (uint16_t(pulse.enable)) << (uint16_t(pulse.toSlotIndex));
+                        uint16_t turnOff = 1 << (uint16_t(pulse.toSlotIndex));
+                        device.states &= ~turnOff;
+                        device.states |= state;
+                        uint16_t setBits = ((1 << uint16_t(device.sourceCount)) - 1);
+                        if ((device.states & setBits) == setBits)
+                        {
+                            sBroadcast(device, otherP, otherPC, 0, lows, highs);
+                        }
+                        else
+                        {
+                            sBroadcast(device, otherP, otherPC, 1, lows, highs);
+                        }
+                        break;
+                    }
+                    case BroadCast:
+                        uint8_t b = pulse.enable;
+                        device.states = b;
+                        sBroadcast(device, otherP, otherPC, b, lows, highs);
+                        break;
+                }
+            }
+            std::swap(currP, otherP);
+            std::swap(currPC, otherPC);
+        }
+    }
+    return lows * highs;
+}
 
 
-
-
+static int64_t sParseB(const char* data)
+{
+    TIMEDSCOPE("20B Total");
+    std::unordered_map<std::string, int> stringMap;
     Device devices[64] = {};
 
     while(*data)
@@ -253,6 +356,15 @@ static int64_t sParseA(const char* data)
     }
     int startIndex = stringMap["broadcaster"];
     int rx = stringMap["rx"];
+    int rxSource = 0;
+    for(int i = 0; i < (int)stringMap.size(); ++i)
+    {
+        if(devices[i].targetIndices[0] == rx)
+        {
+            rxSource = i;
+            break;
+        }
+    }
 
     Pulse pulses1[256] = {};
     Pulse pulses2[256] = {};
@@ -268,15 +380,14 @@ static int64_t sParseA(const char* data)
     int64_t lows = 0;
     int64_t k = 0;
 
+    int64_t loops[16] = {};
 
-    while(true) //for(int k = 0; k < 1000; ++k)
+    while(true)
     {
-        if(k % 1000000 == 0)
-            printf("K: %" PRIi64"\n", k);
-        ++k;
         currP[0].index = startIndex;
         currP[0].enable = 0;
         *currPC = 1;
+        ++k;
         lows++;
         while (*currPC)
         {
@@ -284,11 +395,16 @@ static int64_t sParseA(const char* data)
             for (int i = 0; i < *currPC; ++i)
             {
                 const Pulse &pulse = currP[i];
-                if(pulse.index == rx)
+                if(pulse.index == rxSource && pulse.enable)
                 {
-                    if(!pulse.enable)
+                    loops[pulse.toSlotIndex] = k;
+                    bool found = true;
+                    for(int l = 0; l < devices[rxSource].sourceCount; ++l)
                     {
-                        --k;
+                        found &= loops[l] != 0;
+                    }
+                    if(found)
+                    {
                         goto end;
                     }
                 }
@@ -334,19 +450,13 @@ static int64_t sParseA(const char* data)
         }
     }
     end:
-    printf("Highs: %i, lows: %i\n", int(highs), int(lows));
-    printf("k: %" PRIi64"\n", k);
-
-    return lows * highs;
-}
-
-
-static int64_t sParseB(const char* data)
-{
-    TIMEDSCOPE("20B Total");
-    //std::unordered_map<std::string, int> stringMap;
-
-    return *data;
+    int64_t multi = 1;
+    for(int l = 0; l < devices[rxSource].sourceCount; ++l)
+    {
+        multi *= loops[l];
+    }
+    // probably should find lcm for the numbers.
+    return multi;
 }
 
 static int sPrintA(char* buffer, int64_t value)

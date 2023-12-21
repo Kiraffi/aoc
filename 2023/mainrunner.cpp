@@ -158,8 +158,8 @@ int runAll(bool, char*)
     measureRun(sParseAmount, "19A", run19A);
     measureRun(sParseAmount, "19B", run19B);
     sAddLineBreak();
-    //measureRun(sParseAmount, "20A", run20A);
-    //measureRun(sParseAmount, "20B", run20B);
+    measureRun(sParseAmount, "20A", run20A);
+    measureRun(sParseAmount, "20B", run20B);
     sAddLineBreak();
     return 0;
 }
