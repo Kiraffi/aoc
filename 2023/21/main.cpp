@@ -137,7 +137,7 @@ struct Point
     int x;
     int y;
 };
-
+static int hittrees = 0;
 void sCheckMove(const char* data, int x, int y, int width, int height, std::unordered_set<int64_t>& points)
 {
     //if(x < 0 || x >= width || y < 0 || y >= height)
@@ -148,8 +148,10 @@ void sCheckMove(const char* data, int x, int y, int width, int height, std::unor
         return;
     //assert(pointCount + 1 < PointsMax);
     char tile = data[(x % width) + (y % height) * (width + 1)];
-    if(tile == '.')
+    if(tile != '#')
         points.insert(p);
+    else
+        hittrees++;
 }
 
 static int64_t sParseA(const char* data)
@@ -160,8 +162,8 @@ static int64_t sParseA(const char* data)
     sGetSize(data, width, height);
     const char* dataStart = data;
     while(*data != 'S') data++;
-    int x = intptr_t(data - dataStart) / (width + 1);
-    int y = intptr_t(data - dataStart) / (width + 1);
+    int x = intptr_t(data - dataStart) / (width + 1) + width;
+    int y = intptr_t(data - dataStart) / (width + 1) + height;
 
 
     std::unordered_set<int64_t> points1 = {};
@@ -182,36 +184,111 @@ static int64_t sParseA(const char* data)
         }
         std::swap(points1, points2);
     }
-    char map[131 * 131 * 16] = {};
-    for(int j = 0; j < height * 4; ++j)
-    {
-        for(int i = 0; i < width * 4; ++i)
-        {
-            map[i + j * width * 4] = dataStart[(i % width) + (j % height) * (width + 1)];
-            if(points1.find(int64_t(i) + (int64_t(j) << (int64_t(32)))) != points1.end())
-            {
-                map[i + j * width] = 'O';
-            }
-        }
-    }
-    for(int j = 0; j < height * 4; ++j)
-    {
-        for(int i = 0; i < width * 4; ++i)
-        {
-            printf("%c", map[i + j * width * 4]);
-        }
-        printf("\n");
-    }
-
     return (int64_t)points1.size();
 }
 
+static int sCountTrees(const char* data, int width, int height)
+{
+    int trees = 0;
+    int midX = width / 2;
+    int midY = height / 2;
+    int points = 0;
+    for(int j = 0; j <= midY; ++j)
+    {
+        for(int i = midX - j; i <= midX + j; i += 2)
+        {
+            ++points;
+            trees += data[i + j * (width + 1)] == '#';
+        }
+    }
+    for(int j = midY + 1; j < height; ++j)
+    {
+        int offset = height - 1 - j;
+        for(int i = midX - offset; i <= midX + offset; i += 2)
+        {
+            ++points;
+            trees += data[i + j * (width + 1)] == '#';
+        }
+    }
+    printf("points: %i, trees: %i\n", points, trees);
+    return trees;
+}
 
 static int64_t sParseB(const char* data)
 {
     TIMEDSCOPE("21B Total");
+    int width = 0;
+    int height = 0;
+    sGetSize(data, width, height);
+    const char* dataStart = data;
+    while(*data != 'S') data++;
+    static constexpr int64_t MulMul = 0;
+    int x = intptr_t(data - dataStart) / (width + 1) + width * MulMul;
+    int y = intptr_t(data - dataStart) / (width + 1) + height * MulMul;
 
-    return *data;
+    int trees = sCountTrees(dataStart, width, height);
+    printf("trees: %i\n", trees);
+
+
+    std::unordered_set<int64_t> points1 = {};
+    points1.insert(x + (int64_t(y) << (int64_t(32))));
+    std::unordered_set<int64_t> points2 = {};
+
+    for(int i = 0; i < 65 + width * MulMul; ++i)
+    {
+        hittrees = 0;
+        points2.clear();
+        for(int64_t point : points1)
+        {
+            int x1 = point & (0xffff'ffff);
+            int y1 = point >> 32;
+            sCheckMove(dataStart, x1 + 1, y1, width, height, points2);
+            sCheckMove(dataStart, x1 - 1, y1, width, height, points2);
+            sCheckMove(dataStart, x1, y1 + 1, width, height, points2);
+            sCheckMove(dataStart, x1, y1 - 1, width, height, points2);
+        }
+        std::swap(points1, points2);
+    }
+    printf("hittrees: %i\n", hittrees);
+    static constexpr int64_t Multi = MulMul * 2 + 1;
+
+    char map[131 * 131 * Multi * Multi];
+    for(int64_t j = 0; j < height * Multi; ++j)
+    {
+        for(int64_t i = 0; i < width * Multi; ++i)
+        {
+            map[i + j * width * Multi] = dataStart[(i % width) + (j % height) * (width + 1)];
+            if(points1.find(int64_t(i) + (int64_t(j) << (int64_t(32)))) != points1.end())
+            {
+                map[i + j * width * Multi] = 'O';
+            }
+        }
+    }
+    int64_t numbers[64 * 64 *  Multi * Multi] = {};
+    for(int64_t j = 0; j < height * Multi; ++j)
+    {
+        for(int64_t i = 0; i < width * Multi; ++i)
+        {
+            int64_t xInd = i / width;
+            int64_t yInd = j / height;
+            numbers[xInd + yInd * Multi] += map[i + j * width * Multi] == 'O' ? 1 : 0;
+        }
+    }
+
+    for(int64_t j = 0; j < height * Multi; ++j)
+    {
+        for(int64_t i = 0; i < width * Multi; ++i)
+        {
+            printf("%c", map[i + j * width * Multi]);
+        }
+        printf("\n");
+    }
+
+    for(int i = 0; i < Multi * Multi; ++i)
+    {
+        printf("%i count: %" PRIi64 "\n", i, numbers[i]);
+    }
+    return (int64_t)points1.size();
 }
 
 static int sPrintA(char* buffer, int64_t value)
