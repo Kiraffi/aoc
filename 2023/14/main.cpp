@@ -18,7 +18,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test14A[] =
@@ -33,27 +33,6 @@ O.#..O.#.#
 #....###..
 #OO..#....
 )";
-
-/*
-static int64_t sParserNumber(int64_t startNumber, const char** data)
-{
-    int64_t number = startNumber;
-    while(**data == ' ') ++*data;
-    bool neg = false;
-    if(**data == '-')
-    {
-        neg = true;
-        ++*data;
-    }
-    while(**data >= '0')
-    {
-        number = ((**data) - '0') + number * 10;
-        ++*data;
-    }
-    while(**data == ' ') ++*data;
-    return neg ? -number : number;
-}
-*/
 
 static int64_t sParseA(const char* data)
 {
@@ -209,14 +188,18 @@ static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
     while(!_mm_test_all_ones(~row))
     {
         __m128i collided = _mm_and_si128(collisions, row);
-        while(!_mm_test_all_ones(~collided))
+        while (!_mm_test_all_ones(~collided))
         {
-            collided = _mm_and_si128(collided, row);
-            sBitShift(&collided, -moveDir);
-            collisions = _mm_or_si128(collided, collisions);
+            for (int i = 0; i < 4; ++i)
+            {
+                collided = _mm_and_si128(collided, row);
+                sBitShift(&collided, -moveDir);
+                collisions = _mm_or_si128(collided, collisions);
+            }
         }
         row = _mm_and_si128(~collisions, row);
         sBitShift(&row, moveDir);
+
     }
     sBitShift(&collisions, moveDir);
 
@@ -358,10 +341,18 @@ static int64_t sParseB(const char* data)
 
 
 
+        int end = (height - 1) % 4;
 
-        for(int i = 1; i <= height; ++i)
+        for(int i = 1; i <= end + 1; i += 4)
         {
-            sMoveRocksLeftRight(wallMap, rockMap, i, -1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 0, -1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 1, -1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 2, -1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 3, -1);
+        }
+        for(int i = end + 1; i <= height + 1; i++)
+        {
+            sMoveRocksLeftRight(wallMap, rockMap, i + 0, -1);
         }
         //sDrawMaps14(wallMap, rockMap, height);
 
@@ -373,7 +364,14 @@ static int64_t sParseB(const char* data)
         }
         //sDrawMaps14(wallMap, rockMap, height);
 
-        for(int i = 1; i <= height; ++i)
+        for(int i = 1; i <= end + 1; i += 4)
+        {
+            sMoveRocksLeftRight(wallMap, rockMap, i + 0, 1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 1, 1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 2, 1);
+            sMoveRocksLeftRight(wallMap, rockMap, i + 3, 1);
+        }
+        for(int i = end + 1; i <= height; ++i)
         {
             sMoveRocksLeftRight(wallMap, rockMap, i, 1);
         }

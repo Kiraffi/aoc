@@ -36,40 +36,6 @@ alignas(32) static constexpr char test21A[] =
 ...........
 )";
 
-/*
-template <typename T>
-static T sMax(T a, T b)
-{
-    return a < b ? b : a;
-}
-
-template <typename T>
-static T sMin(T a, T b)
-{
-    return a < b ? a : b;
-}
-*/
-/*
-static int64_t sParserNumber(int64_t startNumber, const char** data)
-{
-    int64_t number = startNumber;
-    while(**data == ' ') ++*data;
-    bool neg = false;
-    if(**data == '-')
-    {
-        neg = true;
-        ++*data;
-    }
-    while(**data >= '0' && **data <= '9')
-    {
-        number = ((**data) - '0') + number * 10;
-        ++*data;
-    }
-    while(**data == ' ') ++*data;
-    return neg ? -number : number;
-}
-*/
-
 static void sGetSize(const char* data, int& width, int& height)
 {
     width = 0;
@@ -83,54 +49,6 @@ static void sGetSize(const char* data, int& width, int& height)
         data += width + 1;
     }
 }
-
-/*
-static void sBitShiftRightOne(__m128i* value)
-{
-    __m128i movedTop = _mm_bsrli_si128(*value, 8);
-    movedTop = _mm_slli_epi64(movedTop, 63);
-    *value = _mm_srli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedTop);
-}
-
-static void sBitShiftLeftOne(__m128i* value)
-{
-    __m128i movedBot = _mm_bslli_si128(*value, 8);
-    movedBot = _mm_srli_epi64(movedBot, 63);
-    *value = _mm_slli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedBot);
-}
-
-
-static void sBitShift(__m128i* value, int dir)
-{
-
-    if(dir == -1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftRightOne(value);
-    }
-    else if(dir == 1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftLeftOne(value);
-    }
-}
- */
-/*
-template <typename T>
-static void sMemset(T* arr, T value, int amount)
-{
-    const T* end = arr + amount;
-    while(arr < end)
-    {
-        *arr++ = value;
-    }
-
-}
-*/
 
 struct Point
 {

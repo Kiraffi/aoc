@@ -43,63 +43,6 @@ enum Dir
     Down = 8,
 };
 
-/*
-static int64_t sParserNumber(int64_t startNumber, const char** data)
-{
-    int64_t number = startNumber;
-    while(**data == ' ') ++*data;
-    bool neg = false;
-    if(**data == '-')
-    {
-        neg = true;
-        ++*data;
-    }
-    while(**data >= '0')
-    {
-        number = ((**data) - '0') + number * 10;
-        ++*data;
-    }
-    while(**data == ' ') ++*data;
-    return neg ? -number : number;
-}
-*/
-
-/*
-static void sBitShiftRightOne(__m128i* value)
-{
-    __m128i movedTop = _mm_bsrli_si128(*value, 8);
-    movedTop = _mm_slli_epi64(movedTop, 63);
-    *value = _mm_srli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedTop);
-}
-
-static void sBitShiftLeftOne(__m128i* value)
-{
-    __m128i movedBot = _mm_bslli_si128(*value, 8);
-    movedBot = _mm_srli_epi64(movedBot, 63);
-    *value = _mm_slli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedBot);
-}
-
-
-static void sBitShift(__m128i* value, int dir)
-{
-
-    if(dir == -1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftRightOne(value);
-    }
-    else if(dir == 1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftLeftOne(value);
-    }
-}
- */
-
 static int sGetX(int fromHash)
 {
     return fromHash & 255;
@@ -113,21 +56,6 @@ static int sGetDir(int fromHash)
     return (fromHash >> 16) & 255;
 }
 
-/*
-static int sSetX(int toHash, int x)
-{
-    toHash &= ~255;
-    toHash |= x;
-    return toHash;
-}
-
-static int sSetY(int toHash, int x)
-{
-    toHash &= ~(255 << 8);
-    toHash |= x << 8;
-    return toHash;
-}
-*/
 static int sSetDir(int toHash, int x)
 {
     toHash &= ~(255 << 16);
