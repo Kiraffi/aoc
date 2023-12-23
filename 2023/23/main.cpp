@@ -320,13 +320,13 @@ static void sCreateJumpMap(
 
 
 
-int64_t sFindLongest(int currIndex, int64_t startDistance, const std::vector<CrossRoad>& crossRoads, uint8_t* visited)
+int64_t sFindLongest(int currIndex, int64_t startDistance, const CrossRoad* crossRoads, uint64_t visited)
 {
     if(currIndex == 1)
         return startDistance;
-    if(visited[currIndex])
+    if((visited >> currIndex) & 1)
         return 0;
-    visited[currIndex] = 1;
+    uint64_t newVisited = visited | (uint64_t(1) << currIndex);
     int64_t result = 0;
 
     const CrossRoad& crossRoad = crossRoads[currIndex];
@@ -335,10 +335,9 @@ int64_t sFindLongest(int currIndex, int64_t startDistance, const std::vector<Cro
         if(crossRoad.distances[i])
         {
             result = sMax(result, sFindLongest(
-                crossRoad.indices[i], startDistance + crossRoad.distances[i], crossRoads, visited));
+                crossRoad.indices[i], startDistance + crossRoad.distances[i], crossRoads, newVisited));
         }
     }
-    visited[currIndex] = 0;
     return result;
 }
 
@@ -365,7 +364,6 @@ static int64_t sParseB(const char* data)
         TIMEDSCOPE("23B create jump map");
         sCreateJumpMap(data, 1, 0, width, height, Down, crossRoads, crossRoadPositions);
     }
-    uint8_t visited[64] = {};
     assert(crossRoads.size() == crossRoadPositions.size());
     assert(crossRoads.size() < 64);
 
@@ -373,7 +371,7 @@ static int64_t sParseB(const char* data)
 
     {
         TIMEDSCOPE("23B find longest");
-        result = sFindLongest(0, 0, crossRoads, visited);
+        result = sFindLongest(0, 0, crossRoads.data(), 0);
     }
     return result;
 }
