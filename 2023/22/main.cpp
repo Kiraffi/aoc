@@ -156,14 +156,14 @@ static int sGetIndex(int x, int y, int z)
     return x + y * XSize + z * XSize * YSize;
 }
 
-static void sSetTile(int x, int y, int z, uint16_t value, uint16_t* map)
+static void sSetTile(int x, int y, int z, int16_t value, int16_t* map)
 {
     map[sGetIndex(x, y, z)] = value;
 }
 
-static uint16_t sGetTile(int x, int y, int z, const uint16_t* map)
+static int16_t sGetTile(int x, int y, int z, const int16_t* map)
 {
-    uint16_t value = map[sGetIndex(x, y, z)];
+    int16_t value = map[sGetIndex(x, y, z)];
     return value;
 }
 template <typename T>
@@ -188,9 +188,9 @@ struct Block
 static int64_t sParseA(const char* data)
 {
     TIMEDSCOPE("22A Total");
-    uint16_t map[XSize * YSize * ZSize] = {};
+    int16_t map[XSize * YSize * ZSize] = {};
     Block blocks[MaxBlocks] = {};
-    uint16_t numberCount = 1;
+    int16_t numberCount = 1;
 
     while(*data)
     {
@@ -220,11 +220,12 @@ static int64_t sParseA(const char* data)
         return a.z1 < b.z1;
     });
 
+    uint8_t onlyOneSupport[MaxBlocks] = {};
 
-    using SetMap = std::unordered_set<uint16_t>;
-    SetMap supporteds[MaxBlocks];
-    uint8_t supportsAnotherBlock[MaxBlocks] = {};
+#define SIMPLE_BIT_WISE_TESTING 1
+#if SIMPLE_BIT_WISE_TESTING
     uint64_t hitTest[ZSize * 4] = {};
+#endif
     for(int n = 1; n < numberCount; ++n)
     {
         Block& b = blocks[n];
@@ -239,16 +240,19 @@ static int64_t sParseA(const char* data)
         [[maybe_unused]] int loop = 0;
         bool hit = false;
 
+#if SIMPLE_BIT_WISE_TESTING
         uint64_t bHit[4] = {};
+#endif
         for (int j = y1; j <= y2; ++j)
         {
+#if SIMPLE_BIT_WISE_TESTING
             uint64_t& bHitB = bHit[j / 4];
             uint64_t newBits1 = (uint64_t(1) << (x2 + 1)) - 1;
-            uint64_t newBits2 = (uint64_t(1) << (x1 + 1)) - 1;
+            uint64_t newBits2 = (uint64_t(1) << (x1 + 0)) - 1;
             uint64_t newBits = newBits1 - newBits2;
             newBits = newBits << ((j % 4) * 16);
             bHitB |= newBits;
-            /*
+#else
             for (int i = x1; i <= x2; ++i)
             {
                 if(sGetTile(i, j, z1, map))
@@ -258,11 +262,24 @@ static int64_t sParseA(const char* data)
                     break;
                 }
             }
-             */
-        }
+#endif
 
+        }
         while(!hit)
         {
+#if SIMPLE_BIT_WISE_TESTING
+            uint64_t testValue[4] = {};
+            testValue[0] = hitTest[z1 * 4 + 0] & bHit[0];
+            testValue[1] = hitTest[z1 * 4 + 1] & bHit[1];
+            testValue[2] = hitTest[z1 * 4 + 2] & bHit[2];
+            testValue[3] = hitTest[z1 * 4 + 3] & bHit[3];
+            testValue[0] = testValue[0] | testValue[1];
+            testValue[2] = testValue[2] | testValue[3];
+            testValue[0] = testValue[0] | testValue[2];
+            hit = testValue[0] != 0;
+#else
+
+
             for (int j = y1; j <= y2; ++j)
             {
                 for (int i = x1; i <= x2; ++i)
@@ -275,6 +292,7 @@ static int64_t sParseA(const char* data)
                     }
                 }
             }
+#endif
             assert(!hit || z1 >= 1);
             if(z1 == 1 && !hit)
             {
@@ -288,8 +306,18 @@ static int64_t sParseA(const char* data)
         }
         z1 += 2;
         z2 += 2;
+
+        uint16_t supports[16] = {};
+        uint8_t supportCount = 0;
+
         for(int k = z1; k <= z2; ++k)
         {
+#if SIMPLE_BIT_WISE_TESTING
+            hitTest[k * 4 + 0] |= bHit[0];
+            hitTest[k * 4 + 1] |= bHit[1];
+            hitTest[k * 4 + 2] |= bHit[2];
+            hitTest[k * 4 + 3] |= bHit[3];
+#endif
             for (int j = y1; j <= y2; ++j)
             {
                 for (int i = x1; i <= x2; ++i)
@@ -299,14 +327,28 @@ static int64_t sParseA(const char* data)
                     if((underValue != n) & (underValue != 0))
                     {
                         assert(n);
-                        supporteds[n].insert(underValue);
-                        assert(supportsAnotherBlock[underValue] <= 255);
-                        ++supportsAnotherBlock[underValue];
+
+                        supports[supportCount++] = underValue;
                     }
                 }
             }
         }
+        uint16_t value = supports[0];
+        bool isOnlyOne = true;
+        for(int i = 1; i < supportCount; ++i)
+        {
+            if(supports[i] != value)
+            {
+                isOnlyOne = false;
+                break;
+            }
+        }
+        if(isOnlyOne)
+        {
+            onlyOneSupport[value]++;
+        }
     }
+#if 0
 /*
     for(int i = 1; i < numberCount; ++i)
     {
@@ -315,7 +357,6 @@ static int64_t sParseA(const char* data)
     }
 */
     SetMap removals;
-    uint8_t onlyOneSupport[MaxBlocks] = {};
     for(const auto& setMapIter : supporteds)
     {
         if(setMapIter.size() == 1)
@@ -330,16 +371,17 @@ static int64_t sParseA(const char* data)
             //removals.insert(setMapIter.second.begin(), setMapIter.second.end());
         }
     }
+#endif
     int64_t removalCount = 0;
     for(int i = 1; i < numberCount; ++i)
     {
-        if(supportsAnotherBlock[i] == 0)
+        //if(supportsAnotherBlock[i] == 0)
         {
-            removalCount++;
+        //    removalCount++;
             //printf("would add: %i\n", i);
             //removals.insert(i);
         }
-        else if(onlyOneSupport[i] == 0)
+        if(onlyOneSupport[i] == 0)
         {
             removalCount++;
             //printf("Non support: %i\n", i);
@@ -358,9 +400,9 @@ static int64_t sParseA(const char* data)
 static int64_t sParseB(const char* data)
 {
     TIMEDSCOPE("22B Total");
-    uint16_t map[XSize * YSize * ZSize] = {};
+    int16_t map[XSize * YSize * ZSize] = {};
     Block blocks[MaxBlocks] = {};
-    uint16_t numberCount = 1;
+    int16_t numberCount = 1;
 
     while(*data)
     {
@@ -390,10 +432,14 @@ static int64_t sParseB(const char* data)
         return a.z1 < b.z1;
     });
 
+    using SetMap = std::unordered_set<int16_t>;
 
-    using SetMap = std::unordered_set<uint16_t>;
-    std::unordered_map<uint16_t, SetMap> supporteds;
-    std::unordered_map<uint16_t, SetMap> supportBlocks;
+
+    static const int BlocksMaxSupport = 4;
+    alignas(16) int16_t supportedByBlocks[MaxBlocks * BlocksMaxSupport] = {};
+    uint8_t supportedByBlocksCounts[MaxBlocks] = {};
+
+    std::unordered_map<int16_t, SetMap> supportsBlocks;
 
     for(int n = 1; n < numberCount; ++n)
     {
@@ -435,6 +481,7 @@ static int64_t sParseB(const char* data)
         }
         z1 += 2;
         z2 += 2;
+        int supportedByBlocksCount = 0;
         for(int k = z1; k <= z2; ++k)
         {
             for (int j = y1; j <= y2; ++j)
@@ -442,25 +489,89 @@ static int64_t sParseB(const char* data)
                 for (int i = x1; i <= x2; ++i)
                 {
                     sSetTile(i, j, k, n, map);
-                    uint16_t underValue = sGetTile(i, j, k - 1, map);
+                    int16_t underValue = sGetTile(i, j, k - 1, map);
                     if((underValue != n) & (underValue != 0))
                     {
                         assert(n);
-                        supporteds[n].insert(underValue);
-                        supportBlocks[underValue].insert(n);
+                        assert(supportedByBlocksCount < BlocksMaxSupport);
+                        supportedByBlocks[n * BlocksMaxSupport + supportedByBlocksCount] = underValue;
+                        supportedByBlocksCount++;
+                        for(int tmp = 0; tmp < supportedByBlocksCount - 1; ++tmp)
+                        {
+                            if(supportedByBlocks[n * BlocksMaxSupport + tmp] == underValue)
+                            {
+                                supportedByBlocksCount--;
+                                break;
+                            }
+                        }
+
+                        supportsBlocks[underValue].insert(n);
+
                     }
                 }
             }
         }
+        supportedByBlocksCounts[n] = supportedByBlocksCount;
     }
-    int64_t removalCount = 0;
+    int64_t fallingBlockCount = 0;
 
 
+    uint8_t drops[MaxBlocks] = {};
 
+    for(int16_t i = 1; i < numberCount; ++i)
+    {
+        SetMap checks;
+        memset(drops, 0xff, MaxBlocks);
+        for(int16_t v : supportsBlocks[i])
+            checks.insert(v);
+        drops[i] = 0;
+        drops[0] = 0;
+        bool modified = true;
+        while(modified && !checks.empty())
+        {
+            modified = false;
+            //for(int16_t j : checks)
+            for(int16_t j = 1; j < numberCount; j++)
+            {
+                if((drops[j] == 0))// || (supportedByBlocksCounts[j] == 0))
+                    continue;
+                //if(*((const uint64_t*)(supportedByBlocks + j * BlocksMaxSupport)) == 0)
+                //    continue;
+                if(supportedByBlocksCounts[j] == 0)
+                    continue;
+                bool isValid = true;
+                for(int16_t k = 0; k < supportedByBlocksCounts[j]; k++)
+//                for(int16_t k = 0; k < BlocksMaxSupport; k++)
+                {
+                    int16_t index = supportedByBlocks[j * BlocksMaxSupport + k];
+                    isValid &= drops[index] == 0;
+                }
+                if(isValid)
+                {
+                    //for(int16_t v : supportsBlocks[j])
+                    //    checks.insert(v);
+                    drops[j] = 0;
+                    //drops.insert(j); // = 1;
+                    fallingBlockCount++;
+                    modified = true;
+                }
+            }
+            //std::erase_if(checks, [&](int16_t value) {
+            //    return drops[value] != 0;
+            //});
+        }
+        //printf("After: %i, falling blocks: %" PRIi64 "\n", i, fallingBlockCount);
+        /*
+        for(uint16_t v : supportBlocks[i])
+        {
+            if(supporteds[])
+            removalCount += drops[v];
+            drops[i] += drops[v];
+        }
+         */
+    }
 
-    //for(int i = 0; i < amou)
-
-    return removalCount;
+    return fallingBlockCount;
 }
 
 static int sPrintA(char* buffer, int64_t value)
@@ -470,7 +581,7 @@ static int sPrintA(char* buffer, int64_t value)
 
 static int sPrintB(char* buffer, int64_t value)
 {
-    return sprintf(buffer, "22B: Spots: %" PRIi64, value);
+    return sprintf(buffer, "22B: Falling blocks: %" PRIi64, value);
 }
 
 #ifndef RUNNER
