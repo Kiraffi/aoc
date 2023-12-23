@@ -200,19 +200,6 @@ static void sDropPiece(Block* blocks, int16_t numberCount)
                 z2++;
             }
         }
-        /*
-            assert(!hit || z1 >= 1);
-            if(z1 == 1)
-            {
-                hit = true;
-            }
-            if(hit)
-                break;
-            z1 -= 2;
-            z2 -= 2;
-            ++loop;
-        }
-        */
         for(int k = z1; k <= z2; ++k)
         {
             hitTest[k * 2 + 0] |= bHit[0];

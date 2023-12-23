@@ -209,25 +209,29 @@ static void sCreateJumpMap(
     {
         int validDirs = 0;
         int dirs = 0;
-        if (sGetTile(data, x + 1, y + 0, width) != '#')
+        char rTile = sGetTile(data, x + 1, y + 0, width);
+        char lTile = sGetTile(data, x - 1, y + 0, width);
+        char uTile = sGetTile(data, x + 0, y - 1, width);
+        char dTile = sGetTile(data, x + 0, y + 1, width);
+        if (rTile != '#')
         {
             if (!(lastX == x + 1 && lastY == y + 0))
                 validDirs |= Right;
             dirs++;
         }
-        if (sGetTile(data, x - 1, y + 0, width) != '#')
+        if (lTile != '#')
         {
             if (!(lastX == x - 1 && lastY == y + 0))
                 validDirs |= Left;
             dirs++;
         }
-        if (sGetTile(data, x + 0, y + 1, width) != '#')
+        if (dTile != '#')
         {
             if (!(lastX == x + 0 && lastY == y + 1))
                 validDirs |= Down;
             dirs++;
         }
-        if (sGetTile(data, x + 0, y - 1, width) != '#')
+        if (uTile != '#')
         {
             if (!(lastX == x + 0 && lastY == y - 1))
                 validDirs |= Up;
@@ -369,7 +373,7 @@ static int64_t sParseB(const char* data)
 
     {
         TIMEDSCOPE("23B find longest");
-        sFindLongest(0, 0, crossRoads, visited);
+        result = sFindLongest(0, 0, crossRoads, visited);
     }
     return result;
 }
