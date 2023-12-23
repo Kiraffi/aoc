@@ -61,26 +61,6 @@ static T sMin(T a, T b)
     return a < b ? a : b;
 }
 */
-/*
-static int64_t sParserNumber(int64_t startNumber, const char** data)
-{
-    int64_t number = startNumber;
-    while(**data == ' ') ++*data;
-    bool neg = false;
-    if(**data == '-')
-    {
-        neg = true;
-        ++*data;
-    }
-    while(**data >= '0' && **data <= '9')
-    {
-        number = ((**data) - '0') + number * 10;
-        ++*data;
-    }
-    while(**data == ' ') ++*data;
-    return neg ? -number : number;
-}
-*/
 
 static void sGetSize(const char* data, int& width, int& height)
 {
@@ -131,18 +111,7 @@ static void sBitShift(__m128i* value, int dir)
     }
 }
  */
-/*
-template <typename T>
-static void sMemset(T* arr, T value, int amount)
-{
-    const T* end = arr + amount;
-    while(arr < end)
-    {
-        *arr++ = value;
-    }
 
-}
-*/
 static constexpr int XSize = 160;
 static constexpr int YSize = 160;
 static char sGetTile(const char* data, int x, int y, int width)
@@ -150,10 +119,7 @@ static char sGetTile(const char* data, int x, int y, int width)
     assert(x >= 0 && x < XSize && y >= 0 && y < YSize);
     return data[x + y * (width + 1)];
 }
-/*
-uint8_t visitedVisited[XSize * YSize * 128] = {};
-uint8_t visitedVisitedCount = 0;
-*/
+
 static int64_t sGetLongestPath(const char* data, int x, int y, int width, int height, uint8_t* visited, int64_t steps)
 {
     if(x < 0 || y < 0 || x >= width || y >= width)
@@ -163,9 +129,6 @@ static int64_t sGetLongestPath(const char* data, int x, int y, int width, int he
     visited[x + y * width] = 1;
     if(x == width - 2 && y == height - 1)
     {
-        //memcpy(visitedVisited + visitedVisitedCount * XSize * YSize, visited, XSize * YSize);
-        //visitedVisitedCount++;
-        //printf("steps: %" PRIi64 "\n", steps);
         visited[x + y * width] = 0;
         return steps;
     }
@@ -200,35 +163,215 @@ static int64_t sParseA(const char* data)
 
     uint8_t visited[XSize * YSize] = {};
     int64_t steps = sGetLongestPath(data, 1, 0, width, height, visited, 0);
-/*
-    for(int i = 0; i < visitedVisitedCount; ++i)
-    {
-        for(int y = 0; y < width; ++y)
-        {
-            for (int x = 0; x < height; ++x)
-            {
-                if(visitedVisited[(x + y * width) + i * XSize * YSize])
-                {
-                    printf("O");
-                }
-                else
-                {
-                    printf("%c", data[x + y * (width + 1)]);
-                }
-            }
-            printf("\n");
-        }
-        printf("\n\n");
-    }
-*/
-
     return steps;
 }
+
+enum Dir : uint8_t
+{
+    None = 0,
+    Left = 1,
+    Right = 2,
+    Up = 8,
+    Down = 16
+};
+
+struct CrossRoad
+{
+    uint16_t distances[4];
+    uint8_t indices[4];
+};
+
+static void sCreateJumpMap(
+    const char* data,
+    int x,
+    int y,
+    int width,
+    int height,
+    Dir dir,
+    std::vector<CrossRoad>& crossRoads,
+    std::unordered_map<uint16_t, uint8_t>& crossRoadPositions)
+{
+    int distance = 1;
+    int lastX = x;
+    int lastY = y;
+    int startX = x;
+    int startY = y;
+    switch(dir)
+    {
+        case Left: x--; dir = Right; break;
+        case Right: x++; dir = Left; break;
+        case Up: y--; dir = Down; break;
+        case Down: y++; dir = Up; break;
+        case None:
+            assert(false);
+    }
+    while(true)
+    {
+        int validDirs = 0;
+        int dirs = 0;
+        if (sGetTile(data, x + 1, y + 0, width) != '#')
+        {
+            if (!(lastX == x + 1 && lastY == y + 0))
+                validDirs |= Right;
+            dirs++;
+        }
+        if (sGetTile(data, x - 1, y + 0, width) != '#')
+        {
+            if (!(lastX == x - 1 && lastY == y + 0))
+                validDirs |= Left;
+            dirs++;
+        }
+        if (sGetTile(data, x + 0, y + 1, width) != '#')
+        {
+            if (!(lastX == x + 0 && lastY == y + 1))
+                validDirs |= Down;
+            dirs++;
+        }
+        if (sGetTile(data, x + 0, y - 1, width) != '#')
+        {
+            if (!(lastX == x + 0 && lastY == y - 1))
+                validDirs |= Up;
+            dirs++;
+        }
+        assert(dirs > 1 || (x == width - 2 && y == height - 1));
+        if(dirs > 2 || (x == width - 2 && y == height - 1))
+        {
+            int prevDirIndex = 0;
+            if(lastX + 1 == x && lastY == y) { prevDirIndex = 0; }
+            else if(lastX - 1 == x && lastY == y) { prevDirIndex = 1; }
+            else if(lastY - 1 == y && lastX == x) { prevDirIndex = 2; }
+            else if(lastY + 1 == y && lastX == x) { prevDirIndex = 3; }
+            else assert(false);
+
+            uint16_t pos = x + y * width;
+            bool added = false;
+            if(crossRoadPositions.find(pos) == crossRoadPositions.end())
+            {
+                crossRoadPositions[pos] = crossRoads.size();
+                crossRoads.push_back({});
+                added = true;
+            }
+            uint16_t oldPos = startX + startY * width;
+            assert(crossRoadPositions.find(oldPos) != crossRoadPositions.end());
+            int oldIndex = crossRoadPositions[oldPos];
+            int oldCrossRoadDirIndex = 0;
+            switch(dir)
+            {
+                case Right: oldCrossRoadDirIndex = 0; break;
+                case Left: oldCrossRoadDirIndex = 1; break;
+                case Up: oldCrossRoadDirIndex = 2; break;
+                case Down: oldCrossRoadDirIndex = 3; break;
+                default:
+                    assert(false);
+                    break;
+            }
+            int index = crossRoadPositions[pos];
+            assert(index);
+            CrossRoad& oldCrossRoad = crossRoads[oldIndex];
+            oldCrossRoad.indices[oldCrossRoadDirIndex] = index;
+            oldCrossRoad.distances[oldCrossRoadDirIndex] = distance;
+
+            crossRoads[index].indices[prevDirIndex] = oldIndex;
+            crossRoads[index].distances[prevDirIndex] = distance;
+
+            if(added)
+            {
+                assert(distance < 65536);
+                if(validDirs & Right)
+                {
+                    sCreateJumpMap(data, x, y, width, height, Right, crossRoads, crossRoadPositions);
+                }
+                if(validDirs & Left)
+                {
+                    sCreateJumpMap(data, x, y, width, height, Left, crossRoads, crossRoadPositions);
+                }
+                if(validDirs & Up)
+                {
+                    sCreateJumpMap(data, x, y, width, height, Up, crossRoads, crossRoadPositions);
+                }
+                if(validDirs & Down)
+                {
+                    sCreateJumpMap(data, x, y, width, height, Down, crossRoads, crossRoadPositions);
+                }
+            }
+            return;
+        }
+        else if (dirs == 2)
+        {
+            lastX = x;
+            lastY = y;
+            distance++;
+
+            switch(validDirs)
+            {
+                case Right: x++; break;
+                case Left: x--; break;
+                case Up: y--; break;
+                case Down: y++; break;
+                default: assert(false); break;
+            }
+        }
+    }
+}
+
+
+
+int64_t sFindLongest(int currIndex, int64_t startDistance, const std::vector<CrossRoad>& crossRoads, uint8_t* visited)
+{
+    if(currIndex == 1)
+        return startDistance;
+    if(visited[currIndex])
+        return 0;
+    visited[currIndex] = 1;
+    int64_t result = 0;
+
+    const CrossRoad& crossRoad = crossRoads[currIndex];
+    for(int i = 0; i < 4; ++i)
+    {
+        if(crossRoad.distances[i])
+        {
+            result = sMax(result, sFindLongest(
+                crossRoad.indices[i], startDistance + crossRoad.distances[i], crossRoads, visited));
+        }
+    }
+    visited[currIndex] = 0;
+    return result;
+}
+
+
 
 static int64_t sParseB(const char* data)
 {
     TIMEDSCOPE("23B Total");
-    return *data;
+    int width = 0;
+    int height = 0;
+    sGetSize(data, width, height);
+    assert(width < 256 && height < 256);
+
+    std::vector<CrossRoad> crossRoads;
+    std::unordered_map<uint16_t, uint8_t> crossRoadPositions;
+    // width - 2, height - 1
+    crossRoadPositions[width * height - 2] = 1;
+    // 1, 0
+    crossRoadPositions[1] = 0;
+
+    crossRoads.push_back({});
+    crossRoads.push_back({});
+    {
+        TIMEDSCOPE("23B create jump map");
+        sCreateJumpMap(data, 1, 0, width, height, Down, crossRoads, crossRoadPositions);
+    }
+    uint8_t visited[64] = {};
+    assert(crossRoads.size() == crossRoadPositions.size());
+    assert(crossRoads.size() < 64);
+
+    int64_t result = 0;
+
+    {
+        TIMEDSCOPE("23B find longest");
+        sFindLongest(0, 0, crossRoads, visited);
+    }
+    return result;
 }
 
 static int sPrintA(char* buffer, int64_t value)
