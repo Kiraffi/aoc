@@ -22,6 +22,10 @@
 #define PROFILE 1
 #include "../profile.h"
 
+
+#define SIMPLE_BIT_WISE_TESTING 1
+
+
 alignas(32) static constexpr char test22A[] =
     R"(1,0,1~1,2,1
 0,0,2~2,0,2
@@ -185,47 +189,8 @@ struct Block
     uint8_t y2;
 };
 
-static int64_t sParseA(const char* data)
+static void sDropPiece(Block* blocks, int16_t numberCount, uint64_t* hitTest)
 {
-    TIMEDSCOPE("22A Total");
-    int16_t map[XSize * YSize * ZSize] = {};
-    Block blocks[MaxBlocks] = {};
-    int16_t numberCount = 1;
-
-    while(*data)
-    {
-        Block &b = blocks[numberCount];
-        b.x1 = sParserNumber(0, &data);
-        ++data;
-        b.y1 = sParserNumber(0, &data);
-        ++data;
-        b.z1 = sParserNumber(0, &data);
-        ++data;
-        b.x2 = sParserNumber(0, &data);
-        ++data;
-        b.y2 = sParserNumber(0, &data);
-        ++data;
-        b.z2 = sParserNumber(0, &data);
-        ++data;
-        assert(b.x1 >= 0 && b.x2 >= 0 && b.y1 >= 0 && b.y2 >= 0 && b.z1 >= 0 && b.z2 >= 0);
-        assert(b.x1 < XSize && b.x2 < XSize && b.y1 < YSize && b.y2 < YSize && b.z1 < ZSize && b.z2 < ZSize);
-        sSwapIfSmaller(b.x1, b.x2);
-        sSwapIfSmaller(b.y1, b.y2);
-        sSwapIfSmaller(b.z1, b.z2);
-        ++numberCount;
-    }
-    assert(numberCount < MaxBlocks);
-
-    std::sort(blocks + 1, blocks + numberCount, [](const Block& a, const Block& b){
-        return a.z1 < b.z1;
-    });
-
-    uint8_t onlyOneSupport[MaxBlocks] = {};
-
-#define SIMPLE_BIT_WISE_TESTING 1
-#if SIMPLE_BIT_WISE_TESTING
-    uint64_t hitTest[ZSize * 4] = {};
-#endif
     for(int n = 1; n < numberCount; ++n)
     {
         Block& b = blocks[n];
@@ -306,10 +271,6 @@ static int64_t sParseA(const char* data)
         }
         z1 += 2;
         z2 += 2;
-
-        uint16_t supports[16] = {};
-        uint8_t supportCount = 0;
-
         for(int k = z1; k <= z2; ++k)
         {
 #if SIMPLE_BIT_WISE_TESTING
@@ -318,6 +279,69 @@ static int64_t sParseA(const char* data)
             hitTest[k * 4 + 2] |= bHit[2];
             hitTest[k * 4 + 3] |= bHit[3];
 #endif
+        }
+    }
+
+}
+
+static int64_t sParseA(const char* data)
+{
+    TIMEDSCOPE("22A Total");
+    int16_t map[XSize * YSize * ZSize] = {};
+    Block blocks[MaxBlocks] = {};
+    int16_t numberCount = 1;
+
+    while(*data)
+    {
+        Block &b = blocks[numberCount];
+        b.x1 = sParserNumber(0, &data);
+        ++data;
+        b.y1 = sParserNumber(0, &data);
+        ++data;
+        b.z1 = sParserNumber(0, &data);
+        ++data;
+        b.x2 = sParserNumber(0, &data);
+        ++data;
+        b.y2 = sParserNumber(0, &data);
+        ++data;
+        b.z2 = sParserNumber(0, &data);
+        ++data;
+        assert(b.x1 >= 0 && b.x2 >= 0 && b.y1 >= 0 && b.y2 >= 0 && b.z1 >= 0 && b.z2 >= 0);
+        assert(b.x1 < XSize && b.x2 < XSize && b.y1 < YSize && b.y2 < YSize && b.z1 < ZSize && b.z2 < ZSize);
+        sSwapIfSmaller(b.x1, b.x2);
+        sSwapIfSmaller(b.y1, b.y2);
+        sSwapIfSmaller(b.z1, b.z2);
+        ++numberCount;
+    }
+    assert(numberCount < MaxBlocks);
+
+    std::sort(blocks + 1, blocks + numberCount, [](const Block& a, const Block& b){
+        return a.z1 < b.z1;
+    });
+
+    uint8_t onlyOneSupport[MaxBlocks] = {};
+
+#if SIMPLE_BIT_WISE_TESTING
+    uint64_t hitTest[ZSize * 4] = {};
+#endif
+    sDropPiece(blocks, numberCount, hitTest);
+
+    for(int n = 1; n < numberCount; ++n)
+    {
+        Block& b = blocks[n];
+
+        uint16_t z1 = b.z1;
+        uint16_t z2 = b.z2;
+        uint8_t x1 = b.x1;
+        uint8_t x2 = b.x2;
+        uint8_t y1 = b.y1;
+        uint8_t y2 = b.y2;
+
+        uint16_t supports[16] = {};
+        uint8_t supportCount = 0;
+
+        for(int k = z1; k <= z2; ++k)
+        {
             for (int j = y1; j <= y2; ++j)
             {
                 for (int i = x1; i <= x2; ++i)
@@ -404,7 +428,7 @@ static int64_t sParseB(const char* data)
     Block blocks[MaxBlocks] = {};
     int16_t numberCount = 1;
 
-    while(*data)
+    while (*data)
     {
         Block &b = blocks[numberCount];
         b.x1 = sParserNumber(0, &data);
@@ -428,7 +452,7 @@ static int64_t sParseB(const char* data)
     }
     assert(numberCount < MaxBlocks);
 
-    std::sort(blocks + 1, blocks + numberCount, [](const Block& a, const Block& b){
+    std::sort(blocks + 1, blocks + numberCount, [](const Block &a, const Block &b) {
         return a.z1 < b.z1;
     });
 
@@ -441,26 +465,31 @@ static int64_t sParseB(const char* data)
     uint8_t onlyOneSupport[MaxBlocks] = {};
     std::unordered_map<int16_t, SetMap> supportsBlocks;
 
-    for(int n = 1; n < numberCount; ++n)
+#if SIMPLE_BIT_WISE_TESTING
+    uint64_t hitTest[ZSize * 4] = {};
+#endif
+    sDropPiece(blocks, numberCount, hitTest);
+/*
+    for (int n = 1; n < numberCount; ++n)
     {
-        Block& b = blocks[n];
+        Block &b = blocks[n];
 
-        uint16_t& z1 = b.z1;
-        uint16_t& z2 = b.z2;
-        uint8_t& x1 = b.x1;
-        uint8_t& x2 = b.x2;
-        uint8_t& y1 = b.y1;
-        uint8_t& y2 = b.y2;
+        uint16_t &z1 = b.z1;
+        uint16_t &z2 = b.z2;
+        uint8_t &x1 = b.x1;
+        uint8_t &x2 = b.x2;
+        uint8_t &y1 = b.y1;
+        uint8_t &y2 = b.y2;
 
         [[maybe_unused]] int loop = 0;
         bool hit = false;
-        while(!hit)
+        while (!hit)
         {
             for (int j = y1; j <= y2 && !hit; ++j)
             {
                 for (int i = x1; i <= x2; ++i)
                 {
-                    if(sGetTile(i, j, z1, map))
+                    if (sGetTile(i, j, z1, map))
                     {
                         hit = true;
                         assert(loop > 0);
@@ -469,7 +498,7 @@ static int64_t sParseB(const char* data)
                 }
             }
             assert(!hit || z1 >= 1);
-            if(z1 == 1 && !hit)
+            if (z1 == 1 && !hit)
             {
                 hit = true;
                 --z1;
@@ -481,6 +510,24 @@ static int64_t sParseB(const char* data)
         }
         z1 += 2;
         z2 += 2;
+
+    }
+*/
+    std::sort(blocks + 1, blocks + numberCount, [](const Block &a, const Block &b) {
+        return a.z1 < b.z1;
+    });
+
+    for (int n = 1; n < numberCount; ++n)
+    {
+        Block &b = blocks[n];
+
+        uint16_t z1 = b.z1;
+        uint16_t z2 = b.z2;
+        uint8_t x1 = b.x1;
+        uint8_t x2 = b.x2;
+        uint8_t y1 = b.y1;
+        uint8_t y2 = b.y2;
+
         int supportedByBlocksCount = 0;
 
         uint16_t supports[16] = {};
@@ -548,14 +595,14 @@ static int64_t sParseB(const char* data)
             checks.insert(v);
         drops[i] = 0;
         drops[0] = 0;
-        bool modified = true;
-        while(modified && !checks.empty())
+        //bool modified = true;
+        //while(modified && !checks.empty())
         {
-            modified = false;
+            //modified = false;
             //for(int16_t j : checks)
-            for(int16_t j = 1; j < numberCount; j++)
+            for(int16_t j = i + 1; j < numberCount; j++)
             {
-                if((drops[j] == 0))// || (supportedByBlocksCounts[j] == 0))
+                if(drops[j] == 0)// || (supportedByBlocksCounts[j] == 0))
                     continue;
                 //if(*((const uint64_t*)(supportedByBlocks + j * BlocksMaxSupport)) == 0)
                 //    continue;
@@ -575,7 +622,7 @@ static int64_t sParseB(const char* data)
                     drops[j] = 0;
                     //drops.insert(j); // = 1;
                     fallingBlockCount++;
-                    modified = true;
+                    //modified = true;
                 }
             }
             //std::erase_if(checks, [&](int16_t value) {
