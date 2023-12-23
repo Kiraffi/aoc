@@ -150,7 +150,6 @@ static void sDropPiece(Block* blocks, int16_t numberCount)
         uint8_t& y2 = b.y2;
 
         [[maybe_unused]] int loop = 0;
-        bool hit = false;
 
         alignas(16) uint64_t bHit[2] = {};
         for (int j = y1; j <= y2; ++j)
@@ -173,23 +172,47 @@ static void sDropPiece(Block* blocks, int16_t numberCount)
             bHit[1] |= newBits2;
         }
         __m128i hitTestValue = _mm_loadu_si128((const __m128i*)bHit);
-        while(!hit)
+        __m256i hitTestValue256 = _mm256_set_m128i(hitTestValue, hitTestValue);
+
+        bool hit = false;
+
+        z1 -= 1;
+        z2 -= 1;
+
+        while(z1 >= 1)
         {
+            __m256i value256 = _mm256_loadu_si256((const __m256i *) (hitTest + z1 * 2));
+            hit = !_mm256_testz_si256(value256, hitTestValue256);
+            if(hit || z1 == 1)
+                break;
+            z1 -= 2;
+            z2 -= 2;
+        }
+        if(hit || z1 == 0)
+        {
+            z1++;
+            z2++;
 
-            __m128i value = _mm_loadu_si128((const __m128i*) (hitTest + z1 * 2));
-            hit = !_mm_testz_si128(value, hitTestValue);
-
+            __m128i value = _mm_loadu_si128((const __m128i *) (hitTest + z1 * 2));
+            if (!_mm_testz_si128(value, hitTestValue))
+            {
+                z1++;
+                z2++;
+            }
+        }
+        /*
             assert(!hit || z1 >= 1);
             if(z1 == 1)
             {
                 hit = true;
             }
-            --z1;
-            --z2;
+            if(hit)
+                break;
+            z1 -= 2;
+            z2 -= 2;
             ++loop;
         }
-        z1 += 2;
-        z2 += 2;
+        */
         for(int k = z1; k <= z2; ++k)
         {
             hitTest[k * 2 + 0] |= bHit[0];
