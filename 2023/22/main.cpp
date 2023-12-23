@@ -438,7 +438,7 @@ static int64_t sParseB(const char* data)
     static const int BlocksMaxSupport = 4;
     alignas(16) int16_t supportedByBlocks[MaxBlocks * BlocksMaxSupport] = {};
     uint8_t supportedByBlocksCounts[MaxBlocks] = {};
-
+    uint8_t onlyOneSupport[MaxBlocks] = {};
     std::unordered_map<int16_t, SetMap> supportsBlocks;
 
     for(int n = 1; n < numberCount; ++n)
@@ -482,6 +482,11 @@ static int64_t sParseB(const char* data)
         z1 += 2;
         z2 += 2;
         int supportedByBlocksCount = 0;
+
+        uint16_t supports[16] = {};
+        uint8_t supportCount = 0;
+
+
         for(int k = z1; k <= z2; ++k)
         {
             for (int j = y1; j <= y2; ++j)
@@ -507,9 +512,24 @@ static int64_t sParseB(const char* data)
 
                         supportsBlocks[underValue].insert(n);
 
+                        supports[supportCount++] = underValue;
                     }
                 }
             }
+        }
+        uint16_t value = supports[0];
+        bool isOnlyOne = true;
+        for(int i = 1; i < supportCount; ++i)
+        {
+            if(supports[i] != value)
+            {
+                isOnlyOne = false;
+                break;
+            }
+        }
+        if(isOnlyOne)
+        {
+            onlyOneSupport[value] = 0xff;
         }
         supportedByBlocksCounts[n] = supportedByBlocksCount;
     }
@@ -520,6 +540,8 @@ static int64_t sParseB(const char* data)
 
     for(int16_t i = 1; i < numberCount; ++i)
     {
+        if(onlyOneSupport[i] == 0)
+            continue;
         SetMap checks;
         memset(drops, 0xff, MaxBlocks);
         for(int16_t v : supportsBlocks[i])
