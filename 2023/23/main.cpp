@@ -23,15 +23,38 @@
 #include "../profile.h"
 
 alignas(32) static constexpr char test23A[] =
-    R"()";
+    R"(#.#####################
+#.......#########...###
+#######.#########.#.###
+###.....#.>.>.###.#.###
+###v#####.#v#.###.#.###
+###.>...#.#.#.....#...#
+###v###.#.#.#########.#
+###...#.#.#.......#...#
+#####.#.#.#######.#.###
+#.....#.#.#.......#...#
+#.#####.#.#.#########v#
+#.#...#...#...###...>.#
+#.#.#v#######v###.###v#
+#...#.>.#...>.>.#.###.#
+#####v#.#.###v#.#.###.#
+#.....#...#...#.#.#...#
+#.#########.###.#.#.###
+#...###...#...#...#.###
+###.###.#.###v#####v###
+#...#...#.#.>.>.#.>.###
+#.###.###.#.###.#.#v###
+#.....###...###...#...#
+#####################.#
+)";
 
-/*
+
 template <typename T>
 static T sMax(T a, T b)
 {
     return a < b ? b : a;
 }
-
+/*
 template <typename T>
 static T sMin(T a, T b)
 {
@@ -58,7 +81,7 @@ static int64_t sParserNumber(int64_t startNumber, const char** data)
     return neg ? -number : number;
 }
 */
-/*
+
 static void sGetSize(const char* data, int& width, int& height)
 {
     width = 0;
@@ -72,7 +95,7 @@ static void sGetSize(const char* data, int& width, int& height)
         data += width + 1;
     }
 }
-*/
+
 /*
 static void sBitShiftRightOne(__m128i* value)
 {
@@ -120,12 +143,86 @@ static void sMemset(T* arr, T value, int amount)
 
 }
 */
+static constexpr int XSize = 160;
+static constexpr int YSize = 160;
+static char sGetTile(const char* data, int x, int y, int width)
+{
+    assert(x >= 0 && x < XSize && y >= 0 && y < YSize);
+    return data[x + y * (width + 1)];
+}
+/*
+uint8_t visitedVisited[XSize * YSize * 128] = {};
+uint8_t visitedVisitedCount = 0;
+*/
+static int64_t sGetLongestPath(const char* data, int x, int y, int width, int height, uint8_t* visited, int64_t steps)
+{
+    if(x < 0 || y < 0 || x >= width || y >= width)
+        return 0;
+    if(visited[x + y * width])
+        return 0;
+    visited[x + y * width] = 1;
+    if(x == width - 2 && y == height - 1)
+    {
+        //memcpy(visitedVisited + visitedVisitedCount * XSize * YSize, visited, XSize * YSize);
+        //visitedVisitedCount++;
+        //printf("steps: %" PRIi64 "\n", steps);
+        visited[x + y * width] = 0;
+        return steps;
+    }
+    char tile = sGetTile(data, x, y, width);
+    int64_t result = 0;
+    switch(tile)
+    {
+        case '#': break;
+        case '>': result = sGetLongestPath(data, x + 1, y + 0, width, height, visited, steps + 1); break;
+        case '<': result = sGetLongestPath(data, x - 1, y + 0, width, height, visited, steps + 1); break;
+        case '^': result = sGetLongestPath(data, x + 0, y - 1, width, height, visited, steps + 1); break;
+        case 'v': result = sGetLongestPath(data, x + 0, y + 1, width, height, visited, steps + 1); break;
+        default:
+            result = sMax(result, sGetLongestPath(data, x + 1, y + 0, width, height, visited, steps + 1));
+            result = sMax(result, sGetLongestPath(data, x - 1, y + 0, width, height, visited, steps + 1));
+            result = sMax(result, sGetLongestPath(data, x + 0, y + 1, width, height, visited, steps + 1));
+            result = sMax(result, sGetLongestPath(data, x + 0, y - 1, width, height, visited, steps + 1));
+            break;
+    }
+    // using bread crumbs, set it back to state it was before calling the function.
+    visited[x + y * width] = 0;
+    return result;
+}
 
 
 static int64_t sParseA(const char* data)
 {
     TIMEDSCOPE("23A Total");
-    return *data;
+    int width = 0;
+    int height = 0;
+    sGetSize(data, width, height);
+
+    uint8_t visited[XSize * YSize] = {};
+    int64_t steps = sGetLongestPath(data, 1, 0, width, height, visited, 0);
+/*
+    for(int i = 0; i < visitedVisitedCount; ++i)
+    {
+        for(int y = 0; y < width; ++y)
+        {
+            for (int x = 0; x < height; ++x)
+            {
+                if(visitedVisited[(x + y * width) + i * XSize * YSize])
+                {
+                    printf("O");
+                }
+                else
+                {
+                    printf("%c", data[x + y * (width + 1)]);
+                }
+            }
+            printf("\n");
+        }
+        printf("\n\n");
+    }
+*/
+
+    return steps;
 }
 
 static int64_t sParseB(const char* data)
