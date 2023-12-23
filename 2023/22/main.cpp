@@ -1,5 +1,6 @@
 #include <algorithm> // std::max
 #include <assert.h> // assert
+#include <immintrin.h> // SIMD
 #include <inttypes.h> // PRI64
 #include <stdio.h> // printf
 
@@ -135,7 +136,7 @@ static void sReadMapAndSort(const char* data, Block* blocks, int16_t& numberCoun
 
 static void sDropPiece(Block* blocks, int16_t numberCount)
 {
-    alignas(16) uint64_t hitTest[ZSize * 4] = {};
+    alignas(16) uint64_t hitTest[ZSize * 2] = {};
 
     for(int n = 1; n < numberCount; ++n)
     {
@@ -151,27 +152,32 @@ static void sDropPiece(Block* blocks, int16_t numberCount)
         [[maybe_unused]] int loop = 0;
         bool hit = false;
 
-        uint64_t bHit[4] = {};
+        alignas(16) uint64_t bHit[2] = {};
         for (int j = y1; j <= y2; ++j)
         {
-            uint64_t& bHitB = bHit[j / 4];
             uint64_t newBits1 = (uint64_t(1) << (x2 + 1)) - 1;
             uint64_t newBits2 = (uint64_t(1) << (x1 + 0)) - 1;
             uint64_t newBits = newBits1 - newBits2;
-            newBits = newBits << ((j % 4) * 16);
-            bHitB |= newBits;
+
+            if(j % 10 < 6)
+            {
+                newBits1 = newBits << ((j % 10) * 10);
+                newBits2 = 0;
+            }
+            else
+            {
+                newBits1 = 0;
+                newBits2 = newBits << (((j % 10) - 6) * 10);
+            }
+            bHit[0] |= newBits1;
+            bHit[1] |= newBits2;
         }
+        __m128i hitTestValue = _mm_loadu_si128((const __m128i*)bHit);
         while(!hit)
         {
-            uint64_t testValue[4] = {};
-            testValue[0] = hitTest[z1 * 4 + 0] & bHit[0];
-            testValue[1] = hitTest[z1 * 4 + 1] & bHit[1];
-            testValue[2] = hitTest[z1 * 4 + 2] & bHit[2];
-            testValue[3] = hitTest[z1 * 4 + 3] & bHit[3];
-            testValue[0] = testValue[0] | testValue[1];
-            testValue[2] = testValue[2] | testValue[3];
-            testValue[0] = testValue[0] | testValue[2];
-            hit = testValue[0] != 0;
+
+            __m128i value = _mm_loadu_si128((const __m128i*) (hitTest + z1 * 2));
+            hit = !_mm_testz_si128(value, hitTestValue);
 
             assert(!hit || z1 >= 1);
             if(z1 == 1)
@@ -186,10 +192,8 @@ static void sDropPiece(Block* blocks, int16_t numberCount)
         z2 += 2;
         for(int k = z1; k <= z2; ++k)
         {
-            hitTest[k * 4 + 0] |= bHit[0];
-            hitTest[k * 4 + 1] |= bHit[1];
-            hitTest[k * 4 + 2] |= bHit[2];
-            hitTest[k * 4 + 3] |= bHit[3];
+            hitTest[k * 2 + 0] |= bHit[0];
+            hitTest[k * 2 + 1] |= bHit[1];
         }
     }
 }
