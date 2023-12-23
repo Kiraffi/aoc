@@ -1,14 +1,7 @@
 #include <algorithm> // std::max
 #include <assert.h> // assert
-#include <bit> //std::popcount
-#include <ctype.h> //isdigit
-#include <immintrin.h> // SIMD
 #include <inttypes.h> // PRI64
-#include <math.h> // sqrt
-#include <stdint.h> // intptr
 #include <stdio.h> // printf
-#include <stdlib.h> //strtol
-#include <string.h> //strlen
 
 #include <string>
 #include <vector>
@@ -199,7 +192,37 @@ static void sDropPiece(Block* blocks, int16_t numberCount)
             hitTest[k * 4 + 3] |= bHit[3];
         }
     }
+}
+static constexpr int MaxSupportCount = 16;
+static int sSetBlock(const Block& b, int16_t blockIndex, int16_t* map, int16_t* supports)
+{
+    int supportCount = 0;
 
+    for (int j = b.y1; j <= b.y2; ++j)
+    {
+        for (int i = b.x1; i <= b.x2; ++i)
+        {
+            int16_t underValue = sGetTile(i, j, b.z1 - 1, map);
+            if((underValue != blockIndex) & (underValue != 0))
+            {
+                assert(blockIndex);
+                assert(supportCount < MaxSupportCount);
+                supports[supportCount++] = underValue;
+            }
+        }
+    }
+
+    for(int k = b.z1; k <= b.z2; ++k)
+    {
+        for (int j = b.y1; j <= b.y2; ++j)
+        {
+            for (int i = b.x1; i <= b.x2; ++i)
+            {
+                sSetTile(i, j, k, blockIndex, map);
+            }
+        }
+    }
+    return supportCount;
 }
 
 static int64_t sParseA(const char* data)
@@ -216,40 +239,16 @@ static int64_t sParseA(const char* data)
 
     sDropPiece(blocks, numberCount);
 
-    for(int n = 1; n < numberCount; ++n)
+    for(int16_t blockIndex = 1; blockIndex < numberCount; ++blockIndex)
     {
-        const Block& b = blocks[n];
+        const Block& b = blocks[blockIndex];
+        int16_t supports[MaxSupportCount] = {};
 
-        uint16_t z1 = b.z1;
-        uint16_t z2 = b.z2;
-        uint8_t x1 = b.x1;
-        uint8_t x2 = b.x2;
-        uint8_t y1 = b.y1;
-        uint8_t y2 = b.y2;
-
-        uint16_t supports[16] = {};
-        uint8_t supportCount = 0;
-
-        for(int k = z1; k <= z2; ++k)
-        {
-            for (int j = y1; j <= y2; ++j)
-            {
-                for (int i = x1; i <= x2; ++i)
-                {
-                    sSetTile(i, j, k, n, map);
-                    uint16_t underValue = sGetTile(i, j, z1 - 1, map);
-                    if((underValue != n) & (underValue != 0))
-                    {
-                        assert(n);
-
-                        supports[supportCount++] = underValue;
-                    }
-                }
-            }
-        }
+        int supportCount = sSetBlock(b, blockIndex, map, supports);
         uint16_t value = supports[0];
+
         bool isOnlyOne = true;
-        for(int i = 1; i < supportCount; ++i)
+        for(int i = 0; i < supportCount; ++i)
         {
             if(supports[i] != value)
             {
@@ -284,64 +283,43 @@ static int64_t sParseB(const char* data)
     int16_t numberCount = 1;
     sReadMapAndSort(data, blocks, numberCount);
 
+    sDropPiece(blocks, numberCount);
+    // Sort tiles again after dropping them.
+    std::sort(blocks + 1, blocks + numberCount, [](const Block &a, const Block &b) {
+        return a.z1 < b.z1;
+    });
+
+
     static const int BlocksMaxSupport = 4;
     alignas(16) int16_t supportedByBlocks[MaxBlocks * BlocksMaxSupport] = {};
     uint8_t supportedByBlocksCounts[MaxBlocks] = {};
     uint8_t onlyOneSupport[MaxBlocks] = {};
 
-    sDropPiece(blocks, numberCount);
-
-    std::sort(blocks + 1, blocks + numberCount, [](const Block &a, const Block &b) {
-        return a.z1 < b.z1;
-    });
-
-    for (int n = 1; n < numberCount; ++n)
+    for (int16_t blockIndex = 1; blockIndex < numberCount; ++blockIndex)
     {
-        Block &b = blocks[n];
+        const Block& b = blocks[blockIndex];
+        int16_t supports[MaxSupportCount] = {};
 
-        uint16_t z1 = b.z1;
-        uint16_t z2 = b.z2;
-        uint8_t x1 = b.x1;
-        uint8_t x2 = b.x2;
-        uint8_t y1 = b.y1;
-        uint8_t y2 = b.y2;
+        int supportCount = sSetBlock(b, blockIndex, map, supports);
 
-        int16_t supports[16] = {};
-        uint8_t supportCount = 0;
-
-        for(int k = z1; k <= z2; ++k)
-        {
-            for (int j = y1; j <= y2; ++j)
-            {
-                for (int i = x1; i <= x2; ++i)
-                {
-                    sSetTile(i, j, k, n, map);
-                    int16_t underValue = sGetTile(i, j, k - 1, map);
-                    if((underValue != n) & (underValue != 0))
-                    {
-                        assert(n);
-                        supports[supportCount++] = underValue;
-                    }
-                }
-            }
-        }
         int supportedByBlocksCount = supportCount > 0 ? 1 : 0;
         // Find uniques
         if(supportCount > 0)
         {
+            // Sort them supports to check uniques easier
             std::sort(supports, supports + supportCount, [](int16_t a, int16_t b){
-                return a > b;
+                return a < b;
             });
 
             int16_t value = supports[0];
-            supportedByBlocks[n * BlocksMaxSupport] = value;
+            supportedByBlocks[blockIndex * BlocksMaxSupport] = value;
             for (int i = 1; i < supportCount; ++i)
             {
                 if (supports[i] != value)
                 {
                     value = supports[i];
                     assert(supportedByBlocksCount + 1 < BlocksMaxSupport);
-                    supportedByBlocks[n * BlocksMaxSupport + supportedByBlocksCount] = value;
+                    supportedByBlocks[blockIndex * BlocksMaxSupport + supportedByBlocksCount] = value;
                     supportedByBlocksCount++;
                 }
             }
@@ -349,17 +327,14 @@ static int64_t sParseB(const char* data)
             // If only one support
             if (supportedByBlocksCount == 1)
             {
-                int16_t value = supports[0];
                 onlyOneSupport[value] = 0xff;
             }
 
         }
-        supportedByBlocksCounts[n] = supportedByBlocksCount;
+        supportedByBlocksCounts[blockIndex] = supportedByBlocksCount;
     }
+
     int64_t fallingBlockCount = 0;
-
-
-    //uint8_t drops[MaxBlocks] = {};
     {
         TIMEDSCOPE("22B Counting");
 
@@ -373,7 +348,7 @@ static int64_t sParseB(const char* data)
             for (int16_t j = i + 1; j < numberCount; j++)
             {
                 // Check if index j has already dropped or if this is root block. Since we remove root block
-                // in the beginning, these blocks wont be affected.
+                // in the beginning, these blocks will not be affected.
                 if (drops[j] != 0 || supportedByBlocksCounts[j] == 0)
                     continue;
                 bool isValid = true;

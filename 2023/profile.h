@@ -23,8 +23,9 @@ struct ScopeProfile
     std::chrono::high_resolution_clock::time_point begin;
     const char* name;
 };
-
-#define TIMEDSCOPE(name) ScopeProfile profile##__LINE__ (name)
+#define CONCAT1(a, b) a ## b
+#define CONCAT2(a, b) CONCAT1(a, b)
+#define TIMEDSCOPE(name) ScopeProfile CONCAT2(profile, __LINE__)(name)
 
 
 #else
