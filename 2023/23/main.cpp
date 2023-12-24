@@ -323,12 +323,16 @@ int64_t sFindLongest(int currIndex,
     int endIndex,
     int64_t startDistance,
     const CrossRoad* crossRoads,
-    uint64_t visited)
+    uint64_t visited,
+    uint64_t secondLastCheck)
 {
     if(currIndex == endIndex)
         return startDistance;
     if((visited >> currIndex) & 1)
         return 0;
+    if((visited & secondLastCheck) == secondLastCheck)
+        return 0;
+
     uint64_t newVisited = visited | (uint64_t(1) << uint64_t(currIndex));
 
     int64_t result = 0;
@@ -341,7 +345,12 @@ int64_t sFindLongest(int currIndex,
         if(crossRoad.distances[i])
         {
             result = sMax(result, sFindLongest(
-                crossRoad.indices[i], endIndex, startDistance + crossRoad.distances[i], crossRoads, newVisited));
+                crossRoad.indices[i],
+                endIndex,
+                startDistance + crossRoad.distances[i],
+                crossRoads,
+                newVisited,
+                secondLastCheck));
         }
     }
     return result;
@@ -373,9 +382,19 @@ static int64_t sParseB(const char* data)
     int64_t result = 0;
 
     {
+        uint64_t secondLastCheck = 0;
+        for(int i = 0; i < 4; i++)
+        {
+            const CrossRoad& crossRoad = crossRoads[crossRoads[1].indices[3]];
+            if(crossRoad.distances[i] && crossRoad.indices[i] != 1)
+            {
+                secondLastCheck |= uint64_t(1) << uint64_t(crossRoad.indices[i]);
+            }
+        }
+
         TIMEDSCOPE("23B find longest");
         // Find route to the cross road before the goal element
-        result = sFindLongest(0, crossRoads[1].indices[3], 0, crossRoads, 0);
+        result = sFindLongest(0, crossRoads[1].indices[3], 0, crossRoads, 0, secondLastCheck);
     }
     return result + crossRoads[1].distances[3];
 }
