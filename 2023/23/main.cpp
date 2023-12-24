@@ -19,7 +19,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test23A[] =
@@ -54,13 +54,6 @@ static T sMax(T a, T b)
 {
     return a < b ? b : a;
 }
-/*
-template <typename T>
-static T sMin(T a, T b)
-{
-    return a < b ? a : b;
-}
-*/
 
 static void sGetSize(const char* data, int& width, int& height)
 {
@@ -76,44 +69,10 @@ static void sGetSize(const char* data, int& width, int& height)
     }
 }
 
-/*
-static void sBitShiftRightOne(__m128i* value)
-{
-    __m128i movedTop = _mm_bsrli_si128(*value, 8);
-    movedTop = _mm_slli_epi64(movedTop, 63);
-    *value = _mm_srli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedTop);
-}
-
-static void sBitShiftLeftOne(__m128i* value)
-{
-    __m128i movedBot = _mm_bslli_si128(*value, 8);
-    movedBot = _mm_srli_epi64(movedBot, 63);
-    *value = _mm_slli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedBot);
-}
-
-
-static void sBitShift(__m128i* value, int dir)
-{
-
-    if(dir == -1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftRightOne(value);
-    }
-    else if(dir == 1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftLeftOne(value);
-    }
-}
- */
-
 static constexpr int XSize = 160;
 static constexpr int YSize = 160;
+static constexpr int EndChecks = 3;
+
 static char sGetTile(const char* data, int x, int y, int width)
 {
     assert(x >= 0 && x < XSize && y >= 0 && y < YSize);
@@ -318,30 +277,37 @@ static void sCreateJumpMap(
     }
 }
 
-
 int64_t sFindLongest(int currIndex,
     int endIndex,
     int64_t startDistance,
     const CrossRoad* crossRoads,
     uint64_t visited,
-    uint64_t secondLastCheck)
+    const uint64_t* lastCheckMasks,
+    const uint64_t* removeMasks)
 {
+    assert(currIndex != 1);
     if(currIndex == endIndex)
         return startDistance;
-    if((visited >> currIndex) & 1)
-        return 0;
-    if((visited & secondLastCheck) == secondLastCheck)
+    uint64_t newIndex = uint64_t(1) << uint64_t(currIndex);
+    if((visited & newIndex) != 0)
         return 0;
 
     uint64_t newVisited = visited | (uint64_t(1) << uint64_t(currIndex));
+
+    for(int i = 0; i < EndChecks; ++i)
+    {
+        if((lastCheckMasks[i] & visited) == lastCheckMasks[i] && (removeMasks[i] & newIndex) == 0)
+            return 0;
+    }
 
     int64_t result = 0;
 
     const CrossRoad& crossRoad = crossRoads[currIndex];
     for(int i = 0; i < 4; ++i)
     {
-        if((newVisited >> crossRoad.indices[i]) & 1)
+        if((newVisited >> uint64_t(crossRoad.indices[i])) & 1)
             continue;
+
         if(crossRoad.distances[i])
         {
             result = sMax(result, sFindLongest(
@@ -350,12 +316,29 @@ int64_t sFindLongest(int currIndex,
                 startDistance + crossRoad.distances[i],
                 crossRoads,
                 newVisited,
-                secondLastCheck));
+                lastCheckMasks,
+                removeMasks));
         }
     }
     return result;
 }
 
+void sFindEnds(int currIndex, const CrossRoad* crossRoads, int depth, uint64_t *checkMasks)
+{
+    if(depth == EndChecks)
+        return;
+    const CrossRoad &crossRoad = crossRoads[currIndex];
+
+    for (int i = 0; i < 4; i++)
+    {
+        if (crossRoad.distances[i])
+        {
+            checkMasks[depth] |= uint64_t(1) << uint64_t(crossRoad.indices[i]);
+            sFindEnds(crossRoad.indices[i], crossRoads, depth + 1,checkMasks);
+        }
+    }
+
+}
 
 
 static int64_t sParseB(const char* data)
@@ -373,28 +356,34 @@ static int64_t sParseB(const char* data)
     // 1, 0
     crossRoadPositions[1] = 0;
     {
-        TIMEDSCOPE("23B create jump map");
+        //TIMEDSCOPE("23B create jump map");
         sCreateJumpMap(data, 1, 0, width, height, Down, crossRoads, crossRoadPositions);
     }
-    assert(crossRoads.size() == crossRoadPositions.size());
-    assert(crossRoads.size() < 64);
+    assert(crossRoadPositions.size() < 64);
 
     int64_t result = 0;
 
     {
-        uint64_t secondLastCheck = 0;
-        for(int i = 0; i < 4; i++)
-        {
-            const CrossRoad& crossRoad = crossRoads[crossRoads[1].indices[3]];
-            if(crossRoad.distances[i] && crossRoad.indices[i] != 1)
-            {
-                secondLastCheck |= uint64_t(1) << uint64_t(crossRoad.indices[i]);
-            }
-        }
+        int parentIndex = crossRoads[1].indices[3];
+        uint64_t lastCheckMasks[EndChecks] = {};
+        uint64_t removeMasks[EndChecks] = {};
 
-        TIMEDSCOPE("23B find longest");
+        removeMasks[0] = uint64_t(1) << uint64_t(parentIndex);
+        removeMasks[0] |= uint64_t(0) << uint64_t(1);
+        removeMasks[0] |= uint64_t(1) << uint64_t(1);
+
+        sFindEnds(parentIndex, crossRoads, 0, lastCheckMasks);
+
+        for(int j = 0; j < EndChecks; ++j)
+        {
+            lastCheckMasks[j] &= ~removeMasks[j];
+            removeMasks[j] |= lastCheckMasks[j];
+            for(int k = j + 1; k < EndChecks; ++k)
+                removeMasks[k] |= removeMasks[j];
+        }
+        //TIMEDSCOPE("23B find longest");
         // Find route to the cross road before the goal element
-        result = sFindLongest(0, crossRoads[1].indices[3], 0, crossRoads, 0, secondLastCheck);
+        result = sFindLongest(0, parentIndex, 0, crossRoads, 0, lastCheckMasks, removeMasks);
     }
     return result + crossRoads[1].distances[3];
 }
