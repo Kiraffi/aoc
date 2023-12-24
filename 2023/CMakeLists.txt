@@ -30,6 +30,7 @@ add_executable(20exec "20/main.cpp")
 add_executable(21exec "21/main.cpp")
 add_executable(22exec "22/main.cpp")
 add_executable(23exec "23/main.cpp")
+add_executable(24exec "24/main.cpp")
 
 
 add_executable(runall "mainrunner.cpp"
