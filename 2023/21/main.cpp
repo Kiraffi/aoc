@@ -19,7 +19,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test21A[] =
@@ -55,29 +55,61 @@ struct Point
     int x;
     int y;
 };
-static int hittrees = 0;
+
 void sCheckMove(const char* data,
     int x,
     int y,
     int width,
     int height,
-    int areaWidth,
-    int areaHeight,
     std::unordered_set<int64_t>& points)
 {
-    if(x < 0 || x >= areaWidth || y < 0 || y >= areaHeight)
+    if(x < 0 || x >= width || y < 0 || y >= height)
         return;
 
     int64_t p = x + (int64_t(y) << int64_t(32));
     if(points.contains(p))
         return;
-    //assert(pointCount + 1 < PointsMax);
     char tile = data[(x % width) + (y % height) * (width + 1)];
     if(tile != '#')
         points.insert(p);
-    else
-        hittrees++;
 }
+
+void sGetStart(const char* data, int& x, int& y)
+{
+    int width = 0;
+    int height = 0;
+
+    sGetSize(data, width, height);
+
+    const char* dataStart = data;
+    while(*data != 'S') data++;
+    x = intptr_t(data - dataStart) / (width + 1);
+    y = intptr_t(data - dataStart) / (width + 1);
+}
+
+int64_t sGetFillCount(const char* data, int x, int y, int width, int height, int steps)
+{
+    std::unordered_set<int64_t> points1 = {};
+    points1.insert(x + (int64_t(y) << (int64_t(32))));
+    std::unordered_set<int64_t> points2 = {};
+
+    for(int i = 0; i < steps; ++i)
+    {
+        points2.clear();
+        for(int64_t point : points1)
+        {
+            int x1 = point & (0xffff'ffff);
+            int y1 = point >> 32;
+            sCheckMove(data, x1 + 1, y1, width, height, points2);
+            sCheckMove(data, x1 - 1, y1, width, height, points2);
+            sCheckMove(data, x1, y1 + 1, width, height, points2);
+            sCheckMove(data, x1, y1 - 1, width, height, points2);
+        }
+        std::swap(points1, points2);
+    }
+    return int64_t(points1.size());
+}
+
 
 static int64_t sParseA(const char* data)
 {
@@ -85,81 +117,11 @@ static int64_t sParseA(const char* data)
     int width = 0;
     int height = 0;
     sGetSize(data, width, height);
-    const char* dataStart = data;
-    while(*data != 'S') data++;
-    int x = intptr_t(data - dataStart) / (width + 1);
-    int y = intptr_t(data - dataStart) / (width + 1);
+    int x = 0;
+    int y = 0;
+    sGetStart(data, x, y);
 
-
-    std::unordered_set<int64_t> points1 = {};
-    points1.insert(x + (int64_t(y) << (int64_t(32))));
-    std::unordered_set<int64_t> points2 = {};
-
-    for(int i = 0; i < 64; ++i)
-    {
-        points2.clear();
-        for(int64_t point : points1)
-        {
-            int x1 = point & (0xffff'ffff);
-            int y1 = point >> 32;
-            sCheckMove(dataStart, x1 + 1, y1, width, height, width, height, points2);
-            sCheckMove(dataStart, x1 - 1, y1, width, height, width, height, points2);
-            sCheckMove(dataStart, x1, y1 + 1, width, height, width, height, points2);
-            sCheckMove(dataStart, x1, y1 - 1, width, height, width, height, points2);
-        }
-        std::swap(points1, points2);
-    }
-    return (int64_t)points1.size();
-}
-
-static int sCountTrees(const std::unordered_set<int64_t>& points1, int x0, int y0, int x1, int y1)
-{
-    int trees = 0;
-    int midX = x0 + (x1 - x0) / 2;
-    int midY = y0 + (y1 - y0) / 2;
-    int points = 0;
-    int points2 = 0;
-    printf("[x0:%i, y0:%i] - [x1:%i, y1:%i] mid[midX:%i, midY:%i]\n", x0, y0, x1, y1, midX, midY);
-
-    int row = 0;
-    int height = y1 - y0 + 1;
-    for(int j = y0; j <= midY; ++j)
-    {
-        for(int i = midX - row; i <= midX + row; i += 2)
-        {
-            ++points;
-            if(!points1.contains(int64_t(i) + (int64_t(j) << (int64_t(32)))))
-            {
-                trees++;
-            }
-            else
-            {
-                printf("p: %i, %i\n", i, j);
-                points2++;
-            }
-        }
-        ++row;
-    }
-    for(int j = midY + 1; j < y1; ++j)
-    {
-        int offset = height - 1 - row;
-        for(int i = midX - offset; i <= midX + offset; i += 2)
-        {
-            ++points;
-            if(!points1.contains(int64_t(i) + (int64_t(j) << (int64_t(32)))))
-            {
-                trees++;
-            }
-            else
-            {
-                printf("p2: %i, %i\n", i, j);
-                points2++;
-            }
-        }
-        row++;
-    }
-    printf("points: %i, points2: %i, trees: %i\n", points, points2, trees);
-    return trees;
+    return sGetFillCount(data, x, y, width, height, 64);
 }
 
 static int64_t sParseB(const char* data)
@@ -168,85 +130,44 @@ static int64_t sParseB(const char* data)
     int width = 0;
     int height = 0;
     sGetSize(data, width, height);
-    const char* dataStart = data;
-    while(*data != 'S') data++;
-    static constexpr int64_t MulMul = 1;
-    static constexpr int64_t Center = 1;
-    int x = intptr_t(data - dataStart) / (width + 1) + width * MulMul * Center;
-    int y = intptr_t(data - dataStart) / (width + 1) + height * MulMul * Center;
 
+    assert(width == height);
 
+    int x = 0;
+    int y = 0;
+    sGetStart(data, x, y);
 
-    std::unordered_set<int64_t> points1 = {};
-    points1.insert(x + (int64_t(y) << (int64_t(32))));
-    std::unordered_set<int64_t> points2 = {};
+    static constexpr int Steps = 26501365;
+    assert(Steps % width == x);
 
-    static constexpr int64_t Multi = (Center + 1) * MulMul + 1; //MulMul * 2 + 1;
+    int64_t grids = Steps / width - 1;
+    int64_t oddGrids = (grids / 2 * 2 + 1);
+    oddGrids *= oddGrids;
+    int64_t evenGrids = ((grids + 1) / 2 * 2);
+    evenGrids *= evenGrids;
 
-    for(int i = 0; i < 65 + width * MulMul; ++i)
-    {
-        hittrees = 0;
-        points2.clear();
-        for(int64_t point : points1)
-        {
-            int x1 = point & (0xffff'ffff);
-            int y1 = point >> 32;
-            sCheckMove(dataStart, x1 + 1, y1, width, height, width * Multi, height * Multi, points2);
-            sCheckMove(dataStart, x1 - 1, y1, width, height, width * Multi, height * Multi, points2);
-            sCheckMove(dataStart, x1, y1 + 1, width, height, width * Multi, height * Multi, points2);
-            sCheckMove(dataStart, x1, y1 - 1, width, height, width * Multi, height * Multi, points2);
-        }
-        std::swap(points1, points2);
-    }
-    printf("hittrees: %i\n", hittrees);
+    int64_t oddCount = sGetFillCount(data,  x, y, width, height, width * 3 / 2 + 1);
+    int64_t evenCount = sGetFillCount(data, x, y, width, height, width * 3 / 2);
 
+    int64_t uCount = sGetFillCount(data, x,         height - 1, width, height, height - 1);
+    int64_t dCount = sGetFillCount(data, x,         0,          width, height, height - 1);
+    int64_t lCount = sGetFillCount(data, width - 1, y,          width, height, width - 1);
+    int64_t rCount = sGetFillCount(data, 0,         y,          width, height, width - 1);
 
+    int64_t trCount = sGetFillCount(data, 0,         height - 1, width, height, width / 2 - 1);
+    int64_t tlCount = sGetFillCount(data, width - 1, height - 1, width, height, width / 2 - 1);
+    int64_t brCount = sGetFillCount(data, 0,         0,          width, height, width / 2 - 1);
+    int64_t blCount = sGetFillCount(data, width - 1, 0,          width, height, width / 2 - 1);
 
-    char map[131 * 131 * Multi * Multi];
-    for(int64_t j = 0; j < height * Multi; ++j)
-    {
-        for(int64_t i = 0; i < width * Multi; ++i)
-        {
-            map[i + j * width * Multi] = dataStart[(i % width) + (j % height) * (width + 1)];
-            if(points1.contains(int64_t(i) + (int64_t(j) << (int64_t(32)))))
-            {
-                map[i + j * width * Multi] = 'O';
-            }
-        }
-    }
-    int64_t numbers[64 * 64 *  Multi * Multi] = {};
-    for(int64_t j = 0; j < height * Multi; ++j)
-    {
-        for(int64_t i = 0; i < width * Multi; ++i)
-        {
-            int64_t xInd = i / width;
-            int64_t yInd = j / height;
-            numbers[xInd + yInd * Multi] += map[i + j * width * Multi] == 'O' ? 1 : 0;
-        }
-    }
+    int64_t trbCount = sGetFillCount(data, 0,         height - 1, width, height, width * 3 / 2 - 1);
+    int64_t tlbCount = sGetFillCount(data, width - 1, height - 1, width, height, width * 3 / 2 - 1);
+    int64_t brbCount = sGetFillCount(data, 0,         0,          width, height, width * 3 / 2 - 1);
+    int64_t blbCount = sGetFillCount(data, width - 1, 0,          width, height, width * 3 / 2 - 1);
 
-    for(int64_t j = 0; j < height * Multi; ++j)
-    {
-        for(int64_t i = 0; i < width * Multi; ++i)
-        {
-            printf("%c", map[i + j * width * Multi]);
-        }
-        printf("\n");
-    }
-
-    for(int i = 0; i < Multi * Multi; ++i)
-    {
-        printf("%i count: %" PRIi64 "\n", i, numbers[i]);
-    }
-
-    int trees1 = sCountTrees(points1, 1, 0, width + 1, height + 0);
-    printf("trees1: %i\n", trees1);
-
-    int trees2 = sCountTrees(points1, 65, 65, 131 + 65, 131 + 65);
-    printf("trees2: %i\n", trees2);
-
-
-    return (int64_t)points1.size();
+    return oddGrids * oddCount + evenGrids * evenCount
+        + uCount + dCount + lCount + rCount
+        + (grids + 1) * (trCount + tlCount + brCount + blCount)
+        + (grids + 0) * (trbCount + tlbCount + brbCount + blbCount);
 }
 
 static int sPrintA(char* buffer, int64_t value)
