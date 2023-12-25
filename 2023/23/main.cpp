@@ -208,7 +208,7 @@ static void sCreateJumpMap(
 
             uint16_t pos = x + y * width;
             bool added = false;
-            if(crossRoadPositions.find(pos) == crossRoadPositions.end())
+            if(!crossRoadPositions.contains(pos))
             {
                 size_t amount = crossRoadPositions.size();
                 crossRoadPositions[pos] = amount;

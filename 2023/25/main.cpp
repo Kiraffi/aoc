@@ -19,129 +19,204 @@
 
 #include "input.cpp"
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
+static const int Amount = 2048;
+
 alignas(32) static constexpr char test25A[] =
-    R"()";
+    R"(jqt: rhn xhk nvd
+rsh: frs pzl lsr
+xhk: hfx
+cmg: qnr nvd lhk bvb
+rhn: xhk bvb hfx
+bvb: xhk hfx
+pzl: lsr hfx nvd
+qnr: nvd
+ntq: jqt hfx bvb xhk
+nvd: lhk
+lsr: lhk
+rzs: qnr cmg lsr rsh
+frs: qnr lhk lsr
+)";
 
-/*
-template <typename T>
-static T sMax(T a, T b)
+std::string sParseString(const char** ptr)
 {
-    return a < b ? b : a;
+    const char* data = *ptr;
+    while(isalpha(*data))data++;
+    std::string s(*ptr, data - *ptr);
+    *ptr = data;
+    return s;
 }
 
-template <typename T>
-static T sMin(T a, T b)
+int16_t sGetIndexFromString(std::unordered_map<std::string, int16_t>& strings, const std::string& findString)
 {
-    return a < b ? a : b;
-}
-*/
-/*
-static int64_t sParserNumber(int64_t startNumber, const char** data)
-{
-    int64_t number = startNumber;
-    while(**data == ' ') ++*data;
-    bool neg = false;
-    if(**data == '-')
+    auto iter =  strings.find(findString);
+    int16_t result = 0;
+    if(iter == strings.end())
     {
-        neg = true;
-        ++*data;
+        result = int16_t(strings.size());
+        strings[findString] = result;
     }
-    while(**data >= '0' && **data <= '9')
+    else
     {
-        number = ((**data) - '0') + number * 10;
-        ++*data;
+        result = iter->second;
     }
-    while(**data == ' ') ++*data;
-    return neg ? -number : number;
-}
-*/
-/*
-static void sGetSize(const char* data, int& width, int& height)
-{
-    width = 0;
-    height = 0;
-    while(*data++ != '\n') width++;
-
-    ++height;
-    while(*data != '\0')
-    {
-        ++height;
-        data += width + 1;
-    }
-}
-*/
-/*
-static void sBitShiftRightOne(__m128i* value)
-{
-    __m128i movedTop = _mm_bsrli_si128(*value, 8);
-    movedTop = _mm_slli_epi64(movedTop, 63);
-    *value = _mm_srli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedTop);
+    return result;
 }
 
-static void sBitShiftLeftOne(__m128i* value)
-{
-    __m128i movedBot = _mm_bslli_si128(*value, 8);
-    movedBot = _mm_srli_epi64(movedBot, 63);
-    *value = _mm_slli_epi64(*value, 1);
-    *value = _mm_or_si128(*value, movedBot);
-}
-
-
-static void sBitShift(__m128i* value, int dir)
+void sFillMap(
+    int startIndex,
+    const int16_t* connections,
+    const uint8_t* connectionCount,
+    uint8_t* visited,
+    int32_t* connectionVisit)
 {
 
-    if(dir == -1)
+    struct Day25State
     {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftRightOne(value);
-    }
-    else if(dir == 1)
-    {
-        // this doesnt work on simd, you have to manually do bit shifting
-        // over 64 bit boundaries
-        bitShiftLeftOne(value);
-    }
-}
- */
-/*
-template <typename T>
-static void sMemset(T* arr, T value, int amount)
-{
-    const T* end = arr + amount;
-    while(arr < end)
-    {
-        *arr++ = value;
-    }
+        int currIndex;
+        int oldIndex;
+    };
 
+    std::vector<Day25State> states1;
+    std::vector<Day25State> states2;
+
+    states1.push_back({.currIndex = startIndex, .oldIndex = -1});
+    while(!states1.empty())
+    {
+        states2.clear();
+        for(const Day25State& s : states1)
+        {
+            if(visited[s.currIndex])
+                continue;
+            visited[s.currIndex] = 1;
+            if(s.oldIndex != -1)
+            {
+                auto fn = [&](int index1, int index2) {
+                    for(int i = 0; i < connectionCount[index1]; ++i)
+                    {
+                        if (connections[index1 * 8 + i] == index2)
+                        {
+                            connectionVisit[index1 * 8 + i] += 1;
+                            break;
+                        }
+                    }
+                };
+                fn(s.currIndex, s.oldIndex);
+                fn(s.oldIndex, s.currIndex);
+            }
+
+            for(int i = 0; i < connectionCount[s.currIndex]; ++i)
+            {
+                states2.push_back(Day25State{.currIndex = connections[s.currIndex * 8 + i], .oldIndex = s.currIndex});
+            }
+        }
+
+        std::swap(states1, states2);
+    }
 }
-*/
 
 
 static int64_t sParseA(const char* data)
 {
     TIMEDSCOPE("25A Total");
-    return *data;
-}
+    std::unordered_map<std::string, int16_t> stringMap;
+    std::string strings[Amount];
 
-static int64_t sParseB(const char* data)
-{
-    TIMEDSCOPE("25B Total");
-    return *data;
+    int16_t connections[8 * Amount] = {};
+    uint8_t connectionAmounts[Amount] = {};
+
+    while(*data)
+    {
+        std::string s1 = sParseString(&data);
+        int oldSize1 = int(stringMap.size());
+        int32_t index1 = sGetIndexFromString(stringMap, s1);
+        if(oldSize1 == index1)
+            strings[index1] = s1;
+        uint8_t& indexCount1 = connectionAmounts[index1];
+        data++;
+        while(*data != '\n')
+        {
+            data++;
+            std::string s2 = sParseString(&data);
+            int oldSize2 = int(stringMap.size());
+            int32_t index2 = sGetIndexFromString(stringMap, s2);
+            if(oldSize2 == index2)
+                strings[index2] = s2;
+
+            uint8_t& indexCount2 = connectionAmounts[index2];
+            connections[index1 * 8 + indexCount1] = int16_t(index2);
+            connections[index2 * 8 + indexCount2] = int16_t(index1);
+            ++indexCount1;
+            ++indexCount2;
+        }
+        data++;
+    }
+    srand(0x01234567);
+
+    for(int j = 0; j < 3; ++j)
+    {
+        int32_t connectionVisit[Amount * 8] = {};
+        for (int i = 0; i < 30; ++i)
+        {
+            int r = rand() % (stringMap.size());
+            uint8_t visited[Amount] = {};
+            sFillMap(r, connections, connectionAmounts, visited, connectionVisit);
+        }
+
+        int topIndex = 0;
+        int topCount = connectionAmounts[0];
+
+        for(int i = 8; i < (int)stringMap.size() * 8; ++i)
+        {
+            if(connectionVisit[i] > topCount)
+            {
+                topIndex = i;
+                topCount = connectionVisit[i];
+            }
+        }
+
+        int index1 = topIndex / 8;
+        int index2 = connections[topIndex];
+
+        connectionAmounts[index1]--;
+        std::swap(connections[topIndex], connections[index1 * 8 + connectionAmounts[index1]]);
+
+        for(int i = 0; i < connectionAmounts[index2]; ++i)
+        {
+            if(connections[index2 * 8 + i] == index1)
+            {
+                connectionAmounts[index2]--;
+                std::swap(connections[index2 * 8 + i], connections[index2 * 8 + connectionAmounts[index2]]);
+                break;
+            }
+        }
+    }
+    int64_t result = 0;
+    {
+        int r = 0;
+
+        int32_t connectionVisit[Amount * 8] = {};
+        uint8_t visited[Amount] = {};
+        sFillMap(r, connections, connectionAmounts, visited, connectionVisit);
+
+        for(int i = 0; i < int(stringMap.size()); ++i)
+        {
+            if(visited[i])
+                result++;
+        }
+
+        int strSize = int(stringMap.size());
+        result *= strSize - result;
+    }
+    return result;
+
 }
 
 static int sPrintA(char* buffer, int64_t value)
 {
     return sprintf(buffer, "25A: Result: %" PRIi64, value);
-}
-
-static int sPrintB(char* buffer, int64_t value)
-{
-    return sprintf(buffer, "25B: Result: %" PRIi64, value);
 }
 
 #ifndef RUNNER
@@ -151,14 +226,10 @@ int main()
 
     sPrintA(printBuffer, sParseA(data25A));
     printf("%s\n", printBuffer);
-
-    sPrintB(printBuffer, sParseB(data25A));
-    printf("%s\n", printBuffer);
-    return 0;
 }
 #endif
 
-int run23A(bool printOut, char* buffer)
+int run25A(bool printOut, char* buffer)
 {
     int charsAdded = 0;
     int64_t resultA = sParseA(data25A);
@@ -167,15 +238,3 @@ int run23A(bool printOut, char* buffer)
         charsAdded = sPrintA(buffer, resultA);
     return charsAdded;
 }
-
-int run25B(bool printOut, char* buffer)
-{
-    int charsAdded = 0;
-    int64_t resultB = sParseB(data25A);
-
-    if(printOut)
-        charsAdded = sPrintB(buffer, resultB);
-
-    return charsAdded;
-}
-

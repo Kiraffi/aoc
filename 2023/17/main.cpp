@@ -95,7 +95,7 @@ static __m128i sWriteMin128(__m128i newValue, uint16_t* map, int offset)
     __m128i prev = out;
     out = _mm_min_epu16(newValue, out);
     _mm_storeu_si128(address, out);
-    return prev = _mm_xor_si128(prev, out);
+    return _mm_xor_si128(prev, out);
 }
 
 
@@ -106,7 +106,7 @@ static __m256i sWriteMin256(__m256i newValue, uint16_t* map, int offset)
     __m256i prev = out;
     out = _mm256_min_epu16(newValue, out);
     _mm256_storeu_si256(address, out);
-    return prev = _mm256_xor_si256(prev, out);
+    return _mm256_xor_si256(prev, out);
 }
 
 static bool sUpdateDir(const uint16_t* numberMap,
