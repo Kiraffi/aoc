@@ -54,11 +54,11 @@ union alignas(4) Day12State
     struct Values
     {
         uint8_t questionMarkCount;
-        uint8_t continuous;
+        //uint8_t continuous;
         uint8_t number;
-        uint8_t padding;
+        //uint8_t padding;
     } values;
-    uint32_t hash;
+    uint16_t hash;
 };
 
 static_assert(sizeof(Day12State) == 4);
@@ -80,39 +80,58 @@ static int64_t visit(
         return iter->second;
 
     int64_t visitNumbers = 0;
-
+    uint8_t continuous = 0;
     for(uint8_t i = linePos; i < lineLen; ++i)
     {
         char c = line[i];
         if(c == '?')
         {
             ++state.values.questionMarkCount;
-            if(state.values.continuous == 0 || numbers[state.values.number] == state.values.continuous)
+            if(continuous == 0 || numbers[state.values.number] == continuous)
             {
                 Day12State newState = state;
-                line[i] = '.';
-                visitNumbers += visit(newState, line, lineLen, i, numbers, numberCount, visited);
-                line[i] = '?';
+
+                if(continuous != 0)
+                    newState.values.number++;
+
+                if(newState.values.number == numberCount)
+                {
+                    uint8_t j = i;
+                    while(j < lineLen && line[j] != '#')
+                    {
+                        ++j;
+                    }
+                    if(j == lineLen)
+                    {
+                        visitNumbers++;
+                    }
+                }
+                else
+                {
+                    line[i] = '.';
+                    visitNumbers += visit(newState, line, lineLen, i, numbers, numberCount, visited);
+                    line[i] = '?';
+                }
             }
             c = '#';
         }
 
         if(c == '#')
         {
-            ++state.values.continuous;
-            if(state.values.continuous > numbers[state.values.number])
+            ++continuous;
+            if(continuous > numbers[state.values.number])
             {
                 break;
             }
         }
-        else if(state.values.continuous)
+        else if(continuous)
         {
-            if(numbers[state.values.number] != state.values.continuous)
+            if(numbers[state.values.number] != continuous)
             {
                 break;
             }
             ++state.values.number;
-            state.values.continuous = 0;
+            continuous = 0;
             if(state.values.number == numberCount)
             {
                 while(i < lineLen && line[i] != '#')
