@@ -18,7 +18,7 @@
 
 #include "input.cpp"
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test14A[] =
@@ -139,6 +139,7 @@ void sDrawMaps14(__m128i* wallMap, __m128i* rockMap, int height)
 static bool sMoveRocksUpDown(const __m128i* __restrict__ wallMap,
     __m128i* rockMap,
     int startIndex,
+    //int endIndex,
     int moveDir)
 {
 
@@ -146,29 +147,36 @@ static bool sMoveRocksUpDown(const __m128i* __restrict__ wallMap,
     __m128i row = rockMap[startIndex];
     rockMap[startIndex] = _mm_setzero_si128();
     int j = startIndex + moveDir;
+    //__m128i prevRock = rockMap[j - moveDir];
     while(!_mm_test_all_ones(~row))
+    //while(!_mm_test_all_ones(~row) && j > 0 && j < 128)
+    //while(j - moveDir != endIndex)
+    //while(j > 0 && j < 128)
     {
-        __m128i colliders = _mm_or_si128(rockMap[j], wallMap[j]);
+        __m128i rocks = rockMap[j];
+        __m128i colliders = _mm_or_si128(rocks, wallMap[j]);
         __m128i collided = _mm_and_si128(row, colliders);
         rockMap[j - moveDir] = _mm_or_si128(collided, rockMap[j - moveDir]);
         row = _mm_xor_si128(row, collided);
         changed = _mm_or_si128(changed, row);
+        //row = _mm_or_si128(row, rocks);
         j += moveDir;
     }
     return !_mm_test_all_ones(~changed);
 }
-
-static void sBitShift(__m128i* value, int dir)
+template<int moveDir>
+constexpr static void sBitShift(__m128i* value) //, int dir)
 {
 
-    if(dir == -1)
+    if(moveDir == -1)
     {
         // this doesnt work on simd, you have to manually do bit shifting
         // over 64 bit boundaries
         //*value >>= 1;
         bitShiftRightOne(value);
     }
-    else if(dir == 1)
+//    else if(dir == 1)
+    else
     {
         // this doesnt work on simd, you have to manually do bit shifting
         // over 64 bit boundaries
@@ -176,39 +184,107 @@ static void sBitShift(__m128i* value, int dir)
         bitShiftLeftOne(value);
     }
 }
-
+template<int moveDir>
 static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
     __m128i* rockMap,
-    int rowIndex,
-    int moveDir)
+    int rowIndex)
 {
-    __m128i row = rockMap[rowIndex];
-    __m128i collisions = wallMap[rowIndex];
-    sBitShift(&collisions, -moveDir);
-    while(!_mm_test_all_ones(~row))
+    __m128i row1 = rockMap[rowIndex];
+    __m128i collisions1 = wallMap[rowIndex];
+    __m128i origColl1 = collisions1;
+/*
+    __m128i row2 = rockMap[rowIndex + 1];
+    __m128i collisions2 = wallMap[rowIndex + 1];
+    __m128i origColl2 = collisions2;
+*/
+    sBitShift<-moveDir>(&collisions1);
+//    sBitShift<-moveDir>(&collisions2);
+
+    //sBitShift(&collisions1, -moveDir);
+    //sBitShift(&collisions2, -moveDir);
+
+    __m128i newRow1 = _mm_setzero_si128();
+    //__m128i newRow2 = _mm_setzero_si128();
+
+    while(!_mm_testz_si128(row1, row1))// || !_mm_testz_si128(row2, row2))
     {
-        __m128i collided = _mm_and_si128(collisions, row);
-        while (!_mm_test_all_ones(~collided))
+        __m128i collided1 = _mm_and_si128(collisions1, row1);
+//        __m128i collided2 = _mm_and_si128(collisions2, row2);
+
+        while (!_mm_testz_si128(collided1, row1))// || !_mm_testz_si128(collided2, row2))
         {
-            for (int i = 0; i < 4; ++i)
+
+            for (int i = 0; i < 2; ++i)
             {
-                collided = _mm_and_si128(collided, row);
-                sBitShift(&collided, -moveDir);
-                collisions = _mm_or_si128(collided, collisions);
+                collided1 = _mm_and_si128(collided1, row1);
+                //newRow1 = _mm_or_si128(collided1, newRow1);
+                //sBitShift<-moveDir>(&collided1, -moveDir);
+                sBitShift<-moveDir>(&collided1);
+                collisions1 = _mm_or_si128(collided1, collisions1);
+/*
+                collided2 = _mm_and_si128(collided2, row2);
+                //newRow2 = _mm_or_si128(collided2, newRow2);
+                //sBitShift(&collided2, -moveDir);
+                sBitShift<-moveDir>(&collided2);
+                collisions2 = _mm_or_si128(collided2, collisions2);
+                */
             }
         }
-        row = _mm_and_si128(~collisions, row);
-        sBitShift(&row, moveDir);
 
+        /*
+        // Remove the added rocks from collided
+        row1 = _mm_xor_si128(collided1, row1);
+        row2 = _mm_xor_si128(collided2, row2);
+
+        // Add new collided rocks into writable
+        newRow1 = _mm_or_si128(newRow1, collided1);
+        newRow2 = _mm_or_si128(newRow2, collided2);
+
+        // Move the collision one in negative direction
+        sBitShift(&collided1, -moveDir);
+        sBitShift(&collided2, -moveDir);
+        collisions1 = _mm_or_si128(collisions1, collided1);
+        collisions2 = _mm_or_si128(collisions2, collided2);
+
+        // Shift the rocks that would not collide with the moved collisions
+        __m128i collRow1 = _mm_and_si128(row1, ~collided1);
+        row1 = _mm_and_si128(row1, collided1);
+        sBitShift(&collRow1, moveDir);
+        row1 = _mm_or_si128(row1, collRow1);
+
+        __m128i collRow2 = _mm_and_si128(row2, ~collided2);
+        row2 = _mm_and_si128(row2, collided2);
+        sBitShift(&collRow2, moveDir);
+        row2 = _mm_or_si128(row2, collRow2);
+*/
+        newRow1 = _mm_or_si128(newRow1, _mm_and_si128(row1, collisions1));
+        row1 = _mm_and_si128(~collisions1, row1);
+        sBitShift<moveDir>(&row1);
+        //sBitShift(&row1, moveDir);
+/*
+        newRow2 = _mm_or_si128(newRow2, _mm_and_si128(row2, collisions2));
+        row2 = _mm_and_si128(~collisions2, row2);
+        sBitShift<moveDir>(&row2);
+*/
+
+        //sBitShift(&collided2, -moveDir);
     }
-    sBitShift(&collisions, moveDir);
+    //sBitShift(&collisions1, moveDir);
+    //sBitShift(&collisions2, moveDir);
 
     // The leftmost column changes otherwise when moving right.
-    collisions = _mm_or_si128(collisions, _mm_set_epi32(0, 0, 0, 1));
+    //collisions1 = _mm_or_si128(collisions1, _mm_set_epi32(0, 0, 0, 1));
+    //collisions2 = _mm_or_si128(collisions2, _mm_set_epi32(0, 0, 0, 1));
 
-    rockMap[rowIndex] = _mm_xor_si128(collisions, wallMap[rowIndex]);
+    //rockMap[rowIndex + 0] = _mm_xor_si128(collisions1, wallMap[rowIndex + 0]);
+    //rockMap[rowIndex + 1] = _mm_xor_si128(collisions2, wallMap[rowIndex + 1]);
 
-    return !_mm_test_all_ones(~_mm_and_si128(collisions, wallMap[rowIndex]));
+    rockMap[rowIndex + 0] = newRow1;
+    //rockMap[rowIndex + 1] = newRow2;
+
+    return !_mm_testc_si128(collisions1, origColl1)
+    //    || !_mm_testc_si128(collisions2, origColl2)
+    ;
 }
 static int64_t sCountScore(const __m128i* __restrict__ rockMap, int height)
 {
@@ -298,15 +374,21 @@ static int64_t sParseB(const char* data)
     std::unordered_map<int64_t, int64_t> diffMap;
 
     static const int64_t LoopCounts = 1000000000;
+    int64_t superLoop = 0;
     for(int64_t j = 0; j < LoopCounts; ++j)
     {
+        ++superLoop;
         //TIMEDSCOPE("14 Loop");
-
-        for(int i = 2; i <= height; ++i)
         {
-            sMoveRocksUpDown(wallMap, rockMap, i, -1);
-        }
+            //TIMEDSCOPE("rockupdown2");
 
+            for (int i = 2; i <= height; ++i)
+            {
+                (sMoveRocksUpDown(wallMap, rockMap, i, -1));
+                //while(sMoveRocksUpDown(wallMap, rockMap, i, -1));
+                //while(sMoveRocksUpDown(wallMap, rockMap, height - 1, 1, -1));
+            }
+        }
         __m128i rowDiffs = _mm_setzero_si128();
 
         for(int i = 1; i <= height; ++i)
@@ -340,7 +422,7 @@ static int64_t sParseB(const char* data)
 
 
 
-
+/*
         int end = (height - 1) % 4;
 
         for(int i = 1; i <= end + 1; i += 4)
@@ -351,19 +433,31 @@ static int64_t sParseB(const char* data)
             sMoveRocksLeftRight(wallMap, rockMap, i + 3, -1);
         }
         for(int i = end + 1; i <= height + 1; i++)
+        */
         {
-            sMoveRocksLeftRight(wallMap, rockMap, i + 0, -1);
+            //TIMEDSCOPE("rockupleftright2");
+
+            for (int i = 1; i <= height + 1; i += 1)
+            {
+                //sMoveRocksLeftRight(wallMap, rockMap, i + 0, -1);
+                sMoveRocksLeftRight<-1>(wallMap, rockMap, i + 0);
+            }
         }
         //sDrawMaps14(wallMap, rockMap, height);
 
 
+//        while(sMoveRocksUpDown(wallMap, rockMap, 1, 1));
+//        while(sMoveRocksUpDown(wallMap, rockMap, 1, height - 1, 1));
 
-        for(int i = height - 1; i > 0; --i)
         {
-            sMoveRocksUpDown(wallMap, rockMap, i, 1);
+            //TIMEDSCOPE("rockupdown");
+            for (int i = height - 1; i > 0; --i)
+            {
+                sMoveRocksUpDown(wallMap, rockMap, i, 1);
+            }
         }
         //sDrawMaps14(wallMap, rockMap, height);
-
+/*
         for(int i = 1; i <= end + 1; i += 4)
         {
             sMoveRocksLeftRight(wallMap, rockMap, i + 0, 1);
@@ -372,15 +466,21 @@ static int64_t sParseB(const char* data)
             sMoveRocksLeftRight(wallMap, rockMap, i + 3, 1);
         }
         for(int i = end + 1; i <= height; ++i)
+*/
         {
-            sMoveRocksLeftRight(wallMap, rockMap, i, 1);
+            //TIMEDSCOPE("rockupleftright");
+
+            for (int i = 1; i <= height; i += 1)
+            {
+                sMoveRocksLeftRight<1>(wallMap, rockMap, i + 0);
+            }
         }
         //sDrawMaps14(wallMap, rockMap, height);
 
     }
     //sDrawMap14(rockMap, height, 'O');
     //sDrawMaps14(wallMap, rockMap, height);
-
+    printf("superloop: %" PRIi64 "\n", superLoop);
     sum = sCountScore(rockMap, height);
 
     return sum;
