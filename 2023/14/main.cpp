@@ -66,6 +66,24 @@ static int64_t sParseA(const char* data)
     return sum;
 }
 
+
+void bitShiftRightOne(__m256i* value)
+{
+    __m256i movedTop = _mm256_bsrli_epi128(*value, 8);
+    movedTop = _mm256_slli_epi64(movedTop, 63);
+    //movedTop = _mm256_and_si256(_mm256_set_epi32(0, 0, 0, 0x8000'0000, 0, 0, 0, 0x8000'0000), movedTop);
+    *value = _mm256_srli_epi64(*value, 1);
+    *value = _mm256_or_si256(*value, movedTop);
+}
+void bitShiftLeftOne(__m256i* value)
+{
+    __m256i movedBot = _mm256_bslli_epi128(*value, 8);
+    movedBot = _mm256_srli_epi64(movedBot, 63);
+    //movedBot = _mm256_and_si256(_mm256_set_epi32(1, 0, 0, 0, 1, 0, 0, 0), movedBot);
+    *value = _mm256_slli_epi64(*value, 1);
+    *value = _mm256_or_si256(*value, movedBot);
+}
+
 void bitShiftRightOne(__m128i* value)
 {
     __m128i movedTop = _mm_bsrli_si128(*value, 8);
@@ -184,14 +202,38 @@ constexpr static void sBitShift(__m128i* value) //, int dir)
         bitShiftLeftOne(value);
     }
 }
+
+
+template<int moveDir>
+constexpr static void sBitShift(__m256i* value) //, int dir)
+{
+
+    if(moveDir == -1)
+    {
+        // this doesnt work on simd, you have to manually do bit shifting
+        // over 64 bit boundaries
+        //*value >>= 1;
+        bitShiftRightOne(value);
+    }
+//    else if(dir == 1)
+    else
+    {
+        // this doesnt work on simd, you have to manually do bit shifting
+        // over 64 bit boundaries
+        //*value <<= 1;
+        bitShiftLeftOne(value);
+    }
+}
+
+
 template<int moveDir>
 static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
     __m128i* rockMap,
     int rowIndex)
 {
-    __m128i row1 = rockMap[rowIndex];
-    __m128i collisions1 = wallMap[rowIndex];
-    __m128i origColl1 = collisions1;
+    __m256i row1 = _mm256_loadu_si256((const __m256i*)(rockMap + rowIndex));
+    __m256i collisions1 = _mm256_loadu_si256((const __m256i*)(wallMap + rowIndex));
+    __m256i origColl1 = collisions1;
 /*
     __m128i row2 = rockMap[rowIndex + 1];
     __m128i collisions2 = wallMap[rowIndex + 1];
@@ -203,24 +245,24 @@ static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
     //sBitShift(&collisions1, -moveDir);
     //sBitShift(&collisions2, -moveDir);
 
-    __m128i newRow1 = _mm_setzero_si128();
+    __m256i newRow1 = _mm256_setzero_si256();
     //__m128i newRow2 = _mm_setzero_si128();
 
-    while(!_mm_testz_si128(row1, row1))// || !_mm_testz_si128(row2, row2))
+    while(!_mm256_testz_si256(row1, row1))// || !_mm_testz_si128(row2, row2))
     {
-        __m128i collided1 = _mm_and_si128(collisions1, row1);
+        __m256i collided1 = _mm256_and_si256(collisions1, row1);
 //        __m128i collided2 = _mm_and_si128(collisions2, row2);
 
-        while (!_mm_testz_si128(collided1, row1))// || !_mm_testz_si128(collided2, row2))
+        while (!_mm256_testz_si256(collided1, row1))// || !_mm_testz_si128(collided2, row2))
         {
 
             for (int i = 0; i < 2; ++i)
             {
-                collided1 = _mm_and_si128(collided1, row1);
+                collided1 = _mm256_and_si256(collided1, row1);
                 //newRow1 = _mm_or_si128(collided1, newRow1);
                 //sBitShift<-moveDir>(&collided1, -moveDir);
                 sBitShift<-moveDir>(&collided1);
-                collisions1 = _mm_or_si128(collided1, collisions1);
+                collisions1 = _mm256_or_si256(collided1, collisions1);
 /*
                 collided2 = _mm_and_si128(collided2, row2);
                 //newRow2 = _mm_or_si128(collided2, newRow2);
@@ -257,8 +299,8 @@ static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
         sBitShift(&collRow2, moveDir);
         row2 = _mm_or_si128(row2, collRow2);
 */
-        newRow1 = _mm_or_si128(newRow1, _mm_and_si128(row1, collisions1));
-        row1 = _mm_and_si128(~collisions1, row1);
+        newRow1 = _mm256_or_si256(newRow1, _mm256_and_si256(row1, collisions1));
+        row1 = _mm256_and_si256(~collisions1, row1);
         sBitShift<moveDir>(&row1);
         //sBitShift(&row1, moveDir);
 /*
@@ -279,10 +321,11 @@ static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
     //rockMap[rowIndex + 0] = _mm_xor_si128(collisions1, wallMap[rowIndex + 0]);
     //rockMap[rowIndex + 1] = _mm_xor_si128(collisions2, wallMap[rowIndex + 1]);
 
-    rockMap[rowIndex + 0] = newRow1;
+    _mm256_storeu_si256((__m256i*)(rockMap + rowIndex), newRow1);
+    //rockMap[rowIndex + 0] = newRow1;
     //rockMap[rowIndex + 1] = newRow2;
 
-    return !_mm_testc_si128(collisions1, origColl1)
+    return !_mm256_testc_si256(collisions1, origColl1)
     //    || !_mm_testc_si128(collisions2, origColl2)
     ;
 }
@@ -316,35 +359,38 @@ static int64_t sParseB(const char* data)
     int8_t x = 1;
     int8_t y = 0;
     __m128i bitShift = one << 2;
-    while(*data)
     {
-        [[__maybe_unused__]] __m128i old = rockMap[y + 1];
-        switch(*data)
+        TIMEDSCOPE("14B Generate rock and wall maps");
+        while (*data)
         {
-            case '\n':
-                width = x;
-                y += 1;
-                x = 0;
-                bitShift = one << 1;
-                break;
-            case 'O':
-                rockMap[y + 1] = _mm_or_si128(rockMap[y + 1], bitShift);
-                assert(!_mm_test_all_ones(~(old ^ rockMap[y + 1])));
-                break;
-            case '#':
-                wallMap[y + 1] = _mm_or_si128(wallMap[y + 1], bitShift);
-                assert(!_mm_test_all_ones(~(old ^ wallMap[y + 1])));
-                break;
+            [[__maybe_unused__]] __m128i old = rockMap[y + 1];
+            switch (*data)
+            {
+                case '\n':
+                    width = x;
+                    y += 1;
+                    x = 0;
+                    bitShift = one << 1;
+                    break;
+                case 'O':
+                    rockMap[y + 1] = _mm_or_si128(rockMap[y + 1], bitShift);
+                    assert(!_mm_test_all_ones(~(old ^ rockMap[y + 1])));
+                    break;
+                case '#':
+                    wallMap[y + 1] = _mm_or_si128(wallMap[y + 1], bitShift);
+                    assert(!_mm_test_all_ones(~(old ^ wallMap[y + 1])));
+                    break;
 
+            }
+            x += 1;
+            bitShift += bitShift;
+            if (_mm_test_all_ones(~bitShift))
+            {
+                bitShift = _mm_set_epi32(0, 1, 0, 0);
+            }
+            assert(!_mm_test_all_ones(~bitShift));
+            ++data;
         }
-        x += 1;
-        bitShift += bitShift;
-        if(_mm_test_all_ones(~bitShift))
-        {
-            bitShift = _mm_set_epi32(0, 1, 0, 0);
-        }
-        assert(!_mm_test_all_ones(~bitShift));
-        ++data;
     }
     height = y;
     wallMap[0] = minusOne;
@@ -437,7 +483,7 @@ static int64_t sParseB(const char* data)
         {
             //TIMEDSCOPE("rockupleftright2");
 
-            for (int i = 1; i <= height + 1; i += 1)
+            for (int i = 1; i <= height + 1; i += 2)
             {
                 //sMoveRocksLeftRight(wallMap, rockMap, i + 0, -1);
                 sMoveRocksLeftRight<-1>(wallMap, rockMap, i + 0);
@@ -470,7 +516,7 @@ static int64_t sParseB(const char* data)
         {
             //TIMEDSCOPE("rockupleftright");
 
-            for (int i = 1; i <= height; i += 1)
+            for (int i = 1; i <= height; i += 2)
             {
                 sMoveRocksLeftRight<1>(wallMap, rockMap, i + 0);
             }
