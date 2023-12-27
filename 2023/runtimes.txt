@@ -1,78 +1,78 @@
 
-Parsing 01: 12.012000us
-Sum of lines 1A: 55123 | Running 01A: duration 18.997000us
-Sum of lines 1B: 55260 | Running 01B: duration 37.296001us
+Parsing 01: 10.406000us
+Sum of lines 1A: 55123 | Running 01A: duration 19.136999us
+Sum of lines 1B: 55260 | Running 01B: duration 37.715000us
 
-2A: Sum of valid Ids: 2913 | Running 02A: duration 17.389999us
-2B: Sum of min multiplies Ids: 55593 | Running 02B: duration 18.089001us
+2A: Sum of valid Ids: 2913 | Running 02A: duration 18.229000us
+2B: Sum of min multiplies Ids: 55593 | Running 02B: duration 18.507999us
 
-3A: Sum of valid digits: 535078 | Running 03A: duration 35.688999us
-3B: Sum of gear ratios: 75312571 | Running 03B: duration 21.930000us
+3A: Sum of valid digits: 535078 | Running 03A: duration 35.409000us
+3B: Sum of gear ratios: 75312571 | Running 03B: duration 21.650999us
 
-4A: Card points: 20829 | Running 04A: duration 21.302000us
-4B: Cards: 12648035 | Running 04B: duration 22.419001us
+4A: Card points: 20829 | Running 04A: duration 25.771999us
+4B: Cards: 12648035 | Running 04B: duration 23.466999us
 
-Parsing 05: 26.260000us
-5A: Smallest seed: 525792406 | Running 05A: duration 4.190000us
-5B: Smallest seed: 79004094 | Running 05B: duration 7.683000us
+Parsing 05: 21.511000us
+5A: Smallest seed: 525792406 | Running 05A: duration 4.261000us
+5B: Smallest seed: 79004094 | Running 05B: duration 8.521000us
 
-6A: Potential records: 588588 | Running 06A: duration 1.467000us
-6B: Potential records: 34655848 | Running 06B: duration 0.908000us
+6A: Potential records: 588588 | Running 06A: duration 1.886000us
+6B: Potential records: 34655848 | Running 06B: duration 1.886000us
 
-7A: winnings: 253866470 | Running 07A: duration 80.806999us
-7B: winnings: 254494947 | Running 07B: duration 66.419998us
+7A: winnings: 253866470 | Running 07A: duration 86.323997us
+7B: winnings: 254494947 | Running 07B: duration 64.744003us
 
-Parsing 08: 37.785000us
-8A: Steps: 14257 | Running 08A: duration 24.653999us
-8B: Steps: 16187743689077 | Running 08B: duration 87.302002us
+Parsing 08: 36.388000us
+8A: Steps: 14257 | Running 08A: duration 25.282000us
+8B: Steps: 16187743689077 | Running 08B: duration 89.188004us
 
-9A: Value: 1641934234 | Running 09A: duration 52.521000us
-9B: Value: 975 | Running 09B: duration 49.936001us
+9A: Value: 1641934234 | Running 09A: duration 53.499001us
+9B: Value: 975 | Running 09B: duration 50.775002us
 
-10A: Steps: 6823 | Running 10A: duration 103.574997us
-10B: Area: 415 | Running 10B - line inside out: duration 147.365005us
+10A: Steps: 6823 | Running 10A: duration 102.389000us
+10B: Area: 415 | Running 10B - line inside out: duration 150.020996us
 
-11A: Distances: 9769724 | Running 11A: duration 42.044998us
-11B: Distances: 60309763700 | Running 11B: duration 41.904999us
+11A: Distances: 9769724 | Running 11A: duration 48.470001us
+11B: Distances: 60309763700 | Running 11B: duration 42.324001us
 
-12A: Counts: 8193 | Running 12A: duration 926.588013us
-12B: Counts: 45322533163795 | Running 12B: duration 10345.556641us
+12A: Counts: 8193 | Running 12A: duration 957.603027us
+12B: Counts: 45322533163795 | Running 12B: duration 10286.042969us
 
-13A: Mirrors: 33356 | Running 13A: duration 31.988001us
-13B: Mirrors: 28475 | Running 13B: duration 316.661987us
+13A: Mirrors: 33356 | Running 13A: duration 23.257999us
+13B: Mirrors: 28475 | Running 13B: duration 304.161011us
 
-14A: Sum of pressure: 109661 | Running 14A: duration 30.520000us
-14B: Sum of pressure: 90176 | Running 14B: duration 15327.423828us
+14A: Sum of pressure: 109661 | Running 14A: duration 30.101999us
+14B: Sum of pressure: 90176 | Running 14B: duration 1320.989990us
 
-15A: Hash: 512950 | Running 15A: duration 39.880001us
-15B: Focusing power: 247153 | Running 15B: duration 125.435997us
+15A: Hash: 512950 | Running 15A: duration 47.702000us
+15B: Focusing power: 247153 | Running 15B: duration 125.785004us
 
-16A: Energy: 7210 | Running 16A: duration 28.146000us
-16B: Energy: 7673 | Running 16B: duration 4739.307129us
+16A: Energy: 7210 | Running 16A: duration 31.708000us
+16B: Energy: 7673 | Running 16B: duration 5221.663086us
 
-17A: Minimum energy: 635 | Running 17A: duration 1279.286987us
-17B: Minimum energy: 734 | Running 17B: duration 889.921021us
+17A: Minimum energy: 635 | Running 17A: duration 1257.994019us
+17B: Minimum energy: 734 | Running 17B: duration 891.603027us
 
-18A: Area: 61661 | Running 18A: duration 31.010000us
-18B: Total area: 111131796939729 | Running 18B: duration 26.749001us
+18A: Area: 61661 | Running 18A: duration 33.174999us
+18B: Total area: 111131796939729 | Running 18B: duration 28.076000us
 
-19A: Accepted: 492702 | Running 19A: duration 200.304993us
-19B: Accepted: 138616621185978 | Running 19B: duration 181.587997us
+19A: Accepted: 492702 | Running 19A: duration 195.348007us
+19B: Accepted: 138616621185978 | Running 19B: duration 183.404999us
 
-20A: Pulses: 819397964 | Running 20A: duration 203.169006us
-20B: Accepted: 252667369442479 | Running 20B: duration 857.094971us
+20A: Pulses: 819397964 | Running 20A: duration 216.509995us
+20B: Accepted: 252667369442479 | Running 20B: duration 907.455994us
 
-21A: Spots: 3615 | Running 21A: duration 54.405998us
-21B: Spots: 602259568764234 | Running 21B: duration 773.843994us
+21A: Spots: 3615 | Running 21A: duration 56.083000us
+21B: Spots: 602259568764234 | Running 21B: duration 784.465027us
 
-22A: Removable blocks: 391 | Running 22A: duration 173.975006us
-22B: Falling blocks: 69601 | Running 22B: duration 1042.105957us
+22A: Removable blocks: 391 | Running 22A: duration 172.300003us
+22B: Falling blocks: 69601 | Running 22B: duration 1072.004028us
 
-23A: Result: 2370 | Running 23A: duration 3413.435059us
-23B: Result: 6546 | Running 23B: duration 57491.738281us
+23A: Result: 2370 | Running 23A: duration 3427.633057us
+23B: Result: 6546 | Running 23B: duration 57285.828125us
 
-24A: Result: 19523 | Running 24A: duration 532.541992us
-24B: Result: 566373506408017 | Running 24B: duration 18871.253906us
+24A: Result: 19523 | Running 24A: duration 493.153992us
+24B: Result: 566373506408017 | Running 24B: duration 18979.060547us
 
-25A: Result: 514794 | Running 25A: duration 4750.341797us
- | Running all avg 1 times: duration 123790.218750us
+25A: Result: 514794 | Running 25A: duration 4775.442871us
+ | Running all avg 1 times: duration 110236.007812us
