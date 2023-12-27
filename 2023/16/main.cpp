@@ -95,7 +95,7 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
     static const int MAX_POSITIONS = 128;
     // Using visitedMap array vs hashset seems to be over 20x faster. 200ms -> 7ms
     alignas (16)uint8_t visitedMap[128 * 128]= {};
-    alignas (16)uint8_t visitedBoolMap[128 * 128 / 8]= {};
+    //alignas (16)uint8_t visitedBoolMap[128 * 128 / 8]= {};
     // Using constant size stack allocated array saves also a bit of time compared to std::vector, although
     // if it was static it probably would not make a difference.
     int32_t positions[MAX_POSITIONS] = {};
@@ -123,7 +123,6 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
                 break;
             }
             visitedMap[index] |= dir;
-            visitedBoolMap[index / 8] |= (1 << (index % 8));
             char c = data[y * (width + 1) + x];
             switch(c)
             {
@@ -182,14 +181,7 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
     }
     {
         //TIMEDSCOPE("Calculate sum");
-#if 0
-        const uint64_t* ptr = (const uint64_t*) visitedBoolMap;
-        for(int i = 0; i < 128 * 128 / 8; ++i)
-        {
-            energy += std::popcount(*ptr);
-            ptr++;
-        }
-#elif 1 // Use simd for summing ~6ms -> ~4.8ms. Each iteration goes from ~4us to 2us
+#if 1 // Use simd for summing ~6ms -> ~4.8ms. Each iteration goes from ~4us to 2us
         __m128i ones8 = _mm_set1_epi8(1);
         __m128i ones16 = _mm_set1_epi16(7);
 
@@ -199,14 +191,12 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
         for(int i = 0; i < 128 * 128 / 16; ++i)
         {
             // Since we have based on direction bits set, can be more than 1,
-            // we need to reduct the bits, doing bitshift right by 2 and or them,
-            // then bitshift right by 1 and or them.
+            // we need to reduct the bits, doing bitshift right by 2, OR them,
+            // then bitshift right by 1, OR them. This will make any of the low bits set the lowest bit true.
             // Then to reduce storing the values, we sum them up to make them 16bit values.
             __m128i values = _mm_loadu_si128(ptr);
-            __m128i values0 = _mm_srli_epi16(values, 3);
 
             __m128i values1 = _mm_srli_epi16(values, 2);
-            values1 = _mm_or_si128(values0, values1);
             values = _mm_or_si128(values, values1);
             __m128i values2 = _mm_srli_epi16(values, 1);
             values = _mm_or_si128(values, values2);
@@ -220,21 +210,11 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
             ++ptr;
         }
 
-#if 0
-        alignas(16) uint64_t storeValues[2] = {};
-        _mm_storeu_si128((__m128i*)storeValues, sumValues);
-        uint64_t v = storeValues[0] +=storeValues[1];
-        v += v >> 16;
-        v &= 0x0000ffff0000ffffu;
-        v += v >> 32;
-        v &= 0xffffu;
-        energy += v;
-#else
         alignas(8) uint16_t storeValues[8] = {};
         _mm_storeu_si128((__m128i*)storeValues, sumValues);
         for(uint16_t v : storeValues)
             energy += v;
-#endif
+
 #else
         for (uint8_t v: visitedMap)
             energy += v ? 1 : 0;
