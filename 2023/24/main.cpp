@@ -175,9 +175,9 @@ static int64_t sParseB(const char* data)
 
     P3 finalResult = {};
 
-    for(int x = -1000; x <= 1000; ++x)
+    for(int x = -500; x <= 500; ++x)
     {
-        for(int y = -1000; y <= 1000; ++y)
+        for(int y = -500; y <= 500; ++y)
         {
             P3 v0 = velocities[0];
             v0.x += x;
@@ -210,12 +210,13 @@ static int64_t sParseB(const char* data)
                     else
                     {
                         valid = false;
+                        break;
                     }
                 }
                 if(valid)
                 {
                     result[1] = result[0];
-                    for(int z = -1000; z <= 1000; ++z)
+                    for(int z = -500; z <= 500; ++z)
                     {
                         valid = true;
                         double zz = points[0].z + (velocities[0].z + z) * result[0].t;

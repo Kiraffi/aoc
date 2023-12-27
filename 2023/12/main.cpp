@@ -30,6 +30,9 @@ alignas(16) static constexpr char test12A[] =
 ?###???????? 3,2,1
 )";
 
+static constexpr int NumbersPerValue = 32;
+static constexpr int Buckets = 128;
+
 static int64_t sParserNumber(int64_t startNumber, const char** data)
 {
     int64_t number = startNumber;
@@ -49,7 +52,7 @@ static int64_t sParserNumber(int64_t startNumber, const char** data)
     return neg ? -number : number;
 }
 
-union alignas(4) Day12State
+union alignas(2) Day12State
 {
     struct Values
     {
@@ -61,26 +64,30 @@ union alignas(4) Day12State
     uint16_t hash;
 };
 
-static_assert(sizeof(Day12State) == 4);
+static_assert(sizeof(Day12State) == 2);
 static_assert(sizeof(Day12State::hash) == sizeof(Day12State::Values));
 
 static int64_t visit(
     Day12State state,
-    char* line,
+    const char* __restrict__ line,
     uint8_t lineLen,
     uint8_t linePos,
-    uint8_t* numbers,
+    const uint8_t* __restrict__ numbers,
     int numberCount,
-    std::unordered_map<uint32_t, int64_t>& visited
+    int64_t* __restrict__ visited
 )
 {
-    uint32_t hash = state.hash;
-    auto iter = visited.find(hash);
-    if(iter != visited.end())
-        return iter->second;
+    int8_t startNumber = state.values.number + 1;
+
+    int currIndex = state.values.questionMarkCount % Buckets;
+    int startOffset = NumbersPerValue * currIndex;
+
+    if(visited[startOffset + startNumber])
+        return visited[startOffset + startNumber] & 0xffff'ffff'ffff;
 
     int64_t visitNumbers = 0;
     uint8_t continuous = 0;
+
     for(uint8_t i = linePos; i < lineLen; ++i)
     {
         char c = line[i];
@@ -108,9 +115,7 @@ static int64_t visit(
                 }
                 else
                 {
-                    line[i] = '.';
-                    visitNumbers += visit(newState, line, lineLen, i, numbers, numberCount, visited);
-                    line[i] = '?';
+                    visitNumbers += visit(newState, line, lineLen, i + 1, numbers, numberCount, visited);//, visitedHash, visitedCounts);
                 }
             }
             c = '#';
@@ -146,7 +151,8 @@ static int64_t visit(
             }
         }
     }
-    visited[hash] = visitNumbers;
+
+    visited[startOffset + startNumber] = visitNumbers | (uint64_t(1) << 63);
     return visitNumbers;
 }
 
@@ -157,14 +163,13 @@ static int64_t sGetArrangementsCount(const char* data, int multiplier)
     uint8_t numbers[32] = {};
     char line[256] = {};
 
-    std::unordered_map<uint32_t, int64_t> visited;
     while(*data)
     {
-        uint8_t numberCount = 0;
+        int16_t numberCount = 0;
 
         uint8_t position = 0;
 
-        visited.clear();
+        alignas(32) int64_t visited[Buckets * NumbersPerValue] = {};
         {
             //TIMEDSCOPE("Parsing");
 
@@ -196,7 +201,7 @@ static int64_t sGetArrangementsCount(const char* data, int multiplier)
         {
             //TIMEDSCOPE("Counting");
             Day12State state = {};
-            combos += visit(state, line, position, 0, numbers, numberCount, visited);
+            combos += visit(state, line, position, 0, numbers, numberCount, visited);// , visitedHash, visitedCounts);
         }
         ++data;
     }

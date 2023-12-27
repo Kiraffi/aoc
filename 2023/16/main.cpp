@@ -94,7 +94,7 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
 
     static const int MAX_POSITIONS = 128;
     // Using visitedMap array vs hashset seems to be over 20x faster. 200ms -> 7ms
-    alignas (16)uint8_t visitedMap[128 * 128]= {};
+    alignas (32)uint8_t visitedMap[128 * 128]= {};
     //alignas (16)uint8_t visitedBoolMap[128 * 128 / 8]= {};
     // Using constant size stack allocated array saves also a bit of time compared to std::vector, although
     // if it was static it probably would not make a difference.
@@ -118,11 +118,12 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
         while(true)
         {
             int index = y * 128 + x;
-            if(visitedMap[index] & dir)
+            uint8_t dirBits = dir;
+            if(visitedMap[index ] & dirBits)
             {
                 break;
             }
-            visitedMap[index] |= dir;
+            visitedMap[index] |= dirBits;
             char c = data[y * (width + 1) + x];
             switch(c)
             {
@@ -182,36 +183,36 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
     {
         //TIMEDSCOPE("Calculate sum");
 #if 1 // Use simd for summing ~6ms -> ~4.8ms. Each iteration goes from ~4us to 2us
-        __m128i ones8 = _mm_set1_epi8(1);
-        __m128i ones16 = _mm_set1_epi16(7);
+        __m256i ones8 = _mm256_set1_epi8(1);
+        __m256i ones16 = _mm256_set1_epi16(7);
 
-        const __m128i* ptr = (const __m128i*) visitedMap;
+        const __m256i* ptr = (const __m256i*) visitedMap;
 
-        __m128i sumValues = _mm_setzero_si128();
-        for(int i = 0; i < 128 * 128 / 16; ++i)
+        __m256i sumValues = _mm256_setzero_si256();
+        for(int i = 0; i < 128 * 128 / 32; ++i)
         {
             // Since we have based on direction bits set, can be more than 1,
             // we need to reduct the bits, doing bitshift right by 2, OR them,
             // then bitshift right by 1, OR them. This will make any of the low bits set the lowest bit true.
             // Then to reduce storing the values, we sum them up to make them 16bit values.
-            __m128i values = _mm_loadu_si128(ptr);
+            __m256i values = _mm256_loadu_si256(ptr);
 
-            __m128i values1 = _mm_srli_epi16(values, 2);
-            values = _mm_or_si128(values, values1);
-            __m128i values2 = _mm_srli_epi16(values, 1);
-            values = _mm_or_si128(values, values2);
-            values = _mm_and_si128(values, ones8);
+            __m256i values1 = _mm256_srli_epi16(values, 2);
+            values = _mm256_or_si256(values, values1);
+            __m256i values2 = _mm256_srli_epi16(values, 1);
+            values = _mm256_or_si256(values, values2);
+            values = _mm256_and_si256(values, ones8);
 
-            __m128i values3 = _mm_srli_epi16(values, 8);
-            values = _mm_add_epi16(values, values3);
-            values = _mm_and_si128(values, ones16);
+            __m256i values3 = _mm256_srli_epi16(values, 8);
+            values = _mm256_add_epi16(values, values3);
+            values = _mm256_and_si256(values, ones16);
 
-            sumValues = _mm_add_epi16(values, sumValues);
+            sumValues = _mm256_add_epi16(values, sumValues);
             ++ptr;
         }
 
-        alignas(8) uint16_t storeValues[8] = {};
-        _mm_storeu_si128((__m128i*)storeValues, sumValues);
+        alignas(16) uint16_t storeValues[16] = {};
+        _mm256_storeu_si256((__m256i*)storeValues, sumValues);
         for(uint16_t v : storeValues)
             energy += v;
 
