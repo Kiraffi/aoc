@@ -87,7 +87,7 @@ static void sMemset(T* arr, T value, int amount)
     }
 
 }
-/*
+
 static __m128i sWriteMin128(__m128i newValue, uint16_t* map, int offset)
 {
     __m128i_u* address = (__m128i*) (map + offset);
@@ -97,7 +97,7 @@ static __m128i sWriteMin128(__m128i newValue, uint16_t* map, int offset)
     _mm_storeu_si128(address, out);
     return _mm_xor_si128(prev, out);
 }
-*/
+
 
 static __m256i sWriteMin256(__m256i newValue, uint16_t* __restrict__ map, int offset)
 {
@@ -181,17 +181,42 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
     int minimumSameDir,
     int maximumSameDir)
 {
-    //TIMEDSCOPE("17 Timed scope left right");
-    bool changed = false;
-    __m256i HighBits = _mm256_set_epi32(0xffff0000, 0, 0, 0,  0, 0, 0, 0);
-    __m256i LowBits = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0x0000ffff);
+#if 1
+    using VType = __m128i;
+    static constexpr int DirMoveSize = 8;
+    #define Shuffle(Vec, SHUFFLE) _mm_shuffle_epi32(Vec, SHUFFLE)
+    #define SetHighest(SetValue) _mm_set_epi32(SetValue, 0, 0, 0)
+    #define SetLowest(SetValue) _mm_set_epi32(0, 0, 0, SetValue)
+    #define LoadU(Addr) _mm_loadu_si128((const __m128i *)(Addr))
+    #define VRotR16(Value, Amount) _mm_srli_epi16(Value, Amount)
+    #define VRotL16(Value, Amount) _mm_slli_epi16(Value, Amount)
 
-    __m256i High2Bits = _mm256_set_epi32(0xc0000000, 0, 0, 0,  0, 0, 0, 0);
-    __m256i Low2Bits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0x0000000c);
+    #define VAnd(AValue, BValue) _mm_and_si128(AValue, BValue)
+    #define VAndNot(AValue, BValue) _mm_andnot_si128(AValue, BValue)
+    #define VOr(AValue, BValue) _mm_or_si128(AValue, BValue)
+    #define VAddsU16(AValue, BValue) _mm_adds_epu16(AValue, BValue)
+    #define VMinU16(AValue, BValue) _mm_min_epu16(AValue, BValue)
+    #define VAndTestZero(AValue, BValue) _mm_testz_si128(AValue, BValue)
+#else
+     using VType = __m256i;
+    #define Shuffle = _mm256_shuffle_epi32
+    #define SetHighest(SetValue) _mm256_set_epi32(SetValue, 0, 0, 0)
+    #define SetLowest(SetValue) _mm256_set_epi32(0, 0, 0, SetValue)
+    #define LoadU(Addr) _mm256_loadu_si256((const __m256i *)(Addr))
+#endif
+     //TIMEDSCOPE("17 Timed scope left right");
+    bool changed = false;
+    //__m256i HighBits = _mm256_set_epi32(0xffff0000, 0, 0, 0,  0, 0, 0, 0);
+    //__m256i LowBits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0x0000ffff);
+
+    //__m256i High2Bits = _mm256_set_epi32(0xc0000000, 0, 0, 0,  0, 0, 0, 0);
+    //__m256i Low2Bits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0x0000000c);
     //
 
-    //__m256i HighBits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0xffff0000);
-    //__m256i LowBits = _mm256_set_epi32(0xffff, 0, 0, 0, 0, 0, 0, 0);
+    VType HighBits = SetHighest(0xffff0000);
+    VType LowBits = SetLowest(0x0000ffff);
+    VType High2Bits = SetHighest(0xc0000000);
+    VType Low2Bits = SetLowest(0x0000000c);
 
     for(int y = 0; y < height; ++y)
     {
@@ -201,12 +226,15 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             continue;
         }
         int x = 0;
-        __m256i changed1 = _mm256_setzero_si256();
+        __m128i changed1 = {};
         static constexpr int ValueCount = 6;
-        __m256i writeValue[ValueCount] = {};
+        __m128i writeValue[ValueCount] = {};
         static constexpr int ValueSize = sizeof(writeValue[0]) / 2;
-        for(int i = 0; i < ValueCount; ++i)
-            writeValue[i] = ~_mm256_setzero_si256();
+        for(auto & i : writeValue)
+        {
+            VType zero = {};
+            i = ~zero;
+        }
 /*
         __m256i writeValue1 = ~_mm256_setzero_si256();
         __m256i writeValue2 = ~_mm256_setzero_si256();
@@ -228,10 +256,10 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
                 offset += (Padding + width - x - 1) / 32 * 32;
                 //offset += Padding + width - x;
             }
-            __m256i v[ValueCount] = {};
+            VType v[ValueCount] = {};
             for(int i = 0; i < ValueCount - 2; ++i)
             {
-                v[i] = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + i * xDirection * 16));
+                v[i] = LoadU(sourceMap + offset + i * xDirection * DirMoveSize);
             }
             /*
             __m256i v1 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + 0 * xDirection * 16));
@@ -241,10 +269,10 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             __m256i v5 = ~_mm256_setzero_si256();
             __m256i v6 = ~_mm256_setzero_si256();
 */
-            __m256i numbers[ValueCount];
+            VType numbers[ValueCount];
             for(int i = 0; i < ValueCount; ++i)
             {
-                numbers[i] = _mm256_loadu_si256((const __m256i *) (numberMap + offset + i * xDirection * 16));
+                numbers[i] = LoadU(numberMap + offset + i * xDirection * DirMoveSize);
             }
             /*
             __m256i numbers1 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 0 * xDirection * 16));
@@ -258,37 +286,39 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             {
                 for (int i = 1; i <= maximumSameDir; ++i)
                 {
-                    __m256i prev = _mm256_setzero_si256();
+                    VType prev = {};
                     for(int j = 0; j < ValueCount; ++j)
                     {
                         // Move from highest to lowset the first 2 bits.
-                        __m256i old1 = v[j];
-                        __m256i old2 = prev;
+                        VType old1 = v[j];
+                        VType old2 = prev;
 
                         prev = old1;
 
                         // Deal with 64 and 128 bit cross lane border
-                        __m256i tmp1 = _mm256_permute4x64_epi64(old1, _MM_SHUFFLE(2, 1, 0, 3));
-                        tmp1 = _mm256_srli_epi16(tmp1, 14);
-                        tmp1 = _mm256_andnot_si256(Low2Bits, tmp1);
+                        //VType tmp1 = Shuffle(old1, _MM_SHUFFLE(2, 1, 0, 3));
+                        //tmp1 = VRotR16(tmp1, 14);
+                        //tmp1 = VAndNot(Low2Bits, tmp1);
 
                         // deal with moving last 2 bits from prev read to first 2 bits.
-                        __m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(3, 3, 3, 3));
-                        tmp2 = _mm256_srli_epi16(tmp2, 14);
-                        tmp2 = _mm256_and_si256(Low2Bits, tmp2);
+                        //__m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(3, 3, 3, 3));
+                        VType tmp2 = Shuffle(old2, _MM_SHUFFLE(3,3,3,3));
+                        tmp2 = VRotR16(tmp2, 14);
+                        tmp2 = VAnd(Low2Bits, tmp2);
 
-                        tmp1 = _mm256_or_si256(tmp1, tmp2);
+                        //tmp2 = VOr(tmp1, tmp2);
 
-                        old1 = _mm256_slli_epi16(old1, 2);
-                        old1 = _mm256_or_si256(old1, tmp1);
-                        v[j] = _mm256_adds_epu16(old1, numbers[j]);
+                        old1 = VRotL16(old1, 2);
+                        old1 = VOr(old1, tmp2);
+                        v[j] = VAddsU16(old1, numbers[j]);
                     }
                     /*
                     v[0] = _mm256_slli_si256(v[0], 2);
                     v[0] = _mm256_adds_epu16(v[0], numbers[0]);
                      */
                     // Make first 16 bits a high value so it wont be written with min
-                    v[0] = _mm256_or_si256(v[0], LowBits);
+                    //v[0] = _mm256_or_si256(v[0], LowBits);
+                    v[0] = VOr(v[0], LowBits);
 
                     /*
                         v6 = _mm256_or_si256(_mm256_slli_si256(v6, 2), _mm256_srli_si256(v5, 14));
@@ -313,7 +343,8 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
                     {
                         for(int j = 0; j < ValueCount; ++j)
                         {
-                            writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
+                            //writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
+                            writeValue[j] = VMinU16(writeValue[j], v[j]);
 
                         }
                         /*
@@ -331,27 +362,30 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             {
                 for (int i = 1; i <= maximumSameDir; ++i)
                 {
-                    __m256i prev = _mm256_setzero_si256();
+                    VType prev = {};
 
                     for(int j = 0; j < ValueCount; ++j)
                     {
-                        __m256i old1 = v[j];
-                        __m256i old2 = prev;
+                        VType old1 = v[j];
+                        VType old2 = prev;
                         prev = old1;
 
-                        __m256i tmp1 = _mm256_permute4x64_epi64(old1, _MM_SHUFFLE(0, 3, 2, 1));
-                        tmp1 = _mm256_slli_epi16(tmp1, 14);
-                        tmp1 = _mm256_andnot_si256(High2Bits, tmp1);
+                        //__m256i tmp1 = _mm256_permute4x64_epi64(old1, _MM_SHUFFLE(0, 3, 2, 1));
+                        /*
+                        auto tmp1 = Shuffle(old1, _MM_SHUFFLE(0, 3, 2, 1));
+                        tmp1 = VRotL16(tmp1, 14);
+                        tmp1 = VAndNot(High2Bits, tmp1);
+                        */
+                        //__m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(0, 0, 0, 0));
+                        VType tmp2 = Shuffle(old2, _MM_SHUFFLE(0, 0, 0, 0));
+                        tmp2 = VRotL16(tmp2, 14);
+                        tmp2 = VAnd(High2Bits, tmp2);
 
-                        __m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(0, 0, 0, 0));
-                        tmp2 = _mm256_slli_epi16(tmp2, 14);
-                        tmp2 = _mm256_and_si256(High2Bits, tmp2);
+                        //tmp2 = VOr(tmp1, tmp2); //_mm256_or_si256(tmp1, tmp2);
 
-                        tmp1 = _mm256_or_si256(tmp1, tmp2);
-
-                        old1 = _mm256_srli_epi16(old1, 2);
-                        old1 = _mm256_or_si256(old1, tmp1);
-                        v[j] = _mm256_adds_epu16(old1, numbers[j]);
+                        old1 = VRotR16(old1, 2);
+                        old1 = VOr(old1, tmp2); // _mm_or_si256(old1, tmp1);
+                        v[j] = VAddsU16(old1, numbers[j]);
 
                         //v[j] = _mm256_or_si256(_mm256_srli_si256(v[j], 2), _mm256_slli_si256(v[j - 1], 14));
                     }
@@ -359,7 +393,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
                     v[0] = _mm256_srli_si256(v[0], 2);
                     v[0] = _mm256_adds_epu16(v[0], numbers[0]);
                     */
-                     v[0] = _mm256_or_si256(v[0], HighBits);
+                     v[0] = VOr(v[0], HighBits);
                     /*
                     v6 = _mm256_or_si256(_mm256_srli_si256(v6, 2), _mm256_slli_si256(v5, 14));
                     v5 = _mm256_or_si256(_mm256_srli_si256(v5, 2), _mm256_slli_si256(v4, 14));
@@ -381,7 +415,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
                     {
                         for(int j = 0; j < ValueCount; ++j)
                         {
-                            writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
+                            writeValue[j] = VMinU16(writeValue[j], v[j]);
                         }
                         /*
                         writeValue1 = _mm256_min_epu16(writeValue1, v1);
@@ -397,7 +431,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 
             for(int i = 0; i < 4; ++i)
             {
-                changed1 = _mm256_or_si256(sWriteMin256(writeValue[i], destMap1, offset + 16 * i * xDirection), changed1);
+                changed1 = VOr(sWriteMin128(writeValue[i], destMap1, offset + DirMoveSize * i * xDirection), changed1);
 
             }
             /*
@@ -410,7 +444,8 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             writeValue[1] = writeValue[ValueCount - 1];
             for(int i = 2; i < ValueCount; ++i)
             {
-                writeValue[i] = ~_mm256_setzero_si256();
+                VType zero = {};
+                writeValue[i] = ~zero;
             }
             /*
             writeValue1 = writeValue5;
@@ -424,7 +459,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
         }
 
         {
-            if ((!_mm256_testz_si256(changed1, changed1)))
+            if (!VAndTestZero(changed1, changed1))
             {
                 //changedRowsDst1[(y) / 8] |= 1 << ((y) % 8);
                 changedRowsDst1[y] = 1;
