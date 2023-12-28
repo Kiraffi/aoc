@@ -25,7 +25,7 @@ static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 31) / 32 * 32;
 static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
 static constexpr int MaxHeight = 160;
 
-#define PROFILE 0
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test17A[] =
@@ -109,11 +109,11 @@ static __m256i sWriteMin256(__m256i newValue, uint16_t* map, int offset)
     return _mm256_xor_si256(prev, out);
 }
 
-static bool sUpdateDir(const uint16_t* numberMap,
-    const uint16_t* sourceMap, // upDown map
-    uint8_t* changedRowsSource,
-    uint16_t* destMap1, // left right map
-    uint8_t* changedRowsDst1,
+static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
+    const uint16_t* __restrict__ sourceMap, // upDown map
+    const uint8_t* __restrict__ changedRowsSource,
+    uint16_t* __restrict__ destMap1, // left right map
+    uint8_t* __restrict__ changedRowsDst1,
     int width,
     int height,
     int xDirection,
@@ -122,8 +122,8 @@ static bool sUpdateDir(const uint16_t* numberMap,
     int maximumSameDir)
 {
     //TIMEDSCOPE("17 Timed scope up down");
-
-    __m256i changed = _mm256_setzero_si256();
+    bool changed = false;
+    //__m256i changed = _mm256_setzero_si256();
     for(int y = 0; y < height; ++y)
     {
         if((changedRowsSource[y / 8] >> (y % 8)) == 0)
@@ -158,31 +158,15 @@ static bool sUpdateDir(const uint16_t* numberMap,
         }
         for (int i = 0; i < maximumSameDir; ++i)
         {
-            int index = y + (i + 1) * yDirection;
+            int index = y + (i + 0) * yDirection;
             if (!(_mm256_testz_si256(changed1[i], changed1[i])))
             {
                 changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
+                changed = true;
             }
         }
-        for (int i = 0; i < 8; ++i)
-        {
-            changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
-        }
-
-        for (int i = 0; i < 4; ++i)
-        {
-            changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
-        }
-
-        for (int i = 0; i < 2; ++i)
-        {
-            changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
-        }
-
-        changed1[0] = _mm256_or_si256(changed1[0], changed1[1]);
-        changed = _mm256_or_si256(changed, changed1[0]);
     }
-    return !_mm256_testz_si256(changed, changed);
+    return changed;
 }
 
 
