@@ -213,10 +213,10 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
     //__m256i Low2Bits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0x0000000c);
     //
 
-    VType HighBits = SetHighest(0xffff0000);
-    VType LowBits = SetLowest(0x0000ffff);
-    VType High2Bits = SetHighest(0xc0000000);
-    VType Low2Bits = SetLowest(0x0000000c);
+    VType HighBits = SetHighest(0xffff'0000);
+    VType LowBits = SetLowest(0x0000'ffff);
+    VType High2Bits = SetHighest(0xc000'0000);
+    VType Low2Bits = SetLowest(0x0000'000c);
 
     for(int y = 0; y < height; ++y)
     {
@@ -226,9 +226,9 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             continue;
         }
         int x = 0;
-        __m128i changed1 = {};
+        VType changed1 = {};
         static constexpr int ValueCount = 6;
-        __m128i writeValue[ValueCount] = {};
+        VType writeValue[ValueCount] = {};
         static constexpr int ValueSize = sizeof(writeValue[0]) / 2;
         for(auto & i : writeValue)
         {
