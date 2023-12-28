@@ -25,7 +25,7 @@ static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 31) / 32 * 32;
 static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
 static constexpr int MaxHeight = 160;
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
 alignas(32) static constexpr char test17A[] =
@@ -111,12 +111,12 @@ static __m256i sWriteMin256(__m256i newValue, uint16_t* map, int offset)
 
 static bool sUpdateDir(const uint16_t* numberMap,
     const uint16_t* sourceMap, // upDown map
-    //uint8_t* changedRowsSource,
+    uint8_t* changedRowsSource,
     uint16_t* destMap1, // left right map
-    //uint8_t* changedRowsDst1,
+    uint8_t* changedRowsDst1,
     int width,
     int height,
-    //int xDirection,
+    int xDirection,
     int yDirection,
     int minimumSameDir,
     int maximumSameDir)
@@ -124,111 +124,17 @@ static bool sUpdateDir(const uint16_t* numberMap,
     //TIMEDSCOPE("17 Timed scope up down");
 
     __m256i changed = _mm256_setzero_si256();
-    int x = Padding;
-    int startY = yDirection == 1 ? 0 : height - 1;
-    int endY = yDirection == 1 ? height - minimumSameDir : minimumSameDir - 1;
-    while(x < width + Padding)
+    for(int y = 0; y < height; ++y)
     {
-
-        __m256i numberValues[16] = {};
-        __m256i minimumWriteValues[16] = {};
-        //__m256i changed3[16] = {};
-
-        int offset1 = startY * MaxWidthU16 + x;
-        //int16_t tmppp = *(sourceMap + offset1);
-        //printf("tmp: %i\n", tmppp);
-        __m256i source0 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset1));
-        for(int i = 1; i <= maximumSameDir; ++i)
-        {
-            int offset = (startY + i * yDirection) * MaxWidthU16 + x;
-            __m256i value = _mm256_loadu_si256((const __m256i *) (numberMap + offset));
-            source0 = _mm256_adds_epu16(source0, value);
-            numberValues[i] = value;
-            minimumWriteValues[i] = source0;
-        }
-        int y = startY;
-        int max1 = maximumSameDir + 1;
-
-        int lastOffset = (y + maximumSameDir * yDirection) * MaxWidthU16 + x;
-
-        while(y != endY)
-        {
-
-            //int firstIndex = y % max1;
-            int lastIndex = (y + max1 + yDirection * maximumSameDir) % max1;
-
-            __m256i newValue = _mm256_loadu_si256((const __m256i *) (sourceMap + offset1));
-            __m256i newMove = _mm256_loadu_si256((const __m256i *) (numberMap + lastOffset));
-            numberValues[lastIndex] = newMove;
-
-            for(int i = 1; i <= maximumSameDir; ++i)
-            {
-                int index = (y + i * yDirection + max1) % max1;
-                newValue = _mm256_adds_epu16(newValue, numberValues[index]);
-                if(i >= minimumSameDir)
-                    minimumWriteValues[index] = _mm256_min_epu16(minimumWriteValues[index], newValue);
-            }
-            minimumWriteValues[lastIndex] = newValue;
-
-            /*
-
-
-
-
-
-
-            __m256i source0 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset1));
-            for(int i = 0; i <= maximumSameDir; ++i)
-            {
-                int offset = i * MaxWidthU16 + x;
-                __m256i value = _mm256_loadu_si256((const __m256i *) (sourceMap + offset));
-                source0 = _mm256_adds_epu16(source0, value);
-                numberValues[i] = value;
-                if(i > 0)
-                    minimumWriteValues[i] = source0;
-            }
-
-
-
-            numberValues[index] = newValue;
-            minimumWriteValues[index] = _mm256_adds_epu16(minimumWriteValues[(index + maximumSameDir) % (maximumSameDir + 1)], newValue);
-            for (int i = 1; i < maximumSameDir; ++i)
-            {
-                int index2 = (i + index) % (maximumSameDir + 1);
-                minimumWriteValues[index2] = _mm256_subs_epu16(minimumWriteValues[index2], numberValues[firstIndex]);
-                changed3[index2] = _mm256_min_epu16(minimumWriteValues[index2], changed3[index2]);
-            }
-            int secondIndex = (firstIndex + 1) % (maximumSameDir + 1);
-            */
-            int minimumIndex = (y + minimumSameDir * yDirection + max1) % max1;
-            int writeOffset = (y + minimumSameDir * yDirection) * MaxWidthU16 + x;
-            __m256i result = sWriteMin256(minimumWriteValues[minimumIndex], destMap1, writeOffset);
-            //if (!_mm256_testz_si256(result, result))
-            //{
-            //    int index = y; // +  * yDirection;
-            //    changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
-//
-            //}
-            changed = _mm256_or_si256(changed, result);
-            y += yDirection;
-            offset1 += yDirection * MaxWidthU16;
-            lastOffset += yDirection * MaxWidthU16;
-
-        }
-
-#if 0
-
-/*
         if((changedRowsSource[y / 8] >> (y % 8)) == 0)
         {
             continue;
         }
-*/
+        int x = Padding;
+        __m256i changed1[16] = {};
 
-        //__m256i changed1[16] = {};
-        //__m256i changed2[16] = {};
-
-
+        while(x < width + Padding)
+        {
             int offset = y * MaxWidthU16 + x;
             __m256i values = _mm256_loadu_si256((const __m256i *) (sourceMap + offset));
             int moves = 1;
@@ -243,23 +149,13 @@ static bool sUpdateDir(const uint16_t* numberMap,
                 values = _mm256_adds_epu16(values, numbers);
                 if (moves >= minimumSameDir)
                 {
-                    __m256i result = sWriteMin256(values, destMap1, loopOffset);
-                    if(!_mm256_testz_si256(result, result))
-                    {
-                        int index = y + (moves + 1) * yDirection;
-                        changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
-
-                        changed = _mm256_or_si256(changed, result);
-                    }
-                    //changed1[moves] = _mm256_or_si256(,
-                    //    changed1[moves]);
+                    changed1[moves] = _mm256_or_si256(sWriteMin256(values, destMap1, loopOffset),
+                        changed1[moves]);
                 }
                 moves++;
             }
             x += 16;
         }
-#endif
-        /*
         for (int i = 0; i < maximumSameDir; ++i)
         {
             int index = y + (i + 1) * yDirection;
@@ -268,7 +164,6 @@ static bool sUpdateDir(const uint16_t* numberMap,
                 changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
             }
         }
-
         for (int i = 0; i < 8; ++i)
         {
             changed1[i] = _mm256_or_si256(changed1[2 * i], changed1[2 * i + 1]);
@@ -285,10 +180,7 @@ static bool sUpdateDir(const uint16_t* numberMap,
         }
 
         changed1[0] = _mm256_or_si256(changed1[0], changed1[1]);
-         */
-        //changed = _mm256_or_si256(changed, changed1[0]);
-        x += 16;
-
+        changed = _mm256_or_si256(changed, changed1[0]);
     }
     return !_mm256_testz_si256(changed, changed);
 }
@@ -296,7 +188,7 @@ static bool sUpdateDir(const uint16_t* numberMap,
 
  bool sUpdateDir2(const uint16_t* numberMap,
     const uint16_t* sourceMap, // left right map
-    //uint8_t* changedRowsSource,
+    uint8_t* changedRowsSource,
     uint16_t* destMap1, // up down map
     uint8_t* changedRowsDst1,
     int width,
@@ -313,10 +205,10 @@ static bool sUpdateDir(const uint16_t* numberMap,
 
     for(int y = 0; y < height; ++y)
     {
-        //if((changedRowsSource[y / 8] >> (y % 8)) == 0)
-        //{
-        //    continue;
-        //}
+        if((changedRowsSource[y / 8] >> (y % 8)) == 0)
+        {
+            continue;
+        }
         int x = 0;
         __m128i changed1 = _mm_setzero_si128();
 
@@ -498,25 +390,25 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
         while (changed)
         {
             changed = false;
-            changed |= sUpdateDir2(numberMap, leftRightMap, //changedRowsLeftRight,
+            changed |= sUpdateDir2(numberMap, leftRightMap, changedRowsLeftRight,
                 upDownMap, changedRowsUpDown,
                 width, height, 1, minimumSameDir,
                 maximumSameDir);
 
-            changed |= sUpdateDir2(numberMap, leftRightMap, //changedRowsLeftRight,
+            changed |= sUpdateDir2(numberMap, leftRightMap, changedRowsLeftRight,
                 upDownMap,  changedRowsUpDown,
                 width, height, -1, minimumSameDir,
                 maximumSameDir);
             memset(changedRowsLeftRight, 0, 32);
 
-            changed |= sUpdateDir(numberMap, upDownMap, //changedRowsUpDown,
-                leftRightMap, //changedRowsLeftRight,
-                width, height, 1, minimumSameDir,
+            changed |= sUpdateDir(numberMap, upDownMap, changedRowsUpDown,
+                leftRightMap, changedRowsLeftRight,
+                width, height, 0, -1, minimumSameDir,
                 maximumSameDir);
 
-            changed |= sUpdateDir(numberMap, upDownMap, //changedRowsUpDown,
-                leftRightMap, //changedRowsLeftRight,
-                width, height, -1, minimumSameDir,
+            changed |= sUpdateDir(numberMap, upDownMap, changedRowsUpDown,
+                leftRightMap, changedRowsLeftRight,
+                width, height, 0, 1, minimumSameDir,
                 maximumSameDir);
             memset(changedRowsUpDown, 0, 32);
 
