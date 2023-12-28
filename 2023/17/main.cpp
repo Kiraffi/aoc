@@ -21,9 +21,9 @@
 // 141 + 16 + 16 u16 rounded up by 32 = 320 bytes
 static constexpr int Padding = 16;
 static_assert((Padding % 16) == 0);
-static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 31) / 32 * 32;
+static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + 63) / 64 * 64;
 static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
-static constexpr int MaxHeight = 160;
+static constexpr int MaxHeight = 150;
 
 #define PROFILE 1
 #include "../profile.h"
@@ -87,7 +87,7 @@ static void sMemset(T* arr, T value, int amount)
     }
 
 }
-
+/*
 static __m128i sWriteMin128(__m128i newValue, uint16_t* map, int offset)
 {
     __m128i_u* address = (__m128i*) (map + offset);
@@ -97,9 +97,9 @@ static __m128i sWriteMin128(__m128i newValue, uint16_t* map, int offset)
     _mm_storeu_si128(address, out);
     return _mm_xor_si128(prev, out);
 }
+*/
 
-
-static __m256i sWriteMin256(__m256i newValue, uint16_t* map, int offset)
+static __m256i sWriteMin256(__m256i newValue, uint16_t* __restrict__ map, int offset)
 {
     __m256i_u* address = (__m256i*) (map + offset);
     __m256i out = _mm256_loadu_si256(address);
@@ -123,7 +123,6 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 {
     //TIMEDSCOPE("17 Timed scope up down");
     bool changed = false;
-    //__m256i changed = _mm256_setzero_si256();
     for(int y = 0; y < height; ++y)
     {
         if((changedRowsSource[y / 8] >> (y % 8)) == 0)
@@ -158,10 +157,11 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
         }
         for (int i = 0; i < maximumSameDir; ++i)
         {
-            int index = y + (i + 0) * yDirection;
+            int index = y + i * yDirection;
             if (!(_mm256_testz_si256(changed1[i], changed1[i])))
             {
-                changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
+                //changedRowsDst1[(index) / 8] |= 1 << ((index) % 8);
+                changedRowsDst1[index] = 1;
                 changed = true;
             }
         }
@@ -170,11 +170,11 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 }
 
 
- bool sUpdateDir2(const uint16_t* numberMap,
-    const uint16_t* sourceMap, // left right map
-    uint8_t* changedRowsSource,
-    uint16_t* destMap1, // up down map
-    uint8_t* changedRowsDst1,
+ bool sUpdateDir2(const uint16_t* __restrict__ numberMap,
+    const uint16_t* __restrict__ sourceMap, // left right map
+    const uint8_t* __restrict__ changedRowsSource,
+    uint16_t* __restrict__ destMap1, // up down map
+    uint8_t* __restrict__ changedRowsDst1,
     int width,
     int height,
     int xDirection,
@@ -182,27 +182,39 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
     int maximumSameDir)
 {
     //TIMEDSCOPE("17 Timed scope left right");
+    bool changed = false;
+    __m256i HighBits = _mm256_set_epi32(0xffff0000, 0, 0, 0,  0, 0, 0, 0);
+    __m256i LowBits = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0x0000ffff);
 
-    __m128i changed = _mm_setzero_si128();
-    __m128i HighBits = _mm_set_epi32(0xffff0000, 0, 0, 0);
-    __m128i LowBits = _mm_set_epi32(0, 0, 0, 0x0000ffff);
+    __m256i High2Bits = _mm256_set_epi32(0xc0000000, 0, 0, 0,  0, 0, 0, 0);
+    __m256i Low2Bits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0x0000000c);
+    //
+
+    //__m256i HighBits = _mm256_set_epi32(0, 0, 0, 0,  0, 0, 0, 0xffff0000);
+    //__m256i LowBits = _mm256_set_epi32(0xffff, 0, 0, 0, 0, 0, 0, 0);
 
     for(int y = 0; y < height; ++y)
     {
-        if((changedRowsSource[y / 8] >> (y % 8)) == 0)
+        //if((changedRowsSource[y / 8] >> (y % 8)) == 0)
+        if(changedRowsSource[y] == 0)
         {
             continue;
         }
         int x = 0;
-        __m128i changed1 = _mm_setzero_si128();
-
-        __m128i writeValue1 = ~_mm_setzero_si128();
-        __m128i writeValue2 = ~_mm_setzero_si128();
-        __m128i writeValue3 = ~_mm_setzero_si128();
-        __m128i writeValue4 = ~_mm_setzero_si128();
-        __m128i writeValue5 = ~_mm_setzero_si128();
-        __m128i writeValue6 = ~_mm_setzero_si128();
-
+        __m256i changed1 = _mm256_setzero_si256();
+        static constexpr int ValueCount = 6;
+        __m256i writeValue[ValueCount] = {};
+        static constexpr int ValueSize = sizeof(writeValue[0]) / 2;
+        for(int i = 0; i < ValueCount; ++i)
+            writeValue[i] = ~_mm256_setzero_si256();
+/*
+        __m256i writeValue1 = ~_mm256_setzero_si256();
+        __m256i writeValue2 = ~_mm256_setzero_si256();
+        __m256i writeValue3 = ~_mm256_setzero_si256();
+        __m256i writeValue4 = ~_mm256_setzero_si256();
+        __m256i writeValue5 = ~_mm256_setzero_si256();
+        __m256i writeValue6 = ~_mm256_setzero_si256();
+*/
         while(x < width)
         {
 
@@ -216,48 +228,102 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
                 offset += (Padding + width - x - 1) / 32 * 32;
                 //offset += Padding + width - x;
             }
-            __m128i v1 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 0 * xDirection * 8));
-            __m128i v2 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 1 * xDirection * 8));
-            __m128i v3 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 2 * xDirection * 8));
-            __m128i v4 = _mm_loadu_si128((const __m128i *) (sourceMap + offset + 3 * xDirection * 8));
-            __m128i v5 = ~_mm_setzero_si128();
-            __m128i v6 = ~_mm_setzero_si128();
-
-            __m128i numbers1 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 0 * xDirection * 8));
-            __m128i numbers2 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 1 * xDirection * 8));
-            __m128i numbers3 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 2 * xDirection * 8));
-            __m128i numbers4 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 3 * xDirection * 8));
-            __m128i numbers5 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 4 * xDirection * 8));
-            __m128i numbers6 = _mm_loadu_si128((const __m128i *) (numberMap + offset + 5 * xDirection * 8));
-
+            __m256i v[ValueCount] = {};
+            for(int i = 0; i < ValueCount - 2; ++i)
+            {
+                v[i] = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + i * xDirection * 16));
+            }
+            /*
+            __m256i v1 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + 0 * xDirection * 16));
+            __m256i v2 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + 1 * xDirection * 16));
+            __m256i v3 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + 2 * xDirection * 16));
+            __m256i v4 = _mm256_loadu_si256((const __m256i *) (sourceMap + offset + 3 * xDirection * 16));
+            __m256i v5 = ~_mm256_setzero_si256();
+            __m256i v6 = ~_mm256_setzero_si256();
+*/
+            __m256i numbers[ValueCount];
+            for(int i = 0; i < ValueCount; ++i)
+            {
+                numbers[i] = _mm256_loadu_si256((const __m256i *) (numberMap + offset + i * xDirection * 16));
+            }
+            /*
+            __m256i numbers1 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 0 * xDirection * 16));
+            __m256i numbers2 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 1 * xDirection * 16));
+            __m256i numbers3 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 2 * xDirection * 16));
+            __m256i numbers4 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 3 * xDirection * 16));
+            __m256i numbers5 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 4 * xDirection * 16));
+            __m256i numbers6 = _mm256_loadu_si256((const __m256i *) (numberMap + offset + 5 * xDirection * 16));
+*/
             if(xDirection > 0 )
             {
                 for (int i = 1; i <= maximumSameDir; ++i)
                 {
-                    v6 = _mm_or_si128(_mm_slli_si128(v6, 2), _mm_srli_si128(v5, 14));
-                    v5 = _mm_or_si128(_mm_slli_si128(v5, 2), _mm_srli_si128(v4, 14));
-                    v4 = _mm_or_si128(_mm_slli_si128(v4, 2), _mm_srli_si128(v3, 14));
-                    v3 = _mm_or_si128(_mm_slli_si128(v3, 2), _mm_srli_si128(v2, 14));
-                    v2 = _mm_or_si128(_mm_slli_si128(v2, 2), _mm_srli_si128(v1, 14));
-                    v1 = _mm_slli_si128(v1, 2);
+                    __m256i prev = _mm256_setzero_si256();
+                    for(int j = 0; j < ValueCount; ++j)
+                    {
+                        // Move from highest to lowset the first 2 bits.
+                        __m256i old1 = v[j];
+                        __m256i old2 = prev;
 
-                    v1 = _mm_adds_epu16(numbers1, v1);
-                    v2 = _mm_adds_epu16(numbers2, v2);
-                    v3 = _mm_adds_epu16(numbers3, v3);
-                    v4 = _mm_adds_epu16(numbers4, v4);
-                    v5 = _mm_adds_epu16(numbers5, v5);
-                    v6 = _mm_adds_epu16(numbers6, v6);
+                        prev = old1;
 
-                    v1 = _mm_or_si128(LowBits, v1);
+                        // Deal with 64 and 128 bit cross lane border
+                        __m256i tmp1 = _mm256_permute4x64_epi64(old1, _MM_SHUFFLE(2, 1, 0, 3));
+                        tmp1 = _mm256_srli_epi16(tmp1, 14);
+                        tmp1 = _mm256_andnot_si256(Low2Bits, tmp1);
+
+                        // deal with moving last 2 bits from prev read to first 2 bits.
+                        __m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(3, 3, 3, 3));
+                        tmp2 = _mm256_srli_epi16(tmp2, 14);
+                        tmp2 = _mm256_and_si256(Low2Bits, tmp2);
+
+                        tmp1 = _mm256_or_si256(tmp1, tmp2);
+
+                        old1 = _mm256_slli_epi16(old1, 2);
+                        old1 = _mm256_or_si256(old1, tmp1);
+                        v[j] = _mm256_adds_epu16(old1, numbers[j]);
+                    }
+                    /*
+                    v[0] = _mm256_slli_si256(v[0], 2);
+                    v[0] = _mm256_adds_epu16(v[0], numbers[0]);
+                     */
+                    // Make first 16 bits a high value so it wont be written with min
+                    v[0] = _mm256_or_si256(v[0], LowBits);
+
+                    /*
+                        v6 = _mm256_or_si256(_mm256_slli_si256(v6, 2), _mm256_srli_si256(v5, 14));
+                        v5 = _mm256_or_si256(_mm256_slli_si256(v5, 2), _mm256_srli_si256(v4, 14));
+                        v4 = _mm256_or_si256(_mm256_slli_si256(v4, 2), _mm256_srli_si256(v3, 14));
+                        v3 = _mm256_or_si256(_mm256_slli_si256(v3, 2), _mm256_srli_si256(v2, 14));
+                        v2 = _mm256_or_si256(_mm256_slli_si256(v2, 2), _mm256_srli_si256(v1, 14));
+                        v1 = _mm256_slli_si256(v1, 2);
+
+                         */
+  /*
+                    v1 = _mm256_adds_epu16(numbers1, v1);
+                    v2 = _mm256_adds_epu16(numbers2, v2);
+                    v3 = _mm256_adds_epu16(numbers3, v3);
+                    v4 = _mm256_adds_epu16(numbers4, v4);
+                    v5 = _mm256_adds_epu16(numbers5, v5);
+                    v6 = _mm256_adds_epu16(numbers6, v6);
+*/
+                    //v1 = _mm256_or_si256(LowBits, v1);
 
                     if (i >= minimumSameDir)
                     {
-                        writeValue1 = _mm_min_epu16(writeValue1, v1);
-                        writeValue2 = _mm_min_epu16(writeValue2, v2);
-                        writeValue3 = _mm_min_epu16(writeValue3, v3);
-                        writeValue4 = _mm_min_epu16(writeValue4, v4);
-                        writeValue5 = _mm_min_epu16(writeValue5, v5);
-                        writeValue6 = _mm_min_epu16(writeValue6, v6);
+                        for(int j = 0; j < ValueCount; ++j)
+                        {
+                            writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
+
+                        }
+                        /*
+                        writeValue1 = _mm256_min_epu16(writeValue1, v1);
+                        writeValue2 = _mm256_min_epu16(writeValue2, v2);
+                        writeValue3 = _mm256_min_epu16(writeValue3, v3);
+                        writeValue4 = _mm256_min_epu16(writeValue4, v4);
+                        writeValue5 = _mm256_min_epu16(writeValue5, v5);
+                        writeValue6 = _mm256_min_epu16(writeValue6, v6);
+                         */
                     }
                 }
             }
@@ -265,57 +331,109 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
             {
                 for (int i = 1; i <= maximumSameDir; ++i)
                 {
-                    v6 = _mm_or_si128(_mm_srli_si128(v6, 2), _mm_slli_si128(v5, 14));
-                    v5 = _mm_or_si128(_mm_srli_si128(v5, 2), _mm_slli_si128(v4, 14));
-                    v4 = _mm_or_si128(_mm_srli_si128(v4, 2), _mm_slli_si128(v3, 14));
-                    v3 = _mm_or_si128(_mm_srli_si128(v3, 2), _mm_slli_si128(v2, 14));
-                    v2 = _mm_or_si128(_mm_srli_si128(v2, 2), _mm_slli_si128(v1, 14));
-                    v1 = _mm_srli_si128(v1, 2);
+                    __m256i prev = _mm256_setzero_si256();
 
-                    v1 = _mm_adds_epu16(numbers1, v1);
-                    v2 = _mm_adds_epu16(numbers2, v2);
-                    v3 = _mm_adds_epu16(numbers3, v3);
-                    v4 = _mm_adds_epu16(numbers4, v4);
-                    v5 = _mm_adds_epu16(numbers5, v5);
-                    v6 = _mm_adds_epu16(numbers6, v6);
+                    for(int j = 0; j < ValueCount; ++j)
+                    {
+                        __m256i old1 = v[j];
+                        __m256i old2 = prev;
+                        prev = old1;
 
-                    v1 = _mm_or_si128(HighBits, v1);
+                        __m256i tmp1 = _mm256_permute4x64_epi64(old1, _MM_SHUFFLE(0, 3, 2, 1));
+                        tmp1 = _mm256_slli_epi16(tmp1, 14);
+                        tmp1 = _mm256_andnot_si256(High2Bits, tmp1);
 
+                        __m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(0, 0, 0, 0));
+                        tmp2 = _mm256_slli_epi16(tmp2, 14);
+                        tmp2 = _mm256_and_si256(High2Bits, tmp2);
+
+                        tmp1 = _mm256_or_si256(tmp1, tmp2);
+
+                        old1 = _mm256_srli_epi16(old1, 2);
+                        old1 = _mm256_or_si256(old1, tmp1);
+                        v[j] = _mm256_adds_epu16(old1, numbers[j]);
+
+                        //v[j] = _mm256_or_si256(_mm256_srli_si256(v[j], 2), _mm256_slli_si256(v[j - 1], 14));
+                    }
+                    /*
+                    v[0] = _mm256_srli_si256(v[0], 2);
+                    v[0] = _mm256_adds_epu16(v[0], numbers[0]);
+                    */
+                     v[0] = _mm256_or_si256(v[0], HighBits);
+                    /*
+                    v6 = _mm256_or_si256(_mm256_srli_si256(v6, 2), _mm256_slli_si256(v5, 14));
+                    v5 = _mm256_or_si256(_mm256_srli_si256(v5, 2), _mm256_slli_si256(v4, 14));
+                    v4 = _mm256_or_si256(_mm256_srli_si256(v4, 2), _mm256_slli_si256(v3, 14));
+                    v3 = _mm256_or_si256(_mm256_srli_si256(v3, 2), _mm256_slli_si256(v2, 14));
+                    v2 = _mm256_or_si256(_mm256_srli_si256(v2, 2), _mm256_slli_si256(v1, 14));
+                    v1 = _mm256_srli_si256(v1, 2);
+
+                    v1 = _mm256_adds_epu16(numbers1, v1);
+                    v2 = _mm256_adds_epu16(numbers2, v2);
+                    v3 = _mm256_adds_epu16(numbers3, v3);
+                    v4 = _mm256_adds_epu16(numbers4, v4);
+                    v5 = _mm256_adds_epu16(numbers5, v5);
+                    v6 = _mm256_adds_epu16(numbers6, v6);
+
+                    v1 = _mm256_or_si256(HighBits, v1);
+*/
                     if (i >= minimumSameDir)
                     {
-                        writeValue1 = _mm_min_epu16(writeValue1, v1);
-                        writeValue2 = _mm_min_epu16(writeValue2, v2);
-                        writeValue3 = _mm_min_epu16(writeValue3, v3);
-                        writeValue4 = _mm_min_epu16(writeValue4, v4);
-                        writeValue5 = _mm_min_epu16(writeValue5, v5);
-                        writeValue6 = _mm_min_epu16(writeValue6, v6);
+                        for(int j = 0; j < ValueCount; ++j)
+                        {
+                            writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
+                        }
+                        /*
+                        writeValue1 = _mm256_min_epu16(writeValue1, v1);
+                        writeValue2 = _mm256_min_epu16(writeValue2, v2);
+                        writeValue3 = _mm256_min_epu16(writeValue3, v3);
+                        writeValue4 = _mm256_min_epu16(writeValue4, v4);
+                        writeValue5 = _mm256_min_epu16(writeValue5, v5);
+                        writeValue6 = _mm256_min_epu16(writeValue6, v6);
+                         */
                     }
                 }
             }
 
-            changed1 = _mm_or_si128(sWriteMin128(writeValue1, destMap1, offset + 8 * 0 * xDirection), changed1);
-            changed1 = _mm_or_si128(sWriteMin128(writeValue2, destMap1, offset + 8 * 1 * xDirection), changed1);
-            changed1 = _mm_or_si128(sWriteMin128(writeValue3, destMap1, offset + 8 * 2 * xDirection), changed1);
-            changed1 = _mm_or_si128(sWriteMin128(writeValue4, destMap1, offset + 8 * 3 * xDirection), changed1);
+            for(int i = 0; i < 4; ++i)
+            {
+                changed1 = _mm256_or_si256(sWriteMin256(writeValue[i], destMap1, offset + 16 * i * xDirection), changed1);
 
+            }
+            /*
+            changed1 = _mm256_or_si256(sWriteMin256(writeValue1, destMap1, offset + 16 * 0 * xDirection), changed1);
+            changed1 = _mm256_or_si256(sWriteMin256(writeValue2, destMap1, offset + 16 * 1 * xDirection), changed1);
+            changed1 = _mm256_or_si256(sWriteMin256(writeValue3, destMap1, offset + 16 * 2 * xDirection), changed1);
+            changed1 = _mm256_or_si256(sWriteMin256(writeValue4, destMap1, offset + 16 * 3 * xDirection), changed1);
+*/
+            writeValue[0] = writeValue[ValueCount - 2];
+            writeValue[1] = writeValue[ValueCount - 1];
+            for(int i = 2; i < ValueCount; ++i)
+            {
+                writeValue[i] = ~_mm256_setzero_si256();
+            }
+            /*
             writeValue1 = writeValue5;
             writeValue2 = writeValue6;
-            writeValue3 = ~_mm_setzero_si128();
-            writeValue4 = ~_mm_setzero_si128();
-            writeValue5 = ~_mm_setzero_si128();
-            writeValue6 = ~_mm_setzero_si128();
-            x += 32;
+            writeValue3 = ~_mm256_setzero_si256();
+            writeValue4 = ~_mm256_setzero_si256();
+            writeValue5 = ~_mm256_setzero_si256();
+            writeValue6 = ~_mm256_setzero_si256();
+             */
+            x += (ValueCount - 2) * ValueSize;
         }
 
         {
-            if ((!_mm_test_all_ones(~changed1)))
+            if ((!_mm256_testz_si256(changed1, changed1)))
             {
-                changedRowsDst1[(y) / 8] |= 1 << ((y) % 8);
+                //changedRowsDst1[(y) / 8] |= 1 << ((y) % 8);
+                changedRowsDst1[y] = 1;
+                changed = true;
             }
         }
-        changed = _mm_or_si128(changed, changed1);
     }
-    return !_mm_test_all_ones(~changed);
+
+    return changed;
 }
 
 
@@ -336,8 +454,8 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
     alignas(32) uint16_t leftRightMap[MaxWidthU16 * MaxHeight] = {};
     alignas(32) uint16_t upDownMap[MaxWidthU16 * MaxHeight] = {};
 
-    alignas(32) uint8_t changedRowsLeftRight[32] = {};
-    alignas(32) uint8_t changedRowsUpDown[32] = {};
+    alignas(32) uint8_t changedRowsLeftRight[32 * 8] = {};
+    alignas(32) uint8_t changedRowsUpDown[32 * 8] = {};
 
     sMemset(leftRightMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
     sMemset(upDownMap, uint16_t(1 << 14), MaxWidthU16 * MaxHeight);
@@ -383,7 +501,7 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
                 upDownMap,  changedRowsUpDown,
                 width, height, -1, minimumSameDir,
                 maximumSameDir);
-            memset(changedRowsLeftRight, 0, 32);
+            memset(changedRowsLeftRight, 0, 32 * 8);
 
             changed |= sUpdateDir(numberMap, upDownMap, changedRowsUpDown,
                 leftRightMap, changedRowsLeftRight,
@@ -394,7 +512,8 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
                 leftRightMap, changedRowsLeftRight,
                 width, height, 0, 1, minimumSameDir,
                 maximumSameDir);
-            memset(changedRowsUpDown, 0, 32);
+
+            memset(changedRowsUpDown, 0, 32 * 8);
 
         }
         lowest = leftRightMap[Padding + width - 1 + (height - 1) * MaxWidthU16];

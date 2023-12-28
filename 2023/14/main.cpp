@@ -191,7 +191,7 @@ static bool sMoveRocksLeftRight(const __m128i* __restrict__ wallMap,
             }
         }
         newRow1 = _mm256_or_si256(newRow1, _mm256_and_si256(row1, collisions1));
-        row1 = _mm256_and_si256(~collisions1, row1);
+        row1 = _mm256_andnot_si256(collisions1, row1);
         sBitShift<moveDir>(&row1);
     }
     _mm256_storeu_si256((__m256i*)(rockMap + rowIndex), newRow1);
