@@ -28,29 +28,23 @@ static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
 static constexpr int MaxHeight = 144;
 
 
-static __m256i HighBits256 = _mm256_set_epi32(0xffff'0000, 0, 0, 0, 0, 0, 0, 0);
-static __m256i LowBits256 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0x0000'ffff);
+static __m256i HighBits256 = _mm256_set_epi32(0xffff'ffff, 0xffff'ffff, 0xffff'ffff, 0xffff'ffff, 0, 0, 0, 0);
+static __m256i LowBits256 = _mm256_set_epi32(0, 0, 0, 0, 0xffff'ffff, 0xffff'ffff, 0xffff'ffff, 0xffff'ffff);
 
-#if 1
+#if 0
 using VType = __m128i;
 #define I128 1
-
 #define SetHighest(SetValue) _mm_set_epi32(SetValue, 0, 0, 0)
 #define SetLowest(SetValue) _mm_set_epi32(0, 0, 0, SetValue)
-
-static VType HighBits128 = SetHighest(0xffff'0000);
-static VType LowBits128 = SetLowest(0x0000'ffff);
-static VType HighBits = HighBits128;
-static VType LowBits = LowBits128;
 
 #else
 using VType = __m256i;
 #define SetHighest(SetValue) _mm256_set_epi32(SetValue, 0, 0, 0, 0, 0, 0 ,0)
 #define SetLowest(SetValue) _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, SetValue)
-
-static VType HighBits = HighBits256;
-static VType LowBits = LowBits256;
 #endif
+
+static VType HighBits = SetHighest(0xffff'0000);
+static VType LowBits = SetLowest(0x0000'ffff);
 
 
 
@@ -124,7 +118,7 @@ static __m256i sByteShiftRight256(__m256i value)
     static_assert(Amount == 2);
     __m256i movedTop = _mm256_bsrli_epi128(value, Amount);
     value = _mm256_permute4x64_epi64(value, _MM_SHUFFLE(1, 1, 2, 2));
-    value = _mm256_bsrli_epi128(value, 15 - Amount);
+    value = _mm256_bslli_epi128(value, 16 - Amount);
     value = _mm256_and_si256(value, LowBits256);
     return _mm256_or_si256(value, movedTop);
 }
@@ -135,7 +129,7 @@ static __m256i sByteShiftLeft256(__m256i value)
     static_assert(Amount > 0 && Amount < 16);
     __m256i movedBot = _mm256_bslli_epi128(value, Amount);
     value = _mm256_permute4x64_epi64(value, _MM_SHUFFLE(1, 1, 2, 2));
-    value = _mm256_bslli_epi128(value, 15 - Amount);
+    value = _mm256_bsrli_epi128(value, 16 - Amount);
     value = _mm256_and_si256(value, HighBits256);
     return _mm256_or_si256(value, movedBot);
 }
@@ -300,8 +294,8 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
      //TIMEDSCOPE("17 Timed scope left right");
     bool changed = false;
 
-     static constexpr int ValueCount = 8;
-     static constexpr int WriteCount = sizeof(VType) == 16 ? ValueCount - 2 : ValueCount - 1;
+     static constexpr int ValueCount = 6;
+     static constexpr int WriteCount = sizeof(VType) == 16 ? ValueCount - 2 : ValueCount - 2;
      static constexpr int ValueSize = sizeof(VType) / 2;
      static constexpr int MoveAmount = (ValueCount - 2) * ValueSize;
 
@@ -370,7 +364,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 
                         // deal with moving last 2 bits from prev read to first 2 bits.
                         //__m256i tmp2 = _mm256_permute4x64_epi64(old2, _MM_SHUFFLE(3, 3, 3, 3));
-#if 0
+#if 1
                         VType tmp1 = sByteShiftLeft<2>(old1);
                         VType tmp2 = Shuffle(old2, _MM_SHUFFLE(3,3,3,3));
                         tmp2 = VRotRVType(tmp2, 14);
@@ -384,10 +378,11 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 */
                         old1 = tmp1;
                         old2 = tmp2;
-#endif
+#else
 
                         old1 = VRotLVType(old1, 2);
                         old2 = VRotRVType(old2, 14);
+#endif
 
                         old1 = VOr(old1, old2);
 
@@ -421,7 +416,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
                         VType old2 = prev;
                         prev = old1;
 
-#if 0
+#if 1
                         VType tmp1 = sByteShiftRight<2>(old1);
                         //old1 = VRotRVType(old1, 2);
                         VType tmp2 = BroadcastI16(old2);
@@ -435,9 +430,11 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 */
                         old1 = tmp1;
                         old2 = tmp2;
-#endif
+#else
+
                         old1 = VRotRVType(old1, 2);
                         old2 = VRotLVType(old2, 14);
+#endif
 
                         old1 = VOr(old1, old2);
 
@@ -538,9 +535,10 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
     {
         TIMEDSCOPE("17 Update maps");
         bool changed = true;
-
+        int rounds = 0;
         while (changed)
         {
+            ++rounds;
             changed = false;
             changed |= sUpdateDir2(numberMap, leftRightMap, changedRowsLeftRight,
                 upDownMap, changedRowsUpDown,
@@ -566,6 +564,7 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
             memset(changedRowsUpDown, 0, 32 * 8);
 
         }
+        printf("rounds: %i\n", rounds);
         lowest = leftRightMap[Padding + width - 1 + (height - 1) * MaxWidthU16];
         lowest = sMin(lowest, upDownMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
     }
