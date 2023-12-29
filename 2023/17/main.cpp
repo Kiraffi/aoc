@@ -27,7 +27,10 @@ static constexpr int MaxWidthBytes = (((141 + Padding) * 2) + RoundUpWidth - 1) 
 static constexpr int MaxWidthU16 = MaxWidthBytes / 2;
 static constexpr int MaxHeight = 144;
 
-#define PROFILE 0
+#define LoadU2(Addr1, Addr2) _mm256_loadu2_m128i((const __m128i *)(Addr1), (const __m128i *)(Addr2))
+#define StoreU2(Addr1, Addr2, ValueOut) _mm256_storeu2_m128i((__m128i *)(Addr1), (__m128i *)(Addr2), ValueOut)
+
+#define PROFILE 1
 #include "../profile.h"
 
 alignas(32) static constexpr char test17A[] =
@@ -120,7 +123,6 @@ static __m128i sWriteMin(__m128i newValue, uint16_t* map, int offset)
     return _mm_xor_si128(prev, out);
 }
 
-
 static __m256i sWriteMin(__m256i newValue, uint16_t* __restrict__ map, int offset)
 {
     __m256i_u* address = (__m256i*) (map + offset);
@@ -131,8 +133,18 @@ static __m256i sWriteMin(__m256i newValue, uint16_t* __restrict__ map, int offse
     return _mm256_xor_si256(prev, out);
 }
 
+
+static __m256i sWriteMin2(__m256i newValue, uint16_t* __restrict__ map1, uint16_t* __restrict__ map2)
+{
+    __m256i out = LoadU2(map1, map2);
+    __m256i prev = out;
+    out = _mm256_min_epu16(newValue, out);
+    StoreU2(map1, map2, out);
+    return _mm256_xor_si256(prev, out);
+}
+
 template<int YDirection>
-static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
+static bool sUpdateUpDownDir(const uint16_t* __restrict__ numberMap,
     const uint16_t* __restrict__ sourceMap, // upDown map
     const uint8_t* __restrict__ changedRowsSource,
     uint16_t* __restrict__ destMap1, // left right map
@@ -150,6 +162,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
         {
             continue;
         }
+
         int x = Padding;
         __m256i changed1[16] = {};
 
@@ -190,7 +203,7 @@ static bool sUpdateDir(const uint16_t* __restrict__ numberMap,
 }
 
 template<int XDirection>
- bool sUpdateDir2(const uint16_t* __restrict__ numberMap,
+ bool sUpdateSidewayDir(const uint16_t* __restrict__ numberMap,
     const uint16_t* __restrict__ sourceMap, // left right map
     const uint8_t* __restrict__ changedRowsSource,
     uint16_t* __restrict__ destMap1, // up down map
@@ -204,35 +217,45 @@ template<int XDirection>
     static constexpr int DirMoveSize = 8;
 
 
-    using VType = __m128i;
-    #define SetHighest(SetValue) _mm_set_epi32(SetValue, 0, 0, 0)
-    #define SetLowest(SetValue) _mm_set_epi32(0, 0, 0, SetValue)
+    #define SetHighest(SetValue) _mm256_set_epi32(SetValue, 0, 0, 0, SetValue, 0, 0, 0)
+    #define SetLowest(SetValue) _mm256_set_epi32(0, 0, 0, SetValue, 0, 0, 0, SetValue)
 
-     static VType HighBits = SetHighest(0xffff'0000);
-     static VType LowBits = SetLowest(0x0000'ffff);
+     static __m256i HighBits = SetHighest(0xffff'0000);
+     static __m256i LowBits = SetLowest(0x0000'ffff);
 
-    #define LoadU(Addr) _mm_loadu_si128((const __m128i *)(Addr))
 
      //TIMEDSCOPE("17 Timed scope left right");
     bool changed = false;
 
-     static constexpr int ValueCount = 8;
-     static constexpr int WriteCount = ValueCount - 2;
-     static constexpr int ValueSize = sizeof(VType) / 2;
-     static constexpr int MoveAmount = (ValueCount - 2) * ValueSize;
+    static constexpr int ValueCount = 8;
+    static constexpr int WriteCount = ValueCount - 2;
+    static constexpr int ValueSize = sizeof(__m128i) / 2;
+    static constexpr int MoveAmount = (ValueCount - 2) * ValueSize;
 
-    for(int y = RowOffset; y < height + RowOffset; ++y)
+    int rows[2] = {};
+    int rowCount = 0;
+
+    for(int y1 = RowOffset; y1 < height + RowOffset; ++y1)
     {
-        if(changedRowsSource[y] == 0)
+        if(changedRowsSource[y1] == 0)
+        {
+            if(y1 != height + RowOffset - 1 || rowCount == 0)
+                continue;
+        }
+        rows[rowCount++] = y1;
+        if(rowCount < 2)
         {
             continue;
         }
-
-        VType changed1 = {};
-        VType writeValue[ValueCount] = {};
+        if(rows[0] == rows[1])
+        {
+            rows[0] = y1 - 1;
+        }
+        __m256i changed1 = {};
+        __m256i writeValue[ValueCount] = {};
         for(auto & i : writeValue)
         {
-            i = ~_mm_setzero_si128();
+            i = ~_mm256_setzero_si256();
         }
 
         int x = 0;
@@ -244,22 +267,25 @@ template<int XDirection>
 
         while(x >= 0 && x < width)
         {
-            int offset = y * MaxWidthU16 + Padding + x;
+            int offset1 = rows[0] * MaxWidthU16 + Padding + x;
+            int offset2 = rows[1] * MaxWidthU16 + Padding + x;
 
-            VType v[ValueCount] = {};
+            __m256i v[ValueCount] = {};
             for(int i = 0; i < WriteCount; ++i)
             {
-                v[i] = LoadU(sourceMap + offset + i * XDirection * DirMoveSize);
+                int add = i * XDirection * DirMoveSize;
+                v[i] = LoadU2(sourceMap + offset1 + add, sourceMap + offset2 + add);
             }
             for(int i = WriteCount; i < ValueCount; ++i)
             {
-                v[i] = ~_mm_setzero_si128();
+                v[i] = ~_mm256_setzero_si256();
             }
 
-            VType numbers[ValueCount] = {};
+            __m256i numbers[ValueCount] = {};
             for(int i = 0; i < ValueCount; ++i)
             {
-                numbers[i] = LoadU(numberMap + offset + i * XDirection * DirMoveSize);
+                int add = i * XDirection * DirMoveSize;
+                numbers[i] = LoadU2(numberMap + offset1 + add, numberMap + offset2 + add);
             }
 
             if(XDirection > 0 )
@@ -269,25 +295,25 @@ template<int XDirection>
                     for(int j = ValueCount - 1; j > 0; --j)
                     {
                         // Move from highest to lowest the first 2 bits.
-                        VType old1 = v[j];
-                        VType old2 = v[j - 1];
+                        __m256i old1 = v[j];
+                        __m256i old2 = v[j - 1];
 
-                        old1 = _mm_slli_si128(old1, 2);
-                        old2 = _mm_srli_si128(old2, 14);
-                        old1 = _mm_or_si128(old1, old2);
-                        v[j] = _mm_adds_epu16(old1, numbers[j]);
+                        old1 = _mm256_slli_si256(old1, 2);
+                        old2 = _mm256_srli_si256(old2, 14);
+                        old1 = _mm256_or_si256(old1, old2);
+                        v[j] = _mm256_adds_epu16(old1, numbers[j]);
                         if (i >= minimumSameDir)
-                            writeValue[j] = _mm_min_epu16(writeValue[j], v[j]);
+                            writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
                     }
 
                     // Make first 16 bits a high value so it wont be written with min
-                    v[0] = _mm_slli_si128(v[0], 2);
-                    v[0] = _mm_adds_epu16(v[0], numbers[0]);
-                    v[0] = _mm_or_si128(v[0], LowBits);
+                    v[0] = _mm256_slli_si256(v[0], 2);
+                    v[0] = _mm256_adds_epu16(v[0], numbers[0]);
+                    v[0] = _mm256_or_si256(v[0], LowBits);
 
                     if (i >= minimumSameDir)
                     {
-                        writeValue[0] = _mm_min_epu16(writeValue[0], v[0]);
+                        writeValue[0] = _mm256_min_epu16(writeValue[0], v[0]);
                     }
                 }
             }
@@ -297,26 +323,26 @@ template<int XDirection>
                 {
                     for(int j = ValueCount - 1; j > 0; --j)
                     {
-                        VType old1 = v[j];
-                        VType old2 = v[j - 1];
+                        __m256i old1 = v[j];
+                        __m256i old2 = v[j - 1];
 
-                        old1 = _mm_srli_si128(old1, 2);
-                        old2 = _mm_slli_si128(old2, 14);
+                        old1 = _mm256_srli_si256(old1, 2);
+                        old2 = _mm256_slli_si256(old2, 14);
 
-                        old1 = _mm_or_si128(old1, old2);
+                        old1 = _mm256_or_si256(old1, old2);
 
-                        v[j] = _mm_adds_epu16(old1, numbers[j]);
+                        v[j] = _mm256_adds_epu16(old1, numbers[j]);
                         if (i >= minimumSameDir)
-                            writeValue[j] = _mm_min_epu16(writeValue[j], v[j]);
+                            writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
                     }
-                    v[0] = _mm_srli_si128(v[0], 2);
-                    v[0] = _mm_adds_epu16(v[0], numbers[0]);
+                    v[0] = _mm256_srli_si256(v[0], 2);
+                    v[0] = _mm256_adds_epu16(v[0], numbers[0]);
 
-                    v[0] = _mm_or_si128(v[0], HighBits);
+                    v[0] = _mm256_or_si256(v[0], HighBits);
 
                     if (i >= minimumSameDir)
                     {
-                        writeValue[0] = _mm_min_epu16(writeValue[0], v[0]);
+                        writeValue[0] = _mm256_min_epu16(writeValue[0], v[0]);
                     }
                 }
             }
@@ -326,7 +352,8 @@ template<int XDirection>
                 int off = DirMoveSize * i * XDirection;
                 int currOffset = x + off;
                 if(currOffset < width && currOffset > -MoveAmount)
-                    changed1 = _mm_or_si128(sWriteMin(writeValue[i], destMap1, offset + off), changed1);
+                    changed1 = _mm256_or_si256(sWriteMin2(
+                        writeValue[i], destMap1 + offset1 + off, destMap1 + offset2 + off), changed1);
             }
             for(int i = 0; i < ValueCount; ++i)
             {
@@ -334,18 +361,25 @@ template<int XDirection>
                 {
                     writeValue[i - WriteCount] = writeValue[i];
                 }
-                writeValue[i] = ~_mm_setzero_si128();
+                writeValue[i] = ~_mm256_setzero_si256();
             }
             x += MoveAmount * XDirection;
         }
 
         {
-            if (!_mm_testz_si128(changed1, changed1))
+            //int64_t z = _mm256_movemask_epi8(changed1);
+            if(!_mm256_testz_si256(changed1, _mm256_set_epi32(0, 0, 0, 0, -1, -1, -1, -1)))
             {
-                changedRowsDst1[y] = 1;
+                changedRowsDst1[rows[0]] = 1;
+                changed = true;
+            }
+            if(!_mm256_testz_si256(changed1, _mm256_set_epi32(-1, -1, -1, -1, 0, 0, 0, 0)))
+            {
+                changedRowsDst1[rows[1]] = 1;
                 changed = true;
             }
         }
+        rowCount = 0;
     }
 
     return changed;
@@ -406,23 +440,23 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
         while (changed)
         {
             changed = false;
-            changed |= sUpdateDir2<1>(numberMap, leftRightMap, changedRowsLeftRight,
+            changed |= sUpdateSidewayDir<1>(numberMap, leftRightMap, changedRowsLeftRight,
                 upDownMap, changedRowsUpDown,
                 width, height, minimumSameDir,
                 maximumSameDir);
 
-            changed |= sUpdateDir2<-1>(numberMap, leftRightMap, changedRowsLeftRight,
-                upDownMap,  changedRowsUpDown,
+            changed |= sUpdateSidewayDir<-1>(numberMap, leftRightMap, changedRowsLeftRight,
+                upDownMap, changedRowsUpDown,
                 width, height, minimumSameDir,
                 maximumSameDir);
             memset(changedRowsLeftRight, 0, 32 * 8);
 
-            changed |= sUpdateDir<-1>(numberMap, upDownMap, changedRowsUpDown,
+            changed |= sUpdateUpDownDir<-1>(numberMap, upDownMap, changedRowsUpDown,
                 leftRightMap, changedRowsLeftRight,
                 width, height, minimumSameDir,
                 maximumSameDir);
 
-            changed |= sUpdateDir<1>(numberMap, upDownMap, changedRowsUpDown,
+            changed |= sUpdateUpDownDir<1>(numberMap, upDownMap, changedRowsUpDown,
                 leftRightMap, changedRowsLeftRight,
                 width, height, minimumSameDir,
                 maximumSameDir);
@@ -430,6 +464,7 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
             memset(changedRowsUpDown, 0, 32 * 8);
 
         }
+
         lowest = leftRightMap[Padding + width - 1 + (height - 1) * MaxWidthU16];
         lowest = sMin(lowest, upDownMap[Padding + width - 1 + (height - 1) * MaxWidthU16]);
     }
