@@ -82,47 +82,6 @@ static void sGetSize(const char* data, int& width, int& height)
     }
 }
 
-//template <typename T>
-static void sMemset(uint16_t* arr, uint16_t value, int amount)
-{
-    __m256i setValue = _mm256_set1_epi16(value);
-    __m256i* start = (__m256i*)(arr);
-    const __m256i* end = (const __m256i*)(arr + amount);
-    while(start < end)
-    {
-        _mm256_storeu_si256(start, setValue);
-        start++;
-    }
-
-}
-
-template<int Amount>
-static __m128i sByteShiftRight128(__m128i value)
-{
-    static_assert(Amount > 0 && Amount < 16);
-    return _mm_bsrli_si128(value, Amount);
-}
-
-template<int Amount>
-static __m128i sByteShiftLeft128(__m128i value)
-{
-    static_assert(Amount > 0 && Amount < 16);
-    return _mm_bslli_si128(value, Amount);
-}
-
-
-
-[[maybe_unused]]
-static __m128i sWriteMin(__m128i newValue, uint16_t* map, int offset)
-{
-    __m128i_u* address = (__m128i*) (map + offset);
-    __m128i out = _mm_loadu_si128(address);
-    __m128i prev = out;
-    out = _mm_min_epu16(newValue, out);
-    _mm_storeu_si128(address, out);
-    return _mm_xor_si128(prev, out);
-}
-
 static __m256i sWriteMin(__m256i newValue, uint16_t* __restrict__ map, int offset)
 {
     __m256i_u* address = (__m256i*) (map + offset);
@@ -406,10 +365,11 @@ static int64_t sGetMinimumEnergy(const char* data, int minimumSameDir, int maxim
     alignas(32) uint8_t changedRowsLeftRight[32 * 8] = {};
     alignas(32) uint8_t changedRowsUpDown[32 * 8] = {};
 
-    sMemset(leftRightMap, uint16_t(1 << 15), MaxWidthU16 * MaxHeight);
-    sMemset(upDownMap, uint16_t(1 << 15), MaxWidthU16 * MaxHeight);
-    sMemset(numberMap, uint16_t(1 << 15), MaxWidthU16 * MaxHeight);
-
+    {
+        memset(leftRightMap, -1, MaxWidthBytes * MaxHeight);
+        memset(upDownMap, -1, MaxWidthBytes * MaxHeight);
+        memset(numberMap, -1, MaxWidthBytes * MaxHeight);
+    }
     {
         const char* tmp = data;
         int index = Padding + MaxWidthU16 * RowOffset;
