@@ -66,7 +66,7 @@ static int64_t sParseA(const char* data)
     return sum;
 }
 
-
+// Note we split 2 lines into 128 bits. No need to deal with crossing lanes
 void bitShiftRightOne(__m256i* value)
 {
     __m256i movedTop = _mm256_bsrli_epi128(*value, 8);
@@ -74,6 +74,8 @@ void bitShiftRightOne(__m256i* value)
     *value = _mm256_srli_epi64(*value, 1);
     *value = _mm256_or_si256(*value, movedTop);
 }
+
+// Note we split 2 lines into 128 bits. No need to deal with crossing lanes
 void bitShiftLeftOne(__m256i* value)
 {
     __m256i movedBot = _mm256_bslli_epi128(*value, 8);
