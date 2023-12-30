@@ -166,6 +166,7 @@ int run04A(bool printOut, char* buffer)
 
     if(printOut)
         charsAdded = sprintf(buffer, "4A: Card points: %" PRIi64, aResult);
+    _mm256_zeroupper();
     return charsAdded;
 }
 
@@ -175,6 +176,7 @@ int run04B(bool printOut, char* buffer)
     int64_t resultB = sParse04B(data04A);
     if(printOut)
         charsAdded = sprintf(buffer, "4B: Cards: %" PRIi64, resultB);
+    _mm256_zeroupper();
 
     return charsAdded;
 }

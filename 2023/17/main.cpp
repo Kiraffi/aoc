@@ -30,7 +30,7 @@ static constexpr int MaxHeight = 144;
 #define LoadU2(Addr1, Addr2) _mm256_loadu2_m128i((const __m128i *)(Addr1), (const __m128i *)(Addr2))
 #define StoreU2(Addr1, Addr2, ValueOut) _mm256_storeu2_m128i((__m128i *)(Addr1), (__m128i *)(Addr2), ValueOut)
 
-#define PROFILE 1
+#define PROFILE 0
 #include "../profile.h"
 
 alignas(32) static constexpr char test17A[] =
@@ -179,9 +179,10 @@ template<int XDirection>
     #define SetHighest(SetValue) _mm256_set_epi32(SetValue, 0, 0, 0, SetValue, 0, 0, 0)
     #define SetLowest(SetValue) _mm256_set_epi32(0, 0, 0, SetValue, 0, 0, 0, SetValue)
 
-     static __m256i HighBits = SetHighest(0xffff'0000);
-     static __m256i LowBits = SetLowest(0x0000'ffff);
+     //static __m256i HighBits = SetHighest(0xffff'0000);
+     //static __m256i LowBits = SetLowest(0x0000'ffff);
 
+    __m256i AllOnes = _mm256_set1_epi32(-1);
 
      //TIMEDSCOPE("17 Timed scope left right");
     bool changed = false;
@@ -257,18 +258,24 @@ template<int XDirection>
                         __m256i old1 = v[j];
                         __m256i old2 = v[j - 1];
 
-                        old1 = _mm256_slli_si256(old1, 2);
-                        old2 = _mm256_srli_si256(old2, 14);
-                        old1 = _mm256_or_si256(old1, old2);
+                        //old1 = _mm256_slli_si256(old1, 2);
+                        //old2 = _mm256_srli_si256(old2, 14);
+                        //old1 = _mm256_or_si256(old1, old2);
+
+                        old1 = _mm256_alignr_epi8(old1, old2, 14);
+
                         v[j] = _mm256_adds_epu16(old1, numbers[j]);
                         if (i >= minimumSameDir)
                             writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
                     }
 
                     // Make first 16 bits a high value so it wont be written with min
-                    v[0] = _mm256_slli_si256(v[0], 2);
+                    //v[0] = _mm256_slli_si256(v[0], 2);
+                    //v[0] = _mm256_or_si256(v[0], LowBits);
+                    v[0] = _mm256_alignr_epi8(v[0], AllOnes, 14);
+
+
                     v[0] = _mm256_adds_epu16(v[0], numbers[0]);
-                    v[0] = _mm256_or_si256(v[0], LowBits);
 
                     if (i >= minimumSameDir)
                     {
@@ -285,19 +292,23 @@ template<int XDirection>
                         __m256i old1 = v[j];
                         __m256i old2 = v[j - 1];
 
-                        old1 = _mm256_srli_si256(old1, 2);
-                        old2 = _mm256_slli_si256(old2, 14);
+                        //old1 = _mm256_srli_si256(old1, 2);
+                        //old2 = _mm256_slli_si256(old2, 14);
+//
+                        //old1 = _mm256_or_si256(old1, old2);
 
-                        old1 = _mm256_or_si256(old1, old2);
+                        old1 = _mm256_alignr_epi8(old2, old1, 2);
 
                         v[j] = _mm256_adds_epu16(old1, numbers[j]);
                         if (i >= minimumSameDir)
                             writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
                     }
-                    v[0] = _mm256_srli_si256(v[0], 2);
+                    //v[0] = _mm256_srli_si256(v[0], 2);
+                    //v[0] = _mm256_or_si256(v[0], HighBits);
+                    v[0] = _mm256_alignr_epi8(AllOnes, v[0], 2);
+
                     v[0] = _mm256_adds_epu16(v[0], numbers[0]);
 
-                    v[0] = _mm256_or_si256(v[0], HighBits);
 
                     if (i >= minimumSameDir)
                     {
@@ -326,7 +337,6 @@ template<int XDirection>
         }
 
         {
-            //int64_t z = _mm256_movemask_epi8(changed1);
             if(!_mm256_testz_si256(changed1, _mm256_set_epi32(0, 0, 0, 0, -1, -1, -1, -1)))
             {
                 changedRowsDst1[rows[0]] = 1;
@@ -463,15 +473,17 @@ int main()
 
     sPrintB(printBuffer, sParseB(data17A));
     printf("%s\n", printBuffer);
+    _mm256_zeroupper();
     return 0;
 }
 #endif
 
 int run17A(bool printOut, char* buffer)
 {
+    _mm256_zeroupper();
     int charsAdded = 0;
     int64_t resultA = sParseA(data17A);
-
+    _mm256_zeroupper();
     if(printOut)
         charsAdded = sPrintA(buffer, resultA);
     return charsAdded;
@@ -479,8 +491,10 @@ int run17A(bool printOut, char* buffer)
 
 int run17B(bool printOut, char* buffer)
 {
+    _mm256_zeroupper();
     int charsAdded = 0;
     int64_t resultB = sParseB(data17A);
+    _mm256_zeroupper();
 
     if(printOut)
         charsAdded = sPrintB(buffer, resultB);

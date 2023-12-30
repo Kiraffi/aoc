@@ -327,7 +327,7 @@ static int64_t sParseB(const char* data)
         }
 
         int end = (height - 1) / 8 * 8;
-
+        _mm256_zeroupper();
         // Move left
         for(int i = 1; i <= end + 1; i += 8)
         {
@@ -340,12 +340,14 @@ static int64_t sParseB(const char* data)
         {
             sMoveRocksLeftRight<-1>(wallMap, rockMap, i + 0);
         }
+        _mm256_zeroupper();
 
         // Move down
         for (int i = height - 1; i > 0; --i)
         {
             sMoveRocksUpDown(wallMap, rockMap, i, 1);
         }
+        _mm256_zeroupper();
 
         // Move left
         for(int i = 1; i <= end + 1; i += 8)
@@ -359,6 +361,7 @@ static int64_t sParseB(const char* data)
         {
             sMoveRocksLeftRight<1>(wallMap, rockMap, i + 0);
         }
+        _mm256_zeroupper();
     }
     sum = sCountScore(rockMap, height);
 

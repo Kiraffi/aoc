@@ -87,7 +87,6 @@ static void sGetMapSize(const char* data, int& width, int& height)
     ++height;
 
 }
-
 static int64_t sCalculateEnergy(const char* data, int hashStart)
 {
     //TIMEDSCOPE("sCalculateEnergy");
@@ -95,6 +94,13 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
     static const int MAX_POSITIONS = 128;
     // Using visitedMap array vs hashset seems to be over 20x faster. 200ms -> 7ms
     alignas (32)uint8_t visitedMap[128 * 128]= {};
+
+    //alignas (32)uint16_t upMap[128 * 128]= {};
+    //alignas (32)uint16_t rightMap[128 * 128]= {};
+    //alignas (32)uint16_t botMap[128 * 128]= {};
+    //alignas (32)uint16_t leftMap[128 * 128]= {};
+
+
     //alignas (16)uint8_t visitedBoolMap[128 * 128 / 8]= {};
     // Using constant size stack allocated array saves also a bit of time compared to std::vector, although
     // if it was static it probably would not make a difference.
@@ -229,7 +235,10 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
 static int64_t sParseA(const char* data)
 {
     TIMEDSCOPE("16A Total");
-    return sCalculateEnergy(data, sSetDir(0, Right));
+    _mm256_zeroupper();
+    int64_t result = sCalculateEnergy(data, sSetDir(0, Right));
+    _mm256_zeroupper();
+    return result;
 }
 
 template <typename T>
@@ -241,6 +250,8 @@ static T sGetMax(T a, T b)
 static int64_t sParseB(const char* data)
 {
     TIMEDSCOPE("16B Total");
+    _mm256_zeroupper();
+
     int64_t maxEnergy = 0;
     int width = 0;
     int height = 0;
@@ -256,8 +267,7 @@ static int64_t sParseB(const char* data)
         maxEnergy = sGetMax(maxEnergy, sCalculateEnergy(data, sSetPosDir(0, y, Right)));
         maxEnergy = sGetMax(maxEnergy, sCalculateEnergy(data, sSetPosDir(width - 1, y, Left)));
     }
-
-
+    _mm256_zeroupper();
     return maxEnergy;
 }
 
