@@ -65,18 +65,18 @@ int16_t sGetIndexFromString(std::unordered_map<std::string, int16_t>& strings, c
     return result;
 }
 
-void sFillMap(
-    int startIndex,
+int sFillMap(
+    int16_t startIndex,
     const int16_t* connections,
     const uint8_t* connectionCount,
     uint8_t* visited,
-    int32_t* connectionVisit)
+    int16_t* connectionVisit)
 {
-
+    int lastIndex = -1;
     struct Day25State
     {
-        int currIndex;
-        int oldIndex;
+        int16_t currIndex;
+        int16_t oldIndex;
     };
 
     std::vector<Day25State> states1;
@@ -88,13 +88,13 @@ void sFillMap(
         states2.clear();
         for(const Day25State& s : states1)
         {
-            if(visited[s.currIndex])
+            if (visited[s.currIndex])
                 continue;
             visited[s.currIndex] = 1;
-            if(s.oldIndex != -1)
+            if (s.oldIndex != -1)
             {
                 auto fn = [&](int index1, int index2) {
-                    for(int i = 0; i < connectionCount[index1]; ++i)
+                    for (int i = 0; i < connectionCount[index1]; ++i)
                     {
                         if (connections[index1 * 8 + i] == index2)
                         {
@@ -107,14 +107,15 @@ void sFillMap(
                 fn(s.oldIndex, s.currIndex);
             }
 
-            for(int i = 0; i < connectionCount[s.currIndex]; ++i)
+            for (uint16_t i = 0; i < connectionCount[s.currIndex]; ++i)
             {
-                states2.push_back(Day25State{.currIndex = connections[s.currIndex * 8 + i], .oldIndex = s.currIndex});
+                lastIndex = connections[s.currIndex * 8 + i];
+                states2.push_back(Day25State{.currIndex = int16_t(lastIndex), .oldIndex = s.currIndex});
             }
         }
-
         std::swap(states1, states2);
     }
+    return lastIndex;
 }
 
 
@@ -155,49 +156,77 @@ static int64_t sParseA(const char* data)
     }
     srand(0x01234567);
 
+    int16_t connectionVisit[Amount * 8] = {};
     for(int j = 0; j < 3; ++j)
     {
-        int32_t connectionVisit[Amount * 8] = {};
-        for (int i = 0; i < 30; ++i)
+        int amount = j == 0 ? 5 : 3;
+        for (int k = 0; k < amount; ++k)
         {
-            int r = rand() % (stringMap.size());
-            uint8_t visited[Amount] = {};
-            sFillMap(r, connections, connectionAmounts, visited, connectionVisit);
+            int16_t r = rand() % (stringMap.size());
+            for (int i = 0; i < 3; ++i)
+            {
+                uint8_t visited[Amount] = {};
+                r = sFillMap(r, connections, connectionAmounts, visited, connectionVisit);
+            }
         }
 
         int topIndex = 0;
         int topCount = connectionAmounts[0];
 
+        struct Connections
+        {
+            int index;
+            int amount;
+        };
+
+        //Connections conns[Amount * 8] = {};
         for(int i = 8; i < (int)stringMap.size() * 8; ++i)
         {
+            //conns[i] = {.index = i, .amount = connectionVisit[i]};
+
             if(connectionVisit[i] > topCount)
             {
                 topIndex = i;
                 topCount = connectionVisit[i];
             }
+
         }
+/*
+        std::sort(conns, conns + Amount * 8, [](const Connections& a, const Connections& b){
+            return a.amount > b.amount;
+        });
+*/
+        auto remove = [&](int topIndex) {
 
-        int index1 = topIndex / 8;
-        int index2 = connections[topIndex];
+            int index1 = topIndex / 8;
+            int index2 = connections[topIndex];
 
-        connectionAmounts[index1]--;
-        std::swap(connections[topIndex], connections[index1 * 8 + connectionAmounts[index1]]);
+            connectionAmounts[index1]--;
+            std::swap(connections[topIndex], connections[index1 * 8 + connectionAmounts[index1]]);
 
-        for(int i = 0; i < connectionAmounts[index2]; ++i)
-        {
-            if(connections[index2 * 8 + i] == index1)
+            for (int i = 0; i < connectionAmounts[index2]; ++i)
             {
-                connectionAmounts[index2]--;
-                std::swap(connections[index2 * 8 + i], connections[index2 * 8 + connectionAmounts[index2]]);
-                break;
+                if (connections[index2 * 8 + i] == index1)
+                {
+                    connectionAmounts[index2]--;
+                    std::swap(connections[index2 * 8 + i], connections[index2 * 8 + connectionAmounts[index2]]);
+                    break;
+                }
             }
-        }
+        };
+        //printf("conns0: %i\n", conns[0].index);
+        //printf("conns1: %i\n", conns[1].index);
+        //printf("conns2: %i\n", conns[2].index);
+        remove(topIndex);
+        //remove(conns[0].index);
+        //remove(conns[1].index);
+        //remove(conns[2].index);
     }
     int64_t result = 0;
     {
         int r = 0;
 
-        int32_t connectionVisit[Amount * 8] = {};
+        int16_t connectionVisit[Amount * 8] = {};
         uint8_t visited[Amount] = {};
         sFillMap(r, connections, connectionAmounts, visited, connectionVisit);
 

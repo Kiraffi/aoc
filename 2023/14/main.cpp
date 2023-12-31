@@ -312,12 +312,9 @@ static int64_t sParseB(const char* data)
         if(iter != diffMap.end())
         {
             int64_t loop = j - iter->second;
-            loop = loop != 0 ? loop : j;
+            loop = loop != 0 ? loop : iter->second;
             int64_t tmp = LoopCounts - j;
             j += (tmp / loop) * loop;
-            j -= loop;
-            if(j + loop < LoopCounts)
-                j += loop;
         }
         diffMap[hashValue] = j;
 

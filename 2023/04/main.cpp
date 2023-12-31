@@ -109,14 +109,12 @@ static int sGetFoundMatchesCount(const char** rowStart)
 static int64_t sParse04A(const char* data)
 {
     int64_t sum = 0;
-    int index = 1;
     while(*data)
     {
         int points = sGetFoundMatchesCount(&data);
         points = points > 0 ? (1 << (points - 1)) : 0;
 
         sum += points;
-        ++index;
         ++data;
     }
     return sum;

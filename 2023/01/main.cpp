@@ -169,7 +169,7 @@ static int sParse01A(const char* data)
             // And the masks together to find numbers between 1 and 9.
             __m128i numbsMask = _mm_and_si128(lt10, gt0);
 
-            if(_mm_test_all_ones(~numbsMask) == 0)
+            if(!_mm_testz_si128(numbsMask, numbsMask))
             {
                 uint32_t mask = _mm_movemask_epi8(numbsMask);
                 // char - '0'

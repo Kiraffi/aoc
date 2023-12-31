@@ -441,7 +441,7 @@ static int64_t sParse10BLine(const char* data)
     std::vector<uint8_t> map;
     std::vector<uint8_t> pipeMap;
 
-    std::vector<uint8_t> straightsMap;
+    std::vector<uint8_t> verticalMap;
     std::vector<uint8_t> leftMap;
     std::vector<uint8_t> rightMap;
     //std::vector<uint8_t> foundMap;
@@ -451,7 +451,7 @@ static int64_t sParse10BLine(const char* data)
     mapWidth = ((width + 127) / 128) * 128 / 8;
 
     pipeMap.resize(mapWidth * height, 0);
-    straightsMap.resize(mapWidth * height, 0);
+    verticalMap.resize(mapWidth * height, 0);
     leftMap.resize(mapWidth * height, 0);
     rightMap.resize(mapWidth * height, 0);
 
@@ -469,7 +469,7 @@ static int64_t sParse10BLine(const char* data)
 
             int index = y * mapWidth + mapX;
             if(c == '-')
-                straightsMap[index] |= addBit;
+                verticalMap[index] |= addBit;
             switch(c)
             {
                 case 'F':
@@ -516,8 +516,8 @@ static int64_t sParse10BLine(const char* data)
             goingRights = (rights ^ goingRights);
 
 
-            uint64_t straights = *(uint64_t*)(&straightsMap[i + j * mapWidth]);
-            inside = inside ^ straights;
+            uint64_t verticals = *(uint64_t*)(&verticalMap[i + j * mapWidth]);
+            inside = inside ^ verticals;
 
             uint64_t insidePoints = (~pipes) & inside;
 
