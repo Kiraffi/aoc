@@ -82,7 +82,7 @@ static void sGetSize(const char* data, int& width, int& height)
     }
 }
 
-static __m256i sWriteMin(__m256i newValue, uint16_t* __restrict__ map, int offset)
+static __m256i sWriteMin(__m256i newValue, uint16_t* __restrict map, int offset)
 {
     __m256i_u* address = (__m256i*) (map + offset);
     __m256i out = _mm256_loadu_si256(address);
@@ -93,7 +93,7 @@ static __m256i sWriteMin(__m256i newValue, uint16_t* __restrict__ map, int offse
 }
 
 
-static __m256i sWriteMin2(__m256i newValue, uint16_t* __restrict__ map1, uint16_t* __restrict__ map2)
+static __m256i sWriteMin2(__m256i newValue, uint16_t* __restrict map1, uint16_t* __restrict map2)
 {
     __m256i out = LoadU2(map1, map2);
     __m256i prev = out;
@@ -103,11 +103,11 @@ static __m256i sWriteMin2(__m256i newValue, uint16_t* __restrict__ map1, uint16_
 }
 
 template<int YDirection>
-static bool sUpdateUpDownDir(const uint16_t* __restrict__ numberMap,
-    const uint16_t* __restrict__ sourceMap, // upDown map
-    const uint8_t* __restrict__ changedRowsSource,
-    uint16_t* __restrict__ destMap1, // left right map
-    uint8_t* __restrict__ changedRowsDst1,
+static bool sUpdateUpDownDir(const uint16_t* __restrict numberMap,
+    const uint16_t* __restrict sourceMap, // upDown map
+    const uint8_t* __restrict changedRowsSource,
+    uint16_t* __restrict destMap1, // left right map
+    uint8_t* __restrict changedRowsDst1,
     int width,
     int height,
     int minimumSameDir,
@@ -162,11 +162,11 @@ static bool sUpdateUpDownDir(const uint16_t* __restrict__ numberMap,
 }
 
 template<int XDirection>
- bool sUpdateSidewayDir(const uint16_t* __restrict__ numberMap,
-    const uint16_t* __restrict__ sourceMap, // left right map
-    const uint8_t* __restrict__ changedRowsSource,
-    uint16_t* __restrict__ destMap1, // up down map
-    uint8_t* __restrict__ changedRowsDst1,
+ bool sUpdateSidewayDir(const uint16_t* __restrict numberMap,
+    const uint16_t* __restrict sourceMap, // left right map
+    const uint8_t* __restrict changedRowsSource,
+    uint16_t* __restrict destMap1, // up down map
+    uint8_t* __restrict changedRowsDst1,
     int width,
     int height,
     int minimumSameDir,
@@ -174,13 +174,6 @@ template<int XDirection>
 {
 
     static constexpr int DirMoveSize = 8;
-
-
-    #define SetHighest(SetValue) _mm256_set_epi32(SetValue, 0, 0, 0, SetValue, 0, 0, 0)
-    #define SetLowest(SetValue) _mm256_set_epi32(0, 0, 0, SetValue, 0, 0, 0, SetValue)
-
-     //static __m256i HighBits = SetHighest(0xffff'0000);
-     //static __m256i LowBits = SetLowest(0x0000'ffff);
 
     __m256i AllOnes = _mm256_set1_epi32(-1);
 
@@ -215,7 +208,7 @@ template<int XDirection>
         __m256i writeValue[ValueCount] = {};
         for(auto & i : writeValue)
         {
-            i = ~_mm256_setzero_si256();
+            i = _mm256_set1_epi32(-1);
         }
 
         int x = 0;
@@ -238,7 +231,7 @@ template<int XDirection>
             }
             for(int i = WriteCount; i < ValueCount; ++i)
             {
-                v[i] = ~_mm256_setzero_si256();
+                v[i] = _mm256_set1_epi32(-1);
             }
 
             __m256i numbers[ValueCount] = {};
@@ -258,10 +251,6 @@ template<int XDirection>
                         __m256i old1 = v[j];
                         __m256i old2 = v[j - 1];
 
-                        //old1 = _mm256_slli_si256(old1, 2);
-                        //old2 = _mm256_srli_si256(old2, 14);
-                        //old1 = _mm256_or_si256(old1, old2);
-
                         old1 = _mm256_alignr_epi8(old1, old2, 14);
 
                         v[j] = _mm256_adds_epu16(old1, numbers[j]);
@@ -270,10 +259,7 @@ template<int XDirection>
                     }
 
                     // Make first 16 bits a high value so it wont be written with min
-                    //v[0] = _mm256_slli_si256(v[0], 2);
-                    //v[0] = _mm256_or_si256(v[0], LowBits);
                     v[0] = _mm256_alignr_epi8(v[0], AllOnes, 14);
-
 
                     v[0] = _mm256_adds_epu16(v[0], numbers[0]);
 
@@ -292,19 +278,12 @@ template<int XDirection>
                         __m256i old1 = v[j];
                         __m256i old2 = v[j - 1];
 
-                        //old1 = _mm256_srli_si256(old1, 2);
-                        //old2 = _mm256_slli_si256(old2, 14);
-//
-                        //old1 = _mm256_or_si256(old1, old2);
-
                         old1 = _mm256_alignr_epi8(old2, old1, 2);
 
                         v[j] = _mm256_adds_epu16(old1, numbers[j]);
                         if (i >= minimumSameDir)
                             writeValue[j] = _mm256_min_epu16(writeValue[j], v[j]);
                     }
-                    //v[0] = _mm256_srli_si256(v[0], 2);
-                    //v[0] = _mm256_or_si256(v[0], HighBits);
                     v[0] = _mm256_alignr_epi8(AllOnes, v[0], 2);
 
                     v[0] = _mm256_adds_epu16(v[0], numbers[0]);
@@ -331,7 +310,7 @@ template<int XDirection>
                 {
                     writeValue[i - WriteCount] = writeValue[i];
                 }
-                writeValue[i] = ~_mm256_setzero_si256();
+                writeValue[i] = _mm256_set1_epi32(-1);
             }
             x += MoveAmount * XDirection;
         }

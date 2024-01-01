@@ -87,6 +87,51 @@ static void sGetMapSize(const char* data, int& width, int& height)
     ++height;
 
 }
+
+int64_t countVisited(const uint8_t* visitedBegin, const uint8_t* visitedEnd)
+{
+    __m256i ones8 = _mm256_set1_epi8(1);
+    __m256i ones16 = _mm256_set1_epi16(255);
+
+    const __m256i* ptr = (const __m256i*) visitedBegin;
+    const __m256i* end = (const __m256i*) visitedEnd;
+
+    __m256i sumValues16 = _mm256_setzero_si256();
+    while(ptr < end)
+    {
+        __m256i sumValues8 = _mm256_setzero_si256();
+        for (int i = 0; i < 64; ++i)
+        {
+            // Since we have based on direction bits set, can be more than 1,
+            // we need to reduct the bits, doing bitshift right by 2, OR them,
+            // then bitshift right by 1, OR them. This will make any of the low bits set the lowest bit true.
+            // Then to reduce storing the values, we sum them up to make them 16bit values.
+            __m256i values = _mm256_loadu_si256(ptr);
+
+            __m256i values1 = _mm256_srli_epi16(values, 2);
+            values = _mm256_or_si256(values, values1);
+            __m256i values2 = _mm256_srli_epi16(values, 1);
+            values = _mm256_or_si256(values, values2);
+            values = _mm256_and_si256(values, ones8);
+
+            sumValues8 = _mm256_adds_epu8(values, sumValues8);
+            ++ptr;
+        }
+        __m256i values = _mm256_srli_epi16(sumValues8, 8);
+        values = _mm256_add_epi16(values, sumValues8);
+        values = _mm256_and_si256(values, ones16);
+
+        sumValues16 = _mm256_add_epi16(values, sumValues16);
+    }
+    alignas(32) uint16_t storeValues[16] = {};
+    _mm256_storeu_si256((__m256i*)storeValues, sumValues16);
+
+    int64_t energy = 0;
+    for(uint16_t v : storeValues)
+        energy += v;
+    return energy;
+}
+
 static int64_t sCalculateEnergy(const char* data, int hashStart)
 {
     //TIMEDSCOPE("sCalculateEnergy");
@@ -95,18 +140,10 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
     // Using visitedMap array vs hashset seems to be over 20x faster. 200ms -> 7ms
     alignas (32)uint8_t visitedMap[128 * 128]= {};
 
-    //alignas (32)uint16_t upMap[128 * 128]= {};
-    //alignas (32)uint16_t rightMap[128 * 128]= {};
-    //alignas (32)uint16_t botMap[128 * 128]= {};
-    //alignas (32)uint16_t leftMap[128 * 128]= {};
-
-
-    //alignas (16)uint8_t visitedBoolMap[128 * 128 / 8]= {};
     // Using constant size stack allocated array saves also a bit of time compared to std::vector, although
     // if it was static it probably would not make a difference.
     int32_t positions[MAX_POSITIONS] = {};
 
-    int64_t energy = 0;
     int positionCount = 1;
     int width = 0;
     int height = 0;
@@ -186,47 +223,14 @@ static int64_t sCalculateEnergy(const char* data, int hashStart)
         positions[0] = positions[positionCount - 1];
         positionCount--;
     }
-    {
-        //TIMEDSCOPE("Calculate sum");
-#if 1 // Use simd for summing ~6ms -> ~4.8ms. Each iteration goes from ~4us to 2us
-        __m256i ones8 = _mm256_set1_epi8(1);
-        __m256i ones16 = _mm256_set1_epi16(7);
+    int64_t energy = 0;
 
-        const __m256i* ptr = (const __m256i*) visitedMap;
-
-        __m256i sumValues = _mm256_setzero_si256();
-        for(int i = 0; i < 128 * 128 / 32; ++i)
-        {
-            // Since we have based on direction bits set, can be more than 1,
-            // we need to reduct the bits, doing bitshift right by 2, OR them,
-            // then bitshift right by 1, OR them. This will make any of the low bits set the lowest bit true.
-            // Then to reduce storing the values, we sum them up to make them 16bit values.
-            __m256i values = _mm256_loadu_si256(ptr);
-
-            __m256i values1 = _mm256_srli_epi16(values, 2);
-            values = _mm256_or_si256(values, values1);
-            __m256i values2 = _mm256_srli_epi16(values, 1);
-            values = _mm256_or_si256(values, values2);
-            values = _mm256_and_si256(values, ones8);
-
-            __m256i values3 = _mm256_srli_epi16(values, 8);
-            values = _mm256_add_epi16(values, values3);
-            values = _mm256_and_si256(values, ones16);
-
-            sumValues = _mm256_add_epi16(values, sumValues);
-            ++ptr;
-        }
-
-        alignas(16) uint16_t storeValues[16] = {};
-        _mm256_storeu_si256((__m256i*)storeValues, sumValues);
-        for(uint16_t v : storeValues)
-            energy += v;
-
+#if 1 // Use simd for summing ~6ms -> ~4.8ms
+    energy = countVisited(visitedMap, visitedMap + 128 * height);
 #else
-        for (uint8_t v: visitedMap)
-            energy += v ? 1 : 0;
+    for (uint8_t v: visitedMap)
+        energy += v ? 1 : 0;
 #endif
-    }
 
     return energy;
 

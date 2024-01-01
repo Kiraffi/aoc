@@ -428,7 +428,53 @@ static int64_t sParse10A(const char* data)
 
 
 
+static int64_t sCalculateArea(const uint8_t* pipeMapU8, const uint8_t* verticalMapU8,
+ const uint8_t* leftMapU8, const uint8_t* rightMapU8, int height)
+{
+    const __m256i* pipeMap = (const __m256i*) pipeMapU8;
+    const __m256i* verticalMap = (const __m256i*) verticalMapU8;
+    const __m256i* leftMap = (const __m256i*) leftMapU8;
+    const __m256i* rightMap = (const __m256i*) rightMapU8;
 
+    int64_t area = 0;
+
+    // Calculate inside out
+    __m256i inside = _mm256_setzero_si256();
+    __m256i goingRights = _mm256_setzero_si256();
+    __m256i goingLefts = _mm256_setzero_si256();
+    for(int j = 0; j < height; ++j)
+    {
+        __m256i pipes = _mm256_loadu_si256(pipeMap);
+        __m256i lefts = _mm256_loadu_si256(leftMap);
+        __m256i rights = _mm256_loadu_si256(rightMap);
+
+
+        inside = _mm256_xor_si256(inside, _mm256_and_si256(rights, goingLefts));
+        inside = _mm256_xor_si256(inside, _mm256_and_si256(lefts, goingRights));
+
+        goingLefts = _mm256_xor_si256(lefts, goingLefts);
+        goingRights = _mm256_xor_si256(rights, goingRights);
+
+
+        __m256i verticals = _mm256_loadu_si256(verticalMap);
+        inside = _mm256_xor_si256(inside, verticals);
+
+        __m256i insidePoints = _mm256_andnot_si256(pipes, inside);
+
+        alignas(32) uint64_t values[4] = {};
+        _mm256_store_si256((__m256i*)values, insidePoints);
+        area += std::popcount(values[0]);
+        area += std::popcount(values[1]);
+        area += std::popcount(values[2]);
+        area += std::popcount(values[3]);
+
+        ++pipeMap;
+        ++verticalMap;
+        ++leftMap;
+        ++rightMap;
+    }
+    return area;
+}
 
 
 
@@ -438,24 +484,20 @@ static int64_t sParse10BLine(const char* data)
     int width = 0;
     int height = 0;
     int mapWidth = 0;
-    std::vector<uint8_t> map;
-    std::vector<uint8_t> pipeMap;
-
-    std::vector<uint8_t> verticalMap;
-    std::vector<uint8_t> leftMap;
-    std::vector<uint8_t> rightMap;
-    //std::vector<uint8_t> foundMap;
-
     sGetMapSize(data, width, height);
+    assert(width < 256);
+    assert(height < 160);
 
-    mapWidth = ((width + 127) / 128) * 128 / 8;
+    std::vector<uint8_t> map;
 
-    pipeMap.resize(mapWidth * height, 0);
-    verticalMap.resize(mapWidth * height, 0);
-    leftMap.resize(mapWidth * height, 0);
-    rightMap.resize(mapWidth * height, 0);
+    mapWidth = ((width + 255) / 256) * 256 / 8;
+    assert(mapWidth <= 256 / 8);
 
-    //foundMap.resize(mapWidth * height, 0);
+    uint8_t pipeMap[256 * 160 / 8] = {};
+    uint8_t verticalMap[256 * 160 / 8] = {};
+    uint8_t leftMap[256 * 160 / 8] = {};
+    uint8_t rightMap[256 * 160 / 8] = {};
+
     {
         TIMEDSCOPE("A part");
         sMarkEdge(data, width, [&](const char* pos, char c) {
@@ -489,45 +531,7 @@ static int64_t sParse10BLine(const char* data)
         });
     }
 
-    //sDrawMap(pipeMap.data(), mapWidth, height);
-    //printf("\n\n");
-    //sDrawMap(map.data(), mapWidth, height);
-    //printf("\n\n");
-
-    int64_t area = 0;
-
-    for(int i = 0; i < mapWidth; i += 8)
-    {
-        uint64_t inside = 0;
-        uint64_t goingRights = 0;
-        uint64_t goingLefts = 0;
-        for(int j = 0; j < height; ++j)
-        {
-            uint64_t pipes = *(uint64_t*)(&pipeMap[i + j * mapWidth]);
-
-            uint64_t lefts = *(uint64_t*)(&leftMap[i + j * mapWidth]);
-            uint64_t rights = *(uint64_t*)(&rightMap[i + j * mapWidth]);
-
-
-            inside = inside ^ (rights & goingLefts);
-            inside = inside ^ (lefts & goingRights);
-
-            goingLefts = (lefts ^ goingLefts);
-            goingRights = (rights ^ goingRights);
-
-
-            uint64_t verticals = *(uint64_t*)(&verticalMap[i + j * mapWidth]);
-            inside = inside ^ verticals;
-
-            uint64_t insidePoints = (~pipes) & inside;
-
-            area += std::popcount(insidePoints);
-        }
-    }
-    //printf("\n");
-    //sDrawMap(foundMap.data(), mapWidth, height);
-
-    return area;
+    return sCalculateArea(pipeMap, verticalMap, leftMap, rightMap, height);
 }
 
 

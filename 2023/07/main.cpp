@@ -178,6 +178,24 @@ static void sSortAllHands(std::vector<std::vector<Hand>>& allHands)
 
 }
 
+static int sGetMatchingCardCount(uint32_t hand, int cardValue)
+{
+    assert(cardValue > 0 && cardValue < 16);
+    uint32_t value = cardValue * 0x0001'1111;
+
+    value = (~value) ^ hand;
+    value = value & (value >> 2);
+    value = value & (value >> 1);
+    value &= 0x0001'1111;
+
+    // Doing popcount manually
+    value = value + (value >> 16);
+    value = (value & 0x00103) + ((value & 0x01010) >> 4);
+    value = (value & 0x7) + ((value & 0x0300) >> 8);
+    int currentSame = int(value); // std::popcount(value);
+    return currentSame;
+}
+
 static int64_t sCalculateWinnings(const std::vector<std::vector<Hand>>& allHands)
 {
     int rank = 1;
@@ -199,43 +217,25 @@ static int64_t sParse07A(const char* data)
     std::vector<std::vector<Hand>> allHands;
     allHands.resize(HandType::HandTypeCount, {});
 
-    uint32_t cards[5] = {};
-
     while(*data)
     {
-        int hand = 0;
+        uint32_t hand = ~0u;
 
         int kinds = 0;
         int same = 0;
-        uint32_t checked = 0;
+
         for(int i = 0; i < 5; ++i)
         {
             char c = *data++;
-            c = char(sMapCardCharA(c) - '1');
+            int cc = sMapCardCharA(c) - '0';
 
             hand <<= 4;
-            hand |= c;
+            hand |= cc;
 
-            cards[4 - i] = c * 0x11111;
-        }
-        for(int i = 0; i < 5; ++i)
-        {
-            if(checked  & (1 << (4 * i)))
-                continue;
-            uint32_t value = cards[i] ^ hand;
-            value = ~value;
-            value = value & (value >> 2);
-            value = value & (value >> 1);
-            value &= 0x11111;
-            assert(value);
-            checked |= value;
-            kinds++;
-            int currentSame = std::popcount(value);
+            int currentSame = sGetMatchingCardCount(hand, cc);
+            kinds = currentSame == 1 ? kinds + 1 : kinds;
             same = same < currentSame ? currentSame : same;
-
         }
-        assert(checked == 0x11111);
-
         int bid = sParserNumber(0, &data);
         sAddToHands(hand, bid, same, kinds, allHands);
         data++;
@@ -251,7 +251,7 @@ static int64_t sParse07B(const char* data)
 
     while(*data)
     {
-        char cards[16] = {};
+        int jokers = 0;
         int64_t hand = 0;
         int kinds = 0;
         int same = 0;
@@ -261,22 +261,24 @@ static int64_t sParse07B(const char* data)
             c = sMapCardCharB(c) - '0';
 
             hand <<= 4;
-            hand |= c;
-            char& cardCount = cards[(int)c];
-            cardCount++;
+            hand |= int(c);
+
             if(c != 1)
             {
-                kinds += cardCount == 1 ? 1 : 0;
-                same = same < cardCount ? cardCount : same;
+                int currentSame = sGetMatchingCardCount(hand, int(c));
+                kinds = currentSame == 1 ? kinds + 1 : kinds;
+                same = same < currentSame ? currentSame : same;
+            }
+            else
+            {
+                jokers++;
             }
         }
+
         // Jokers
-        if(cards[1])
-        {
-            same += cards[1];
-            if(kinds == 0)
-                kinds = 1;
-        }
+        same += jokers;
+        kinds = kinds > 0 ? kinds : 1;
+
         int bid = sParserNumber(0, &data);
         sAddToHands(hand, bid, same, kinds, allHands);
         data++;
