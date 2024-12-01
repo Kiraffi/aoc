@@ -1,0 +1,153 @@
+#version 450 core
+
+#define MATRIX_ORDER row_major
+//#define MATRIX_ORDER column_major
+
+#define MAX_AMOUNT 1000
+
+shared int values1[1024];
+shared int values2[1024];
+shared int sum[256];
+
+#define THREAD_SIZE 256
+
+// using the std140 and MATRIX_ORDER,
+// it seems to count every int line as 16 bytes in renderdoc atleast
+//layout (std140, set = 1, binding = 0, MATRIX_ORDER) restrict buffer DataIn
+
+// Set 1 seems to be buffer read and write
+layout (set = 1, binding = 0) restrict buffer DataIn
+{
+    int dataIn[];
+};
+
+layout (set = 1, binding = 1) restrict buffer DataOut
+{
+    int dataOut[];
+};
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+void calculateAmounts(uint indexInThreadGroup, int radixCount)
+{
+    if(indexInThreadGroup < 256)
+    {
+        sum[indexInThreadGroup] = 0;
+    }
+    doBarriers();
+
+    int shiftAmount = radixCount * 8;
+    uint index = indexInThreadGroup;
+    if((radixCount % 2) == 0)
+    {
+        while(index < MAX_AMOUNT)
+        {
+            int value = values1[index];
+            atomicAdd(sum[((value >> shiftAmount) & 0xff)], 1);
+            index += THREAD_SIZE;
+        }
+    }
+    else
+    {
+        while(index < MAX_AMOUNT)
+        {
+            int value = values2[index];
+            atomicAdd(sum[((value >> shiftAmount) & 0xff)], 1);
+            index += THREAD_SIZE;
+        }
+    }
+
+    doBarriers();
+}
+
+void calculateRunningSum(uint indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        int runningSum = 0;
+        for(int index = 0; index < 256; ++index)
+        {
+            int oldValue = sum[index];
+            sum[index] = runningSum;
+            runningSum += oldValue;
+        }
+    }
+    doBarriers();
+}
+
+void sortByte(uint indexInThreadGroup, int byteIndex)
+{
+    int shiftAmount = byteIndex * 8;
+    // from values1 to values 2
+    if((byteIndex % 2) == 0)
+    {
+        int currentIndex = sum[indexInThreadGroup];
+        for(int i = 0; i < MAX_AMOUNT; ++i)
+        {
+            int value = values1[i];
+            if(((value >> shiftAmount) & 0xff) == indexInThreadGroup)
+            {
+                values2[currentIndex] = value;
+                currentIndex++;
+            }
+        }
+    }
+    else
+    {
+        int currentIndex = sum[indexInThreadGroup];
+        for(int i = 0; i < MAX_AMOUNT; ++i)
+        {
+            int v = values2[i];
+            if(((v >> shiftAmount) & 0xff) == indexInThreadGroup)
+            {
+                values1[currentIndex] = v;
+                currentIndex++;
+            }
+        }
+    }
+    doBarriers();
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    //uint groupThreadIndex = gl_WorkGroupID.x;
+
+    // read data in
+    {
+        uint index = indexInThreadGroup;
+        while(index < MAX_AMOUNT)
+        {
+            int value = dataIn[index];
+            values1[index] = value;
+            index += THREAD_SIZE;
+        }
+    }
+
+    for(int i = 0; i < 4; ++i)
+    {
+        calculateAmounts(indexInThreadGroup, i);
+        calculateRunningSum(indexInThreadGroup);
+        sortByte(indexInThreadGroup, i);
+    }
+
+    // Write out
+    {
+        uint index = indexInThreadGroup;
+        while(index < MAX_AMOUNT)
+        {
+            dataOut[index] = values2[index];
+            index += THREAD_SIZE;
+        }
+    }
+
+}
+

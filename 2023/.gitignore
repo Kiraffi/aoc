@@ -33,3 +33,4 @@
 
 cmake-*/**
 */input.cpp
+build/**

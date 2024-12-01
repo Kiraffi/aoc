@@ -35,5 +35,9 @@ a.out
 target
 zig-cache
 zig-out
+*.input
+.zig-cache/
+
+build/
 
 */*/data.txt
