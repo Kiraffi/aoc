@@ -15,6 +15,8 @@
 #include "parsenumbers_comp.h"
 #include "radixsort_comp.h"
 
+#include "simplesort_comp.h"
+
 #include "commonrender.h"
 
 
@@ -42,6 +44,8 @@ enum PipelineEnum
     PipelineInputParseNumbers,
 
     PipelineRadix,
+    PipelineSimpleSort,
+
     Pipelined01a,
     Pipelined01b,
 
@@ -189,6 +193,7 @@ bool initCompute()
         s_pipelines[PipelineInputFindNumbers] = createComputePipeline(findnumbers_comp, sizeof(findnumbers_comp), 256, 2, 1);
         s_pipelines[PipelineInputParseNumbers] = createComputePipeline(parsenumbers_comp, sizeof(parsenumbers_comp), 256, 4, 0);
         s_pipelines[PipelineRadix] = createComputePipeline(radixsort_comp, sizeof(radixsort_comp), 256, 2, 1);
+        s_pipelines[PipelineSimpleSort] = createComputePipeline(simplesort_comp, sizeof(simplesort_comp), 1024, 2, 1);
         s_pipelines[Pipelined01a] = createComputePipeline(d01a_comp, sizeof(d01a_comp), 1024, 3, 0);
         s_pipelines[Pipelined01b] = createComputePipeline(d01b_comp, sizeof(d01b_comp), 1024, 3, 0);
     }
@@ -270,7 +275,8 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineRadix]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineSimpleSort]);
+            //SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineRadix]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
@@ -316,8 +322,8 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 buffers,
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
-
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineRadix]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineSimpleSort]);
+            //SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineRadix]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
         }

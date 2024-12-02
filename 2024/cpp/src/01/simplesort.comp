@@ -1,0 +1,97 @@
+#version 450 core
+
+#define MATRIX_ORDER row_major
+//#define MATRIX_ORDER column_major
+
+shared ivec4 values1[2048 / 4];
+
+#define THREAD_SIZE 1024
+
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSize;
+    int dataSize2;
+};
+
+layout (set = 1, binding = 0) restrict buffer DataIn
+{
+    ivec4 dataIn[];
+};
+
+layout (set = 1, binding = 1) restrict buffer DataOut
+{
+    int dataOut[];
+};
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    //uint groupThreadIndex = gl_WorkGroupID.x;
+
+    // read data in
+    {
+        uint index = indexInThreadGroup;
+        while(index < dataSize / 4)
+        {
+            values1[index] = dataIn[index];
+            index += THREAD_SIZE;
+        }
+        doBarriers();
+    }
+    // calculate how many smaller values there are by using highest bit when a < b,
+    // value is negative if a - b, and thus highest bit set.
+    {
+        uint index = indexInThreadGroup;
+        while(index < dataSize)
+        {
+            ivec4 ind4 = ivec4(index, index, index, index);
+            int value = values1[index / 4][index % 4];
+            ivec4 values = ivec4(value, value, value, value);
+
+            ivec4 smallers = ivec4(0, 0, 0, 0);
+            ivec4 indexes = ivec4(0, 1, 2, 3);
+            int loop = 0;
+            while(loop < dataSize / 4)
+            {
+                ivec4 loopValues = values1[loop];
+
+                // If the index is earlier
+                ivec4 decs = indexes - ind4;
+                decs = decs >> ivec4(31, 31, 31, 31);
+                decs = decs & ivec4(1, 1, 1, 1); // For some reason these do make difference
+
+                // we adjust the earlier indexes
+                ivec4 diffs = loopValues - values - decs;
+                diffs = diffs >> ivec4(31, 31, 31, 31);
+                diffs = diffs & ivec4(1, 1, 1, 1);
+                smallers += diffs;
+
+                indexes += ivec4(4, 4, 4, 4);
+                ++loop;
+            }
+
+
+            // Write out
+            {
+                int writeIndex = smallers.x + smallers.y + smallers.z + smallers.w;
+                dataOut[writeIndex] = value;
+            }
+
+            index += THREAD_SIZE;
+        }
+    }
+
+
+}
+
