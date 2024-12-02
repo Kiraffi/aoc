@@ -279,6 +279,14 @@ static bool initRenderState()
     );
     s_appState.m_device = gpuDevice;
 
+#if VSYNC_OFF
+    // VSync off
+    SDL_SetGPUSwapchainParameters(
+        gpuDevice,
+        getWindow(),
+        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        SDL_GPU_PRESENTMODE_IMMEDIATE);
+#endif
 
     /* create a depth texture for the window */
     Uint32 drawablew, drawableh;
