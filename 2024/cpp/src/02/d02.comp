@@ -1,0 +1,189 @@
+#version 450 core
+
+#define MATRIX_ORDER row_major
+//#define MATRIX_ORDER column_major
+
+#define THREAD_SIZE 1024
+
+#define LINE_AMOUNT 1000
+
+shared int sharedLineBreaks[1024];
+shared int sharedCount;
+
+shared int sharedSafeA;
+shared int sharedSafeB;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// result, 2 ints
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    int dataOut1[];
+};
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int getNumber(int inputIndex)
+{
+    int value = dataIn1[inputIndex / 4];
+    int c = (value >> ((inputIndex % 4) * 8)) & 0xff;
+
+    // '0' == 48, '9' == 57
+    return c - 48;
+}
+
+bool isLineBreak(int inputIndex)
+{
+    int value = dataIn1[inputIndex / 4];
+    int c = (value >> ((inputIndex % 4) * 8)) & 0xff;
+
+    // new line
+    return c == 10;
+}
+
+void addLineBreak(int pos)
+{
+    int memPos = atomicAdd(sharedCount, 1);
+    sharedLineBreaks[memPos] = pos;
+}
+
+int checkChange(int numbers[8], int numberCount)
+{
+    int result = 0;
+    // Start index, we want to potentially skip first index, if first index needs to be removed.
+    for(int j = 0; j < 2; ++j)
+    {
+        int ascCount = 0;
+        int decCount = 0;
+        int prev = numbers[j];
+        for(int i = j + 1; i < numberCount; ++i)
+        {
+            int curr = numbers[i];
+            int diff = prev - curr;
+            if(diff > 0 && diff <= 3)
+            {
+                ++ascCount;
+                prev = curr;
+            }
+            else if(diff < 0 && diff >= -3)
+            {
+                ++decCount;
+                prev = curr;
+            }
+        }
+        int count = max(ascCount, decCount);
+        result = max(result, count);
+    }
+    return result;
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    //uint groupThreadIndex = gl_WorkGroupID.x;
+
+    if(indexInThreadGroup == 0)
+    {
+        sharedCount = 0;
+        sharedSafeA = 0;
+        sharedSafeB = 0;
+    }
+    doBarriers();
+    // Find line breaks
+    {
+        int index = int(indexInThreadGroup);
+        while(index < dataSizeInputBytes / 4)
+        {
+            if(isLineBreak(index * 4 + 0)) addLineBreak(index * 4 + 0);
+            if(isLineBreak(index * 4 + 1)) addLineBreak(index * 4 + 1);
+            if(isLineBreak(index * 4 + 2)) addLineBreak(index * 4 + 2);
+            if(isLineBreak(index * 4 + 3)) addLineBreak(index * 4 + 3);
+
+            index += THREAD_SIZE;
+        }
+        doBarriers();
+    }
+
+    {
+        int numbers[8];
+        int index = int(indexInThreadGroup);
+
+        while(index < LINE_AMOUNT)
+        {
+            // Parse numbers, read from right to left
+            int charIndex = sharedLineBreaks[index] - 1;
+            int endIndex = charIndex;
+
+            int number = 0;
+            int numberCount = 0;
+            int multiplier = 1;
+
+            while(charIndex >= 0 && !isLineBreak(charIndex))
+            {
+                int n = getNumber(charIndex);
+                if(n >= 0 && n <= 9)
+                {
+                    number += multiplier * n;
+                    multiplier *= 10;
+                }
+                else
+                {
+                    numbers[numberCount] = number;
+                    number = 0;
+                    numberCount++;
+                    multiplier = 1;
+                }
+                --charIndex;
+            }
+            // Add last number
+            numbers[numberCount] = number;
+            numberCount++;
+
+            // check ascending or decreasing
+            {
+                int count = checkChange(numbers, numberCount);
+                if(count == numberCount - 1)
+                {
+                    atomicAdd(sharedSafeA, 1);
+                }
+                if(count >= numberCount - 2)
+                {
+                    atomicAdd(sharedSafeB, 1);
+                }
+            }
+
+
+
+            index += THREAD_SIZE;
+        }
+        doBarriers();
+    }
+
+    if(indexInThreadGroup == 0)
+    {
+        dataOut1[0] = sharedSafeA;
+        dataOut1[1] = sharedSafeB;
+    }
+    doBarriers();
+
+}
+
