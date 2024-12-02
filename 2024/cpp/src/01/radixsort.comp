@@ -3,13 +3,19 @@
 #define MATRIX_ORDER row_major
 //#define MATRIX_ORDER column_major
 
-#define MAX_AMOUNT 1000
-
-shared int values1[1024];
-shared int values2[1024];
+shared int values1[2048];
+shared int values2[2048];
 shared int sum[256];
 
 #define THREAD_SIZE 256
+
+// set 2 for uniform buffers?
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSize;
+    int dataSize2;
+};
+
 
 // using the std140 and MATRIX_ORDER,
 // it seems to count every int line as 16 bytes in renderdoc atleast
@@ -47,7 +53,7 @@ void calculateAmounts(uint indexInThreadGroup, int radixCount)
     uint index = indexInThreadGroup;
     if((radixCount % 2) == 0)
     {
-        while(index < MAX_AMOUNT)
+        while(index < dataSize)
         {
             int value = values1[index];
             atomicAdd(sum[((value >> shiftAmount) & 0xff)], 1);
@@ -56,7 +62,7 @@ void calculateAmounts(uint indexInThreadGroup, int radixCount)
     }
     else
     {
-        while(index < MAX_AMOUNT)
+        while(index < dataSize)
         {
             int value = values2[index];
             atomicAdd(sum[((value >> shiftAmount) & 0xff)], 1);
@@ -89,7 +95,7 @@ void sortByte(uint indexInThreadGroup, int byteIndex)
     if((byteIndex % 2) == 0)
     {
         int currentIndex = sum[indexInThreadGroup];
-        for(int i = 0; i < MAX_AMOUNT; ++i)
+        for(int i = 0; i < dataSize; ++i)
         {
             int value = values1[i];
             if(((value >> shiftAmount) & 0xff) == indexInThreadGroup)
@@ -102,7 +108,7 @@ void sortByte(uint indexInThreadGroup, int byteIndex)
     else
     {
         int currentIndex = sum[indexInThreadGroup];
-        for(int i = 0; i < MAX_AMOUNT; ++i)
+        for(int i = 0; i < dataSize; ++i)
         {
             int v = values2[i];
             if(((v >> shiftAmount) & 0xff) == indexInThreadGroup)
@@ -124,7 +130,7 @@ void main()
     // read data in
     {
         uint index = indexInThreadGroup;
-        while(index < MAX_AMOUNT)
+        while(index < dataSize)
         {
             int value = dataIn[index];
             values1[index] = value;
@@ -142,7 +148,7 @@ void main()
     // Write out
     {
         uint index = indexInThreadGroup;
-        while(index < MAX_AMOUNT)
+        while(index < dataSize)
         {
             dataOut[index] = values2[index];
             index += THREAD_SIZE;

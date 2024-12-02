@@ -465,6 +465,34 @@ bool downloadGPUBuffer(uint8_t* dstData, SDL_GPUBuffer* srcGpuBuffer, uint32_t s
 
 }
 
+SDL_GPUComputePipeline* createComputePipeline(
+    const uint32_t* code,
+    uint32_t codeSize,
+    uint32_t workgroupSize,
+    uint32_t bufferAmount,
+    uint32_t uniformBufferAmount)
+{
+    SDL_GPUComputePipelineCreateInfo newCreateInfo =
+    {
+        .code_size = codeSize,
+        .code = (const uint8_t*)code,
+        .entrypoint = "main",
+        .format = SDL_GPU_SHADERFORMAT_SPIRV,
+        .num_readwrite_storage_buffers = bufferAmount,
+        .num_uniform_buffers = uniformBufferAmount,
+        .threadcount_x = workgroupSize,
+        .threadcount_y = 1,
+        .threadcount_z = 1,
+    };
+
+    SDL_GPUComputePipeline* pipeline = SDL_CreateGPUComputePipeline(getGpuDevice(), &newCreateInfo);
+    if (pipeline == nullptr)
+    {
+        SDL_Log("Failed to create compute pipeline!");
+    }
+    return pipeline;
+}
+
 
 
 SDL_GPUDevice* getGpuDevice()

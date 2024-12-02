@@ -1,0 +1,95 @@
+#version 450 core
+
+#define MATRIX_ORDER row_major
+//#define MATRIX_ORDER column_major
+
+#define THREAD_SIZE 256
+
+
+shared int sharedCount;
+
+// set 2 for uniform buffers?
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSize;
+    int dataSizeInput;
+};
+
+
+// using the std140 and MATRIX_ORDER,
+// it seems to count every int line as 16 bytes in renderdoc atleast
+//layout (std140, set = 1, binding = 0, MATRIX_ORDER) restrict buffer DataIn
+
+
+// Set 1 seems to be buffer read and write
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// outamount should be 2000 ints
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    int dataOut1[];
+};
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+bool isNumber(int c)
+{
+    // '0' == 48, '9' == 57
+    return c >= 48 && c <= 57;
+}
+
+void addNumber(int pos)
+{
+    int memPos = atomicAdd(sharedCount, 1);
+    dataOut1[memPos] = pos;
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    //uint groupThreadIndex = gl_WorkGroupID.x;
+
+    if(indexInThreadGroup == 0)
+    {
+        sharedCount = 0;
+    }
+    doBarriers();
+
+    {
+        int index = int(indexInThreadGroup);
+        while(index < dataSizeInput / 4)
+        {
+            int prev = 0;
+            if(index > 0)
+            {
+                prev = dataIn1[index - 1];
+            }
+            int curr = dataIn1[index];
+            bool n0 = isNumber((prev >> 24) & 0xff);
+            bool n1 = isNumber((curr >> 0) & 0xff);
+            bool n2 = isNumber((curr >> 8) & 0xff);
+            bool n3 = isNumber((curr >> 16) & 0xff);
+            bool n4 = isNumber((curr >> 24) & 0xff);
+
+            if(!n0 && n1) addNumber(index * 4 + 0);
+            if(!n1 && n2) addNumber(index * 4 + 1);
+            if(!n2 && n3) addNumber(index * 4 + 2);
+            if(!n3 && n4) addNumber(index * 4 + 3);
+
+            index += THREAD_SIZE;
+        }
+    }
+}
+

@@ -11,28 +11,73 @@
 
 #include "d01a_comp.h"
 #include "d01b_comp.h"
+#include "findnumbers_comp.h"
+#include "parsenumbers_comp.h"
 #include "radixsort_comp.h"
 
 #include "commonrender.h"
 
 
+enum BufferEnum : int
+{
+    BufferInput,
 
+    BufferInputNumbersPositions,
+    BufferInputNumbersPositionsSorted,
+
+    BufferLeft,
+    BufferLeftSorted,
+
+    BufferRight,
+    BufferRightSorted,
+
+    BufferResult,
+
+    BufferCount
+};
+
+enum PipelineEnum
+{
+    PipelineInputFindNumbers,
+    PipelineInputParseNumbers,
+
+    PipelineRadix,
+    Pipelined01a,
+    Pipelined01b,
+
+    PipelineCount
+};
 
 
 static const std::string s_Filename = "input/01.input";
 
 
-static SDL_GPUComputePipeline* s_radixPipeline = nullptr;
-static SDL_GPUComputePipeline* s_d01aPipeline = nullptr;
-static SDL_GPUComputePipeline* s_d01bPipeline = nullptr;
+static SDL_GPUComputePipeline* s_pipelines[PipelineCount] = {};
 
-static std::vector<SDL_GPUBuffer*> s_buffers;
+static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 
-int s_dataBuffer[1024] = {};
+static std::vector<char> s_input;
+
+
+static int s_dataBuffer[1024] = {};
 
 const char* getTitle()
 {
     return "AOC 2024 day 01";
+}
+
+static std::vector<char> readInputFile()
+{
+    std::vector<char> result;
+    std::ifstream file(s_Filename, std::ios::binary);
+    if(!file.is_open())
+    {
+        printf("Failed to open file\n");
+        return result;
+    }
+    result.assign(std::istreambuf_iterator<char>(file),
+        std::istreambuf_iterator<char>());
+    return result;
 }
 
 static std::vector<int> parseInts()
@@ -122,115 +167,30 @@ void d01()
 
 bool initCompute()
 {
-    std::vector<int> values = parseInts();
-    std::vector<int> left;
-    std::vector<int> right;
-    for(size_t i = 0; i < values.size(); i += 2)
+    s_input = readInputFile();
+
+    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
+
+    s_buffers[BufferInputNumbersPositions] = (createGPUWriteBuffer(2000 * sizeof(int), "InputPositions"));
+    s_buffers[BufferInputNumbersPositionsSorted] = (createGPUWriteBuffer(2000 * sizeof(int), "InputPositionsSorted"));
+
+    s_buffers[BufferLeft] = (createGPUWriteBuffer(1024 * sizeof(int), "Left"));
+    s_buffers[BufferLeftSorted] = (createGPUWriteBuffer(1024 * sizeof(int), "LeftSorted"));
+    s_buffers[BufferRight] = (createGPUWriteBuffer(1024 * sizeof(int), "Right"));
+    s_buffers[BufferRightSorted] = (createGPUWriteBuffer(1024 * sizeof(int), "RightSorted"));
+
+    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+
+    // upload the input data to a buffer
+    uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
+
+    // Create compute pipelines
     {
-        left.push_back(values[i + 0]);
-        right.push_back(values[i + 1]);
-    }
-
-    s_buffers.push_back(createGPUWriteBuffer(left.size() * sizeof(int), "Left"));
-    s_buffers.push_back(createGPUWriteBuffer(left.size() * sizeof(int), "LeftSorted"));
-    s_buffers.push_back(createGPUWriteBuffer(right.size() * sizeof(int), "Right"));
-    s_buffers.push_back(createGPUWriteBuffer(right.size() * sizeof(int), "RightSorted"));
-
-    s_buffers.push_back(createGPUWriteBuffer(1024, "ResultBuffer"));
-
-    uploadGPUBufferOneTimeInInit(s_buffers[0], (uint8_t*)left.data(), left.size() * sizeof(int));
-    uploadGPUBufferOneTimeInInit(s_buffers[2], (uint8_t*)right.data(), right.size() * sizeof(int));
-
-
-    {
-        /* compute works differently?
-        auto loadShader = []() -> SDL_GPUShader* {
-            SDL_GPUDevice* gpuDevice = getGpuDevice();
-            SDL_GPUShaderFormat format = SDL_GetGPUShaderFormats(gpuDevice);
-
-            SDL_GPUShaderCreateInfo createinfo = {
-                .code_size = sizeof(radixsort_comp),
-                .code = (const uint8_t*)radixsort_comp,
-                .entrypoint = "main",
-
-                .format = SDL_GPU_SHADERFORMAT_SPIRV,
-
-                .stage = SDL_GPU_SHADERSTAGE_COMPUTE,
-
-                .num_samplers = 0,
-                .num_storage_textures = 0,
-                .num_storage_buffers = 2u,
-                .num_uniform_buffers = 0u,
-
-                .props = 0,
-            };
-            return SDL_CreateGPUShader(gpuDevice, &createinfo);
-        };
-
-        SDL_GPUShader* radixShader = loadShader();
-        */
-        {
-            SDL_GPUComputePipelineCreateInfo newCreateInfo =
-            {
-                .code_size = sizeof(radixsort_comp),
-                .code = (const uint8_t*)radixsort_comp,
-                .entrypoint = "main",
-                .format = SDL_GPU_SHADERFORMAT_SPIRV,
-                .num_readwrite_storage_buffers = 2,
-                .threadcount_x = 256,
-                .threadcount_y = 1,
-                .threadcount_z = 1,
-            };
-
-            s_radixPipeline = SDL_CreateGPUComputePipeline(getGpuDevice(), &newCreateInfo);
-            if (s_radixPipeline == NULL)
-            {
-                SDL_Log("Failed to create compute pipeline!");
-                return false;
-            }
-        }
-        {
-            SDL_GPUComputePipelineCreateInfo newCreateInfo =
-            {
-                .code_size = sizeof(d01a_comp),
-                .code = (const uint8_t*)d01a_comp,
-                .entrypoint = "main",
-                .format = SDL_GPU_SHADERFORMAT_SPIRV,
-                .num_readwrite_storage_buffers = 3,
-                .threadcount_x = 1024,
-                .threadcount_y = 1,
-                .threadcount_z = 1,
-            };
-
-            s_d01aPipeline = SDL_CreateGPUComputePipeline(getGpuDevice(), &newCreateInfo);
-            if (s_d01aPipeline == NULL)
-            {
-                SDL_Log("Failed to create compute pipeline!");
-                return false;
-            }
-        }
-
-        {
-            SDL_GPUComputePipelineCreateInfo newCreateInfo =
-            {
-                .code_size = sizeof(d01b_comp),
-                .code = (const uint8_t*)d01b_comp,
-                .entrypoint = "main",
-                .format = SDL_GPU_SHADERFORMAT_SPIRV,
-                .num_readwrite_storage_buffers = 3,
-                .threadcount_x = 1024,
-                .threadcount_y = 1,
-                .threadcount_z = 1,
-            };
-
-            s_d01bPipeline = SDL_CreateGPUComputePipeline(getGpuDevice(), &newCreateInfo);
-            if (s_d01bPipeline == NULL)
-            {
-                SDL_Log("Failed to create compute pipeline!");
-                return false;
-            }
-        }
-
+        s_pipelines[PipelineInputFindNumbers] = createComputePipeline(findnumbers_comp, sizeof(findnumbers_comp), 256, 2, 1);
+        s_pipelines[PipelineInputParseNumbers] = createComputePipeline(parsenumbers_comp, sizeof(parsenumbers_comp), 256, 4, 0);
+        s_pipelines[PipelineRadix] = createComputePipeline(radixsort_comp, sizeof(radixsort_comp), 256, 2, 1);
+        s_pipelines[Pipelined01a] = createComputePipeline(d01a_comp, sizeof(d01a_comp), 1024, 3, 0);
+        s_pipelines[Pipelined01b] = createComputePipeline(d01b_comp, sizeof(d01b_comp), 1024, 3, 0);
     }
 
 
@@ -246,17 +206,17 @@ bool initData()
 void deinitData()
 {
     SDL_GPUDevice* gpuDevice = getGpuDevice();
-    SDL_ReleaseGPUComputePipeline(gpuDevice, s_radixPipeline);
-    SDL_ReleaseGPUComputePipeline(gpuDevice, s_d01aPipeline);
-    SDL_ReleaseGPUComputePipeline(gpuDevice, s_d01bPipeline);
-
-    s_radixPipeline = s_d01aPipeline = s_d01bPipeline = nullptr;
+    for(SDL_GPUComputePipeline* pipeline : s_pipelines)
+    {
+        if(pipeline != nullptr)
+            SDL_ReleaseGPUComputePipeline(gpuDevice, pipeline);
+    }
 
     for(SDL_GPUBuffer* buffer : s_buffers)
     {
-        SDL_ReleaseGPUBuffer(gpuDevice, buffer);
+        if(buffer != nullptr)
+            SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
-    s_buffers.clear();
 
 
     printf("01-a compute difference: %i\n", s_dataBuffer[0]);
@@ -265,48 +225,127 @@ void deinitData()
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-    // Do radix sorting
-    for(int i = 0; i < 2; ++i)
+    struct DataSize
     {
-        SDL_GPUStorageBufferReadWriteBinding buffers[] = {
-            { .buffer = s_buffers[0 + i * 2] },
-            { .buffer = s_buffers[1 + i * 2] }
-        };
-        SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
-            cmd,
-            nullptr,
-            0,
-            buffers,
-            sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
-        );
+        int dataNumbers = 1000;
+        int dataSize2;
+    };
+    DataSize dataSize = {
+        .dataNumbers = 2000,
+        .dataSize2 = (int)s_input.size(),
+    };
+    SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
+    {
+        // Find number positions
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferInput] },
+                { .buffer = s_buffers[BufferInputNumbersPositions] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
 
-        SDL_BindGPUComputePipeline(computePass, s_radixPipeline);
-        SDL_DispatchGPUCompute(computePass, 1, 1, 1);
-        SDL_EndGPUComputePass(computePass);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineInputFindNumbers]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+
+        // Radix sort number positions
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferInputNumbersPositions] },
+                { .buffer = s_buffers[BufferInputNumbersPositionsSorted] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineRadix]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+
+        // parse number
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferInput] },
+                { .buffer = s_buffers[BufferInputNumbersPositionsSorted] },
+                { .buffer = s_buffers[BufferLeft] },
+                { .buffer = s_buffers[BufferRight] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineInputParseNumbers]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+    }
+    dataSize.dataNumbers = 1000;
+    SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
+
+    {
+        // Do radix sorting for the numbers
+        for(int i = 0; i < 2; ++i)
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferLeft + i * 2] },
+                { .buffer = s_buffers[BufferLeftSorted + i * 2] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineRadix]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+        }
+
+        // 01a, o1b
+        for(int i = 0; i < 2; ++i)
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferLeftSorted] },
+                { .buffer = s_buffers[BufferRightSorted] },
+                { .buffer = s_buffers[BufferResult] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[Pipelined01a + i]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+        }
     }
 
-    // 01a, o1b
-    for(int i = 0; i < 2; ++i)
-    {
-        SDL_GPUStorageBufferReadWriteBinding buffers[] = {
-            { .buffer = s_buffers[1] },
-            { .buffer = s_buffers[3] },
-            { .buffer = s_buffers[4] }
-        };
-        SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
-            cmd,
-            nullptr,
-            0,
-            buffers,
-            sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
-        );
-
-        SDL_BindGPUComputePipeline(computePass, i == 0 ? s_d01aPipeline : s_d01bPipeline);
-        SDL_DispatchGPUCompute(computePass, 1, 1, 1);
-        SDL_EndGPUComputePass(computePass);
-    }
-
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[4], 1024);
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
     //if(index > 100)
     //    return false;

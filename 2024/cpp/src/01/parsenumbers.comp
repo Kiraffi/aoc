@@ -1,0 +1,93 @@
+#version 450 core
+
+#define MATRIX_ORDER row_major
+//#define MATRIX_ORDER column_major
+
+#define THREAD_SIZE 256
+
+#define MAX_AMOUNT 2000
+
+// using the std140 and MATRIX_ORDER,
+// it seems to count every int line as 16 bytes in renderdoc atleast
+//layout (std140, set = 1, binding = 0, MATRIX_ORDER) restrict buffer DataIn
+
+
+// Set 1 seems to be buffer read and write
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+layout (set = 1, binding = 1) restrict buffer DataIn2
+{
+    int dataIn2[];
+};
+
+// outamount should be 1000 ints
+layout (set = 1, binding = 2) restrict buffer DataOut1
+{
+    int dataOut1[];
+};
+
+layout (set = 1, binding = 3) restrict buffer DataOut2
+{
+    int dataOut2[];
+};
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+bool isNumber(int c)
+{
+    // '0' == 48, '9' == 57
+    return c >= 48 && c <= 57;
+}
+
+int parseNumber(int numberPos)
+{
+    int resultNumber = 0;
+
+    int num = dataIn1[numberPos / 4];
+    bool wasNumber = true;
+    while(wasNumber)
+    {
+        int digit = (num >> ((numberPos % 4) * 8)) & 0xff;
+        wasNumber = isNumber(digit);
+        if(wasNumber)
+        {
+            resultNumber = resultNumber * 10 + (digit - 48);
+        }
+        ++numberPos;
+        if((numberPos % 4) == 0)
+        {
+            num = dataIn1[numberPos / 4];
+        }
+    }
+    return resultNumber;
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    //uint groupThreadIndex = gl_WorkGroupID.x;
+
+
+    {
+        int index = int(indexInThreadGroup);
+        while(index < 2000)
+        {
+            int numberPos1 = dataIn2[index * 2 + 0];
+            int numberPos2 = dataIn2[index * 2 + 1];
+            dataOut1[index] = parseNumber(numberPos1);
+            dataOut2[index] = parseNumber(numberPos2);
+            index += THREAD_SIZE;
+        }
+    }
+}
+
