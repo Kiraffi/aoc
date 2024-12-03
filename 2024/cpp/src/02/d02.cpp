@@ -18,7 +18,7 @@
 #include "radixsort_comp.h"
 */
 #include "commonrender.h"
-
+#include "commons.h"
 
 enum BufferEnum : int
 {
@@ -43,7 +43,8 @@ static SDL_GPUComputePipeline* s_pipelines[PipelineCount] = {};
 
 static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 
-static std::vector<char> s_input;
+static std::string s_input = readInputFile(s_Filename);
+
 
 
 static int s_dataBuffer[1024] = {};
@@ -51,20 +52,6 @@ static int s_dataBuffer[1024] = {};
 const char* getTitle()
 {
     return "AOC 2024 day 02";
-}
-
-static std::vector<char> readInputFile()
-{
-    std::vector<char> result;
-    std::ifstream file(s_Filename, std::ios::binary);
-    if(!file.is_open())
-    {
-        printf("Failed to open file\n");
-        return result;
-    }
-    result.assign(std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>());
-    return result;
 }
 
 static std::vector<std::vector<int>> parseInts()
@@ -196,13 +183,11 @@ void d02()
 
 bool initCompute()
 {
-    s_input = readInputFile();
-
-    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
+    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.length(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
     // upload the input data to a buffer
-    uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
+    uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.length());
 
     // Create compute pipelines
     {
@@ -247,7 +232,7 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     };
 
     DataSize dataSize = {
-        .inputBytes = (int)s_input.size(),
+        .inputBytes = (int)s_input.length(),
     };
     SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
     {

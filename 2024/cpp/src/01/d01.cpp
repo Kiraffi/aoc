@@ -9,6 +9,8 @@
 #include <SDL3/SDL_main.h>
 
 
+
+
 #include "d01a_comp.h"
 #include "d01b_comp.h"
 #include "findnumbers_comp.h"
@@ -17,6 +19,7 @@
 
 #include "simplesort_comp.h"
 
+#include "commons.h"
 #include "commonrender.h"
 
 
@@ -60,7 +63,7 @@ static SDL_GPUComputePipeline* s_pipelines[PipelineCount] = {};
 
 static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 
-static std::vector<char> s_input;
+static std::string s_input = readInputFile(s_Filename);
 
 
 static int s_dataBuffer[1024] = {};
@@ -68,20 +71,6 @@ static int s_dataBuffer[1024] = {};
 const char* getTitle()
 {
     return "AOC 2024 day 01";
-}
-
-static std::vector<char> readInputFile()
-{
-    std::vector<char> result;
-    std::ifstream file(s_Filename, std::ios::binary);
-    if(!file.is_open())
-    {
-        printf("Failed to open file\n");
-        return result;
-    }
-    result.assign(std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>());
-    return result;
 }
 
 static std::vector<int> parseInts()
@@ -171,9 +160,7 @@ void d01()
 
 bool initCompute()
 {
-    s_input = readInputFile();
-
-    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
+    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.length(), "Input"));
 
     s_buffers[BufferInputNumbersPositions] = (createGPUWriteBuffer(2000 * sizeof(int), "InputPositions"));
     s_buffers[BufferInputNumbersPositionsSorted] = (createGPUWriteBuffer(2000 * sizeof(int), "InputPositionsSorted"));
@@ -186,7 +173,7 @@ bool initCompute()
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
     // upload the input data to a buffer
-    uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
+    uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.length());
 
     // Create compute pipelines
     {
@@ -237,7 +224,7 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     };
     DataSize dataSize = {
         .dataNumbers = 2000,
-        .dataSize2 = (int)s_input.size(),
+        .dataSize2 = (int)s_input.length(),
     };
     SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
     {

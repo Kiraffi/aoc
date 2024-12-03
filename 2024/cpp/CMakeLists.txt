@@ -70,6 +70,7 @@ function(make_prog exe prog)
     add_executable(${exe}
         ${SHADERS}
         ${prog}
+        src/commons.cpp
         src/commonrender.cpp
     )
 

@@ -17,6 +17,7 @@
 #include "parsenumbers_comp.h"
 #include "radixsort_comp.h"
 */
+#include "commons.h"
 #include "commonrender.h"
 
 
@@ -43,7 +44,7 @@ static SDL_GPUComputePipeline* s_pipelines[PipelineCount] = {};
 
 static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 
-static std::vector<char> s_input;
+static std::string s_input = readInputFile(s_Filename);
 
 
 static int s_dataBuffer[1024] = {};
@@ -53,68 +54,55 @@ const char* getTitle()
     return "AOC 2024 day 03";
 }
 
-static std::vector<char> readInputFile()
+static int getMul(int pos)
 {
-    std::vector<char> result;
-    std::ifstream file(s_Filename, std::ios::binary);
-    if(!file.is_open())
+    int num1 = 0;
+    int num2 = 0;
+    bool valid = false;
+    while(isdigit(s_input[pos]))
     {
-        printf("Failed to open file\n");
-        return result;
+        num1 = num1 * 10 + (s_input[pos] - '0');
+        valid = true;
+        pos++;
     }
-    result.assign(std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>());
-    return result;
+    if(!valid)
+    {
+        return 0;
+    }
+    if(s_input[pos] != ',')
+    {
+        return 0;
+    }
+    ++pos;
+    valid = false;
+    while(isdigit(s_input[pos]))
+    {
+        num2 = num2 * 10 + (s_input[pos] - '0');
+        valid = true;
+        pos++;
+    }
+    if(!valid)
+    {
+        return 0;
+    }
+    if(s_input[pos] != ')')
+    {
+        return 0;
+    }
+    return num1 * num2;
 }
-
 
 static void d03a()
 {
-    std::vector<char> input = readInputFile();
-    std::string s = input.data();
     int64_t sums = 0;
     int startIndex = 0;
-    while(startIndex < s.length())
+    while(startIndex < s_input.length())
     {
-        int pos = s.find("mul(", startIndex);
-        if(pos < s.length() && pos >= 0)
+        int pos = s_input.find("mul(", startIndex);
+        if(pos < s_input.length() && pos >= 0)
         {
             startIndex = pos + 1;
-            pos += 4;
-            int num1 = 0;
-            int num2 = 0;
-            bool valid = false;
-            while(isdigit(s[pos]))
-            {
-                num1 = num1 * 10 + (s[pos] - '0');
-                valid = true;
-                pos++;
-            }
-            if(!valid)
-            {
-                continue;
-            }
-            if(s[pos] != ',')
-            {
-                continue;
-            }
-            ++pos;
-            valid = false;
-            while(isdigit(s[pos]))
-            {
-                num2 = num2 * 10 + (s[pos] - '0');
-                valid = true;
-                pos++;
-            }
-            if(!valid)
-            {
-                continue;
-            }
-            if(s[pos] != ')')
-            {
-                continue;
-            }
-            sums += num1 * num2;
+            sums += getMul(pos + 4);
         }
         else
         {
@@ -127,20 +115,18 @@ static void d03a()
 
 static void d03b()
 {
-    std::vector<char> input = readInputFile();
-    std::string s = input.data();
     int64_t sums = 0;
 
     bool enabled = true;
 
     int startIndex = 0;
-    int nextDont = s.find("don't()", startIndex);
-    while(startIndex < s.length())
+    int nextDont = s_input.find("don't()", startIndex);
+    while(startIndex < s_input.length())
     {
         if(!enabled)
         {
-            int nextDo = s.find("do()", startIndex);
-            if(nextDo >= 0 && nextDo < s.length())
+            int nextDo = s_input.find("do()", startIndex);
+            if(nextDo >= 0 && nextDo < s_input.length())
             {
                 startIndex = nextDo + 1;
                 enabled = true;
@@ -150,9 +136,9 @@ static void d03b()
         }
         if(nextDont < startIndex)
         {
-            nextDont = s.find("don't()", startIndex);
+            nextDont = s_input.find("don't()", startIndex);
         }
-        int pos = s.find("mul(", startIndex);
+        int pos = s_input.find("mul(", startIndex);
 
         if(enabled && nextDont >= 0 && nextDont < pos)
         {
@@ -161,44 +147,10 @@ static void d03b()
             continue;
         }
 
-        if(pos < s.length() && pos >= 0)
+        if(pos < s_input.length() && pos >= 0)
         {
             startIndex = pos + 1;
-            pos += 4;
-            int num1 = 0;
-            int num2 = 0;
-            bool valid = false;
-            while(isdigit(s[pos]))
-            {
-                num1 = num1 * 10 + (s[pos] - '0');
-                valid = true;
-                pos++;
-            }
-            if(!valid)
-            {
-                continue;
-            }
-            if(s[pos] != ',')
-            {
-                continue;
-            }
-            ++pos;
-            valid = false;
-            while(isdigit(s[pos]))
-            {
-                num2 = num2 * 10 + (s[pos] - '0');
-                valid = true;
-                pos++;
-            }
-            if(!valid)
-            {
-                continue;
-            }
-            if(s[pos] != ')')
-            {
-                continue;
-            }
-            sums += num1 * num2;
+            sums += getMul(pos + 4);
         }
         else
         {
