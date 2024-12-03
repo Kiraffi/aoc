@@ -84,3 +84,4 @@ endfunction(make_prog)
 
 make_prog("01" "src/01/d01.cpp")
 make_prog("02" "src/02/d02.cpp")
+make_prog("03" "src/03/d03.cpp")
