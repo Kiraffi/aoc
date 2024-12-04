@@ -69,18 +69,18 @@ static void parse2d()
     }
 }
 
-char getChar(int x, int y)
+char isChar(int x, int y, char c)
 {
     if(y < 0 || y >= s_input2d.size())
     {
-        return '\0';
+        return false;
     }
     if(x < 0 || x >= s_input2d[y].size())
     {
-        return '\0';
+        return false;
     }
 
-    return (s_input2d[y])[x];
+    return (s_input2d[y])[x] == c;
 }
 
 bool checkWord(int x, int y, int dirX, int dirY, const std::string& findWord)
@@ -88,7 +88,7 @@ bool checkWord(int x, int y, int dirX, int dirY, const std::string& findWord)
     int len = findWord.length();
     for(int i = 0; i < len; ++i)
     {
-        if(getChar(x + dirX * i, y + dirY * i) != findWord[i])
+        if(!isChar(x + dirX * i, y + dirY * i, findWord[i]))
         {
             return false;
         }
@@ -135,7 +135,7 @@ static void a()
                 if(checkWord(x, y, -1,  1, s_findWord)) count++;
                 if(checkWord(x, y,  1, -1, s_findWord)) count++;
                 if(checkWord(x, y, -1, -1, s_findWord)) count++;
-                        }
+            }
         }
     }
     printf("04-a XMAS appears %i times.\n", int(count));
