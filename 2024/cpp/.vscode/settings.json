@@ -51,7 +51,8 @@
         "ctime": "cpp",
         "cwctype": "cpp",
         "iostream": "cpp",
-        "ratio": "cpp"
+        "ratio": "cpp",
+        "chrono": "cpp"
     },
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}"

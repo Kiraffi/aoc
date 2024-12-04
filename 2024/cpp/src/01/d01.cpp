@@ -92,7 +92,7 @@ static std::vector<int> parseInts()
 
 
 
-static void d01a()
+static void a()
 {
     std::vector<int> values = parseInts();
     std::vector<int> left;
@@ -113,7 +113,7 @@ static void d01a()
     printf("01-a difference: %i\n", diff);
 }
 
-static void d01b()
+static void b()
 {
     std::vector<int> values = parseInts();
     std::vector<int> left;
@@ -141,10 +141,10 @@ static void d01b()
     printf("01-b simularity: %i\n", diff);
 }
 
-void d01()
+static void doCpu()
 {
-    d01a();
-    d01b();
+    a();
+    b();
 }
 
 
@@ -191,7 +191,7 @@ bool initCompute()
 
 bool initData()
 {
-    d01();
+    doCpu();
     return initCompute();
 }
 

@@ -116,7 +116,7 @@ int testSafe(std::vector<int> values)
 }
 
 
-static void d02a()
+static void a()
 {
     std::vector<std::vector<int>> values = parseInts();
     int safe = 0;
@@ -133,7 +133,7 @@ static void d02a()
     printf("02-a safe ones: %i\n", safe);
 }
 
-static void d02b()
+static void b()
 {
     std::vector<std::vector<int>> values = parseInts();
     int safe = 0;
@@ -164,10 +164,10 @@ static void d02b()
     printf("02-b safe ones: %i\n", safe);
 }
 
-void d02()
+static void doCpu()
 {
-    d02a();
-    d02b();
+    a();
+    b();
 }
 
 
@@ -199,7 +199,7 @@ bool initCompute()
 
 bool initData()
 {
-    d02();
+    doCpu();
     return initCompute();
 }
 

@@ -37,7 +37,7 @@ enum PipelineEnum
 };
 
 
-static const std::string s_Filename = "input/03.input";
+static const std::string s_Filename = "input/04.input";
 
 
 static SDL_GPUComputePipeline* s_pipelines[PipelineCount] = {};
@@ -47,122 +47,119 @@ static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 static std::string s_input = readInputFile(s_Filename);
 
 
+static std::vector<std::string> s_input2d;
+
 static int s_dataBuffer[1024] = {};
 
 const char* getTitle()
 {
-    return "AOC 2024 day 03";
+    return "AOC 2024 day 04";
 }
 
-static int getMul(int pos)
+static void parse2d()
 {
-    int num1 = 0;
-    int num2 = 0;
-    bool valid = false;
-    while(isdigit(s_input[pos]))
+    int startChar = 0;
+    for(int i = 0; i < s_input.length(); ++i)
     {
-        num1 = num1 * 10 + (s_input[pos] - '0');
-        valid = true;
-        pos++;
+        if(s_input[i] == '\n')
+        {
+            s_input2d.push_back(s_input.substr(startChar, i - startChar));
+            startChar = i + 1;
+        }
     }
-    if(!valid)
+}
+
+char getChar(int x, int y)
+{
+    if(y < 0 || y >= s_input2d.size())
     {
-        return 0;
+        return '\0';
     }
-    if(s_input[pos] != ',')
+    if(x < 0 || x >= s_input2d[y].size())
     {
-        return 0;
+        return '\0';
     }
-    ++pos;
-    valid = false;
-    while(isdigit(s_input[pos]))
+
+    return (s_input2d[y])[x];
+}
+
+bool checkWord(int x, int y, int dirX, int dirY, const std::string& findWord)
+{
+    int len = findWord.length();
+    for(int i = 0; i < len; ++i)
     {
-        num2 = num2 * 10 + (s_input[pos] - '0');
-        valid = true;
-        pos++;
+        if(getChar(x + dirX * i, y + dirY * i) != findWord[i])
+        {
+            return false;
+        }
     }
-    if(!valid)
-    {
-        return 0;
-    }
-    if(s_input[pos] != ')')
-    {
-        return 0;
-    }
-    return num1 * num2;
+
+    return true;
+}
+
+bool checkMasFromA(int x, int y, int dirX, int dirY)
+{
+    static std::string s_findWord = "MAS";
+    return checkWord(x - dirX, y - dirY, dirX, dirY, s_findWord);
+}
+
+bool checkX_MAS(int x, int y)
+{
+    static std::string s_findWord = "MAS";
+    int count = 0;
+
+    if(checkMasFromA(x, y,  1,  1)) count++;
+    if(checkMasFromA(x, y, -1,  1)) count++;
+    if(checkMasFromA(x, y,  1, -1)) count++;
+    if(checkMasFromA(x, y, -1, -1)) count++;
+
+    return count >= 2;
 }
 
 static void a()
 {
-    int64_t sums = 0;
-    int startIndex = 0;
-    while(startIndex < s_input.length())
+    static std::string s_findWord = "XMAS";
+    int64_t count = 0;
+    for(int y = 0; y < s_input2d.size(); ++y)
     {
-        int pos = s_input.find("mul(", startIndex);
-        if(pos < s_input.length() && pos >= 0)
+        for(int x = 0; x < s_input2d[y].length(); ++x)
         {
-            startIndex = pos + 1;
-            sums += getMul(pos + 4);
-        }
-        else
-        {
-            break;
+            if((s_input2d[y])[x] == 'X')
+            {
+                if(checkWord(x, y,  1,  0, s_findWord)) count++;
+                if(checkWord(x, y, -1,  0, s_findWord)) count++;
+                if(checkWord(x, y,  0,  1, s_findWord)) count++;
+                if(checkWord(x, y,  0, -1, s_findWord)) count++;
+
+                if(checkWord(x, y,  1,  1, s_findWord)) count++;
+                if(checkWord(x, y, -1,  1, s_findWord)) count++;
+                if(checkWord(x, y,  1, -1, s_findWord)) count++;
+                if(checkWord(x, y, -1, -1, s_findWord)) count++;
+                        }
         }
     }
-
-    printf("03-a sum of muls: %i\n", int(sums));
+    printf("04-a XMAS appears %i times.\n", int(count));
 }
 
 static void b()
 {
-    int64_t sums = 0;
-
-    bool enabled = true;
-
-    int startIndex = 0;
-    int nextDont = s_input.find("don't()", startIndex);
-    while(startIndex < s_input.length())
+    int64_t count = 0;
+    for(int y = 0; y < s_input2d.size(); ++y)
     {
-        if(!enabled)
+        for(int x = 0; x < s_input2d[y].length(); ++x)
         {
-            int nextDo = s_input.find("do()", startIndex);
-            if(nextDo >= 0 && nextDo < s_input.length())
+            if((s_input2d[y])[x] == 'A')
             {
-                startIndex = nextDo + 1;
-                enabled = true;
-                continue;
+                if(checkX_MAS(x, y)) count++;
             }
-            break;
-        }
-        if(nextDont < startIndex)
-        {
-            nextDont = s_input.find("don't()", startIndex);
-        }
-        int pos = s_input.find("mul(", startIndex);
-
-        if(enabled && nextDont >= 0 && nextDont < pos)
-        {
-            enabled = false;
-            startIndex = nextDont + 1;
-            continue;
-        }
-
-        if(pos < s_input.length() && pos >= 0)
-        {
-            startIndex = pos + 1;
-            sums += getMul(pos + 4);
-        }
-        else
-        {
-            break;
         }
     }
-
-    printf("03-b sum of muls: %i\n", int(sums));
+    printf("04-b X-MAS appears %i times.\n", int(count));
 }
 
 static void doCpu()
 {
+    parse2d();
     a();
     b();
 }
