@@ -1,0 +1,243 @@
+#version 450 core
+
+#define THREAD_SIZE 256
+
+struct DataSumStruct
+{
+    int position;
+    int value;
+};
+
+shared DataSumStruct sharedSums[256];
+shared int sharedDoPositions[256];
+shared int sharedDontPositions[256];
+
+shared int sharedSumCount;
+shared int sharedDoCount;
+shared int sharedDontCount;
+
+shared int sharedSumOffset;
+shared int sharedDoOffset;
+shared int sharedDontOffset;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// { position, value } for sums
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    DataSumStruct outSumStructs[];
+};
+
+// Do positions
+layout (set = 1, binding = 2) restrict buffer DataOut2
+{
+    int outDoPositions[];
+};
+
+// Dont positions
+layout (set = 1, binding = 3) restrict buffer DataOut3
+{
+    int outDontPositions[];
+};
+
+// Atomic value buffer
+layout (set = 1, binding = 4) restrict buffer DataOut4
+{
+    int atomicCountSumValues;
+    int atomicCountDoLocations;
+    int atomicCountDontLocations;
+    int padding;
+    int atomicFinalSumA;
+    int atomicFinalSumB;
+    int padding2;
+    int padding3;
+};
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int makeIntFromChars(int a, int b, int c, int d)
+{
+    return a | (b << 8) | (c << 16) | (d << 24);
+}
+
+int readDataInput(int index)
+{
+    if(index / 4 >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    return dataIn1[(index / 4)];
+}
+
+// something like intrinsics could probably work here, having few threads
+// load all the data, then share it across all the threads in the wave
+ivec2 readTwoBytes(int byteIndex)
+{
+    int bytes0 = readDataInput(byteIndex + 0);
+    int bytes1 = readDataInput(byteIndex + 4);
+    int bytes2 = readDataInput(byteIndex + 8);
+
+    int offset = byteIndex % 4;
+    int word1 = (bytes0 >> (offset * 8)) | (bytes1 << (offset * 8));
+    int word2 = (bytes1 >> (offset * 8)) | (bytes2 << (offset * 8));
+
+    ivec2 result = ivec2(word1, word2);
+    return result;
+}
+
+int getCharacter(ivec2 data, int index)
+{
+    int value = index < 4 ? data.x : data.y;
+    return (value >> ((index % 4) * 8)) & 0xff;
+}
+
+int parseNumber(ivec2 data, inout int index, out int numberCount)
+{
+    numberCount = 0;
+    int result = 0;
+    // '0' == 48, '9' == 57
+    int c = getCharacter(data, index);
+    while(c >= 48 && c <= 57 && numberCount < 4)
+    {
+        result *= 10;
+        result += c - 48;
+        ++index;
+        ++numberCount;
+    }
+    return result;
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    uint globalIndex = gl_WorkGroupID.x * THREAD_SIZE + indexInThreadGroup;
+
+    if(indexInThreadGroup == 0)
+    {
+        sharedSumCount = 0;
+        sharedDoCount = 0;
+        sharedDontCount = 0;
+    }
+    doBarriers();
+    // Find stuff in string.
+    {
+        int sumWord = makeIntFromChars(0x73, 0x75, 0x6D, 0x28); // "sum("
+        int doWord = makeIntFromChars(0x64, 0x6F, 0x28, 0x29); // "do()"
+        ivec2 dontWord = ivec2( // "don't()"
+            makeIntFromChars(0x64, 0x6F, 0x6e, 0x47), // "don'"
+            makeIntFromChars(0x74, 0x28, 0x29, 0)); // "t()"
+
+        // since sumWord and doWord are 4 bytes long, no need for mask
+        ivec2 dontWordMask = ivec2(0xffffffff, 0x00ffffff);
+
+        // Also most likely not all bytes are even needed, the longest word is
+        // 7 characters, which needs minimum of 7 characters read, max 11.
+        ivec2 searchWord = readTwoBytes(int(globalIndex));
+
+        searchWord &= dontWordMask;
+        if(searchWord.x == sumWord)
+        {
+            int index = atomicAdd(sharedSumCount, 1);
+            sharedSums[index] = DataSumStruct(int(globalIndex) + 4, 0);
+        }
+
+        if(searchWord.x == doWord)
+        {
+            int index = atomicAdd(sharedDoCount, 1);
+            sharedDoPositions[index] = int(globalIndex) + 4;
+        }
+        if(searchWord == dontWord)
+        {
+            int index = atomicAdd(sharedDontCount, 1);
+            sharedDontPositions[index] = int(globalIndex) + 7;
+        }
+
+        doBarriers();
+    }
+
+    // Parse and calculate the sum in the string
+    {
+        if(indexInThreadGroup < sharedSumCount)
+        {
+            int startIndex = sharedSums[indexInThreadGroup].position;
+
+            // We read max 8 characters, (1..3 numbers, ',', 1..3 numbers, ')')
+            ivec2 parseBytes = readTwoBytes(startIndex);
+
+            ivec2 numbers = ivec2(0);
+            int dataIndex = 0;
+            int numberCount = 0;
+
+            numbers.x = parseNumber(parseBytes, dataIndex, numberCount);
+            bool valid = (numberCount > 0) && (numberCount <= 3);
+
+            valid = valid && (getCharacter(parseBytes, dataIndex) == 0x2C); // ',' = 0x2C
+            ++dataIndex;
+
+            numbers.y = parseNumber(parseBytes, dataIndex, numberCount);
+            valid = valid && (numberCount > 0 && numberCount <= 3);
+
+            valid = valid && getCharacter(parseBytes, dataIndex) == 0x29; // ')' = 0x29
+
+            sharedSums[indexInThreadGroup].value = valid
+                ? numbers.x * numbers.y
+                : 0;
+        }
+        doBarriers();
+    }
+
+    // Get atomic locations
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedSumOffset = atomicAdd(atomicCountSumValues, sharedSumCount);
+            sharedDoOffset = atomicAdd(atomicCountDoLocations, sharedDoCount);
+            sharedDontOffset = atomicAdd(atomicCountDontLocations, sharedDontCount);
+        }
+        doBarriers();
+    }
+
+    // Write values
+    {
+        if(indexInThreadGroup < sharedSumCount)
+        {
+            int readIndex = int(indexInThreadGroup);
+            int writeIndex = sharedSumOffset + readIndex;
+            outSumStructs[writeIndex] = sharedSums[readIndex];
+        }
+        // Maybe some of the writing could be threaded better?
+        if(indexInThreadGroup < sharedDoCount)
+        {
+            int readIndex = int(indexInThreadGroup);
+            int writeIndex = sharedDoOffset + readIndex;
+            outDoPositions[writeIndex] = sharedDoPositions[readIndex];
+        }
+
+        if(indexInThreadGroup < sharedDontCount)
+        {
+            int readIndex = int(indexInThreadGroup);
+            int writeIndex = sharedDoOffset + readIndex;
+            outDontPositions[writeIndex] = sharedDontPositions[readIndex];
+        }
+    }
+}
+
