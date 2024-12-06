@@ -1,0 +1,112 @@
+#version 450 core
+
+#define THREAD_SIZE 256
+
+struct DataSumStruct
+{
+    int position;
+    int value;
+};
+
+// { position, value } for sums
+layout (set = 1, binding = 0) restrict buffer DataOut1
+{
+    DataSumStruct sumStructs[];
+};
+
+// Do positions
+layout (set = 1, binding = 1) restrict buffer DataOut2
+{
+    int doPositions[];
+};
+
+// Dont positions
+layout (set = 1, binding = 2) restrict buffer DataOut3
+{
+    int dontPositions[];
+};
+
+// Atomic value buffer
+layout (set = 1, binding = 3) restrict buffer DataOut4
+{
+    int atomicCountSumValues;
+    int atomicCountDoLocations;
+    int atomicCountDontLocations;
+    int padding;
+    int atomicFinalSumA;
+    int atomicFinalSumB;
+    int padding2;
+    int padding3;
+};
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    uint indexInThreadGroup = gl_LocalInvocationID.x;
+    uint globalIndex = gl_WorkGroupID.x * THREAD_SIZE + indexInThreadGroup;
+
+    // Calculate sums.
+    {
+        int localSumA = 0;
+        int localSumB = 0;
+
+        int index = int(globalIndex);
+        int sumValueCount = atomicCountSumValues;
+        int doPositionCount = atomicCountDoLocations;
+        int dontPositionCount = atomicCountDontLocations;
+
+        while(index < sumValueCount)
+        {
+            int value = sumStructs[index].value;
+            int position = sumStructs[index].position;
+
+            // Make sure we start with enabled on
+            int minDo = 0;
+            int minDont = -1;
+
+            for(int i = 0; i < doPositionCount; ++i)
+            {
+                int doPosition = doPositions[i];
+                if(doPosition < position)
+                {
+                    minDo = max(doPosition, minDo);
+                }
+            }
+
+            for(int j = 0; j < dontPositionCount; ++j)
+            {
+                int dontPosition = dontPositions[j];
+                if(dontPosition < position)
+                {
+                    minDont = max(dontPosition, minDont);
+                }
+            }
+            localSumA += value;
+            if(minDont < minDo)
+            {
+                localSumB += value;
+                atomicAdd(padding2, 1);
+            }
+            else
+            {
+                atomicAdd(padding3, 1);
+            }
+            index += THREAD_SIZE;
+        }
+
+        {
+            atomicAdd(atomicFinalSumA, localSumA);
+            atomicAdd(atomicFinalSumB, localSumB);
+        }
+    }
+}
+

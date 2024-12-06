@@ -9,14 +9,10 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
+#include "atomic_buffers_reset_comp.h"
+#include "d03_calculate_sums_comp.h"
+#include "parse_sums_dos_donts_comp.h"
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
 #include "commons.h"
 #include "commonrender.h"
 
@@ -24,18 +20,33 @@
 enum BufferEnum : int
 {
     BufferInput,
-    BufferResult,
+
+    BufferSums,
+    BufferDos,
+    BufferDonts,
+
+    BufferAtomicResult,
 
     BufferCount
 };
 
 enum PipelineEnum
 {
+    PipelineAtomicBufferReset,
     PipelineParse,
+    PipelineCalculateSums,
 
     PipelineCount
 };
 
+
+static ComputePipelineInfo s_pipelineInfos[] =
+{
+    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
+    { BUF_N_SIZE(parse_sums_dos_donts_comp), 5, 1, 256 },
+    { BUF_N_SIZE(d03_calculate_sums_comp), 4, 0, 256 },
+};
+static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
 
 static const std::string s_Filename = "input/03.input";
 
@@ -180,18 +191,24 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
-    s_input = readInputFile();
-
+#if 1
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+
+    s_buffers[BufferSums] = (createGPUWriteBuffer(4096 * sizeof(int), "Sums"));
+    s_buffers[BufferDos] = (createGPUWriteBuffer(1024 * sizeof(int), "Dos"));
+    s_buffers[BufferDonts] = (createGPUWriteBuffer(1024 * sizeof(int), "Donts"));
+
+    s_buffers[BufferAtomicResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
     // Create compute pipelines
     {
-        s_pipelines[PipelineD02] = createComputePipeline(d02_comp, sizeof(d02_comp), 256, 2, 1);
+        for(int i = 0; i < PipelineCount; ++i)
+        {
+            s_pipelines[i] = createComputePipeline(s_pipelineInfos[i]);
+        }
     }
 #endif
     return true;
@@ -199,13 +216,15 @@ bool initCompute()
 
 bool initData()
 {
+    if((s_input.size() % 4) != 0)
+    {
+        int count = 4 - (s_input.size() % 4);
+        // cannot append \0...
+        for(int i = 0; i < count; ++i)
+            s_input.append("\1");
+    }
     doCpu();
-#if 0
-
     return initCompute();
-#else
-    return true;
-#endif
 }
 
 void deinitData()
@@ -223,15 +242,14 @@ void deinitData()
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
 
-
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
+    printf("03-a compute sum of muls: %i\n", s_dataBuffer[4]);
+    printf("03-b compute sum of muls: %i\n", s_dataBuffer[5]);
 
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -242,11 +260,10 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     };
     SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
     {
-        // Get values
+        // Atomic reset
         {
             SDL_GPUStorageBufferReadWriteBinding buffers[] = {
-                { .buffer = s_buffers[BufferInput] },
-                { .buffer = s_buffers[BufferResult] }
+                { .buffer = s_buffers[BufferAtomicResult] }
             };
             SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
                 cmd,
@@ -256,18 +273,60 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineAtomicBufferReset]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
         }
+        // Parse sums, dos and donts
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferInput] },
+                { .buffer = s_buffers[BufferSums] },
+                { .buffer = s_buffers[BufferDos] },
+                { .buffer = s_buffers[BufferDonts] },
+                { .buffer = s_buffers[BufferAtomicResult] },
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineParse]);
+            SDL_DispatchGPUCompute(computePass, (s_input.size() + 255) / 256, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+        // Calculate sums
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferSums] },
+                { .buffer = s_buffers[BufferDos] },
+                { .buffer = s_buffers[BufferDonts] },
+                { .buffer = s_buffers[BufferAtomicResult] },
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineCalculateSums]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+
     }
 
     // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferAtomicResult], 1024);
 
-    //if(index > 100)
-    //    return false;
 #endif
     return true;
 }

@@ -501,6 +501,15 @@ SDL_GPUComputePipeline* createComputePipeline(
     return pipeline;
 }
 
+SDL_GPUComputePipeline* createComputePipeline(const ComputePipelineInfo& info)
+{
+    return createComputePipeline(
+        info.m_code,
+        info.m_codeSize,
+        info.m_worgroupSize,
+        info.m_bufferAmount,
+        info.m_uniformBufferAmount);
+}
 
 
 SDL_GPUDevice* getGpuDevice()

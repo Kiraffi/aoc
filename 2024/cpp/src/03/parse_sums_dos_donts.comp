@@ -20,6 +20,9 @@ shared int sharedSumOffset;
 shared int sharedDoOffset;
 shared int sharedDontOffset;
 
+// could calculate the A sum in here, but doing it in other shader.
+// shared int sharedSumValue;
+
 // Input size.
 layout (set = 2, binding = 0) uniform DataSize
 {
@@ -79,11 +82,28 @@ int makeIntFromChars(int a, int b, int c, int d)
 
 int readDataInput(int index)
 {
-    if(index / 4 >= dataSizeInputBytes)
+    index /= 4;
+    if(index >= dataSizeInputBytes)
     {
         return 0;
     }
-    return dataIn1[(index / 4)];
+    return dataIn1[index];
+}
+
+int getInt(int low, int high, int charOffset)
+{
+    int offset = charOffset % 4;
+    int result = 0;
+
+    int lowmask = (1 << ((4 - offset) * 8 )) - 1;
+    int highmask = ~lowmask;
+    low >>= (offset * 8);
+    low &= lowmask;
+    high <<= ((4 - offset) * 8);
+    high &= highmask;
+
+    result = low | high;
+    return result;
 }
 
 // something like intrinsics could probably work here, having few threads
@@ -94,18 +114,24 @@ ivec2 readTwoBytes(int byteIndex)
     int bytes1 = readDataInput(byteIndex + 4);
     int bytes2 = readDataInput(byteIndex + 8);
 
-    int offset = byteIndex % 4;
-    int word1 = (bytes0 >> (offset * 8)) | (bytes1 << (offset * 8));
-    int word2 = (bytes1 >> (offset * 8)) | (bytes2 << (offset * 8));
+    //int low = getInt(bytes0, bytes1, byteIndex);
+    //int high = getInt(bytes1, bytes2, byteIndex);
 
-    ivec2 result = ivec2(word1, word2);
+    // seems to require checking against 0. Maybe shifting 32 bits does odd things.
+    int offset = byteIndex % 4;
+    int low = offset == 0 ? bytes0 : (bytes0 >> (offset * 8)) | (bytes1 << ((4 - offset) * 8));
+    int high = offset == 0 ? bytes1 : (bytes1 >> (offset * 8)) | (bytes2 << ((4 - offset) * 8));
+
+    ivec2 result = ivec2(low, high);
     return result;
 }
 
-int getCharacter(ivec2 data, int index)
+int parseCharacter(ivec2 data, inout int index)
 {
     int value = index < 4 ? data.x : data.y;
-    return (value >> ((index % 4) * 8)) & 0xff;
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+    ++index;
+    return result;
 }
 
 int parseNumber(ivec2 data, inout int index, out int numberCount)
@@ -113,14 +139,15 @@ int parseNumber(ivec2 data, inout int index, out int numberCount)
     numberCount = 0;
     int result = 0;
     // '0' == 48, '9' == 57
-    int c = getCharacter(data, index);
+    int c = parseCharacter(data, index);
     while(c >= 48 && c <= 57 && numberCount < 4)
     {
         result *= 10;
         result += c - 48;
-        ++index;
         ++numberCount;
+        c = parseCharacter(data, index);
     }
+    --index;
     return result;
 }
 
@@ -136,17 +163,18 @@ void main()
         sharedSumCount = 0;
         sharedDoCount = 0;
         sharedDontCount = 0;
+        // sharedSumValue = 0;
     }
     doBarriers();
     // Find stuff in string.
     {
-        int sumWord = makeIntFromChars(0x73, 0x75, 0x6D, 0x28); // "sum("
+        int sumWord = makeIntFromChars(0x6D, 0x75, 0x6C, 0x28); // "mul("
         int doWord = makeIntFromChars(0x64, 0x6F, 0x28, 0x29); // "do()"
         ivec2 dontWord = ivec2( // "don't()"
-            makeIntFromChars(0x64, 0x6F, 0x6e, 0x47), // "don'"
+            makeIntFromChars(0x64, 0x6F, 0x6e, 0x27), // "don'"
             makeIntFromChars(0x74, 0x28, 0x29, 0)); // "t()"
 
-        // since sumWord and doWord are 4 bytes long, no need for mask
+        // since sumWord and doWord are 4 bytes, no need for mask
         ivec2 dontWordMask = ivec2(0xffffffff, 0x00ffffff);
 
         // Also most likely not all bytes are even needed, the longest word is
@@ -163,12 +191,12 @@ void main()
         if(searchWord.x == doWord)
         {
             int index = atomicAdd(sharedDoCount, 1);
-            sharedDoPositions[index] = int(globalIndex) + 4;
+            sharedDoPositions[index] = int(globalIndex);
         }
         if(searchWord == dontWord)
         {
             int index = atomicAdd(sharedDontCount, 1);
-            sharedDontPositions[index] = int(globalIndex) + 7;
+            sharedDontPositions[index] = int(globalIndex);
         }
 
         doBarriers();
@@ -190,17 +218,19 @@ void main()
             numbers.x = parseNumber(parseBytes, dataIndex, numberCount);
             bool valid = (numberCount > 0) && (numberCount <= 3);
 
-            valid = valid && (getCharacter(parseBytes, dataIndex) == 0x2C); // ',' = 0x2C
-            ++dataIndex;
+            valid = valid && (parseCharacter(parseBytes, dataIndex) == 0x2C); // ',' = 0x2C
 
             numbers.y = parseNumber(parseBytes, dataIndex, numberCount);
             valid = valid && (numberCount > 0 && numberCount <= 3);
 
-            valid = valid && getCharacter(parseBytes, dataIndex) == 0x29; // ')' = 0x29
+            valid = valid && parseCharacter(parseBytes, dataIndex) == 0x29; // ')' = 0x29
 
-            sharedSums[indexInThreadGroup].value = valid
+            int value = valid
                 ? numbers.x * numbers.y
                 : 0;
+            sharedSums[indexInThreadGroup].value = value;
+
+            // atomicAdd(sharedSumValue, value);
         }
         doBarriers();
     }
@@ -212,6 +242,8 @@ void main()
             sharedSumOffset = atomicAdd(atomicCountSumValues, sharedSumCount);
             sharedDoOffset = atomicAdd(atomicCountDoLocations, sharedDoCount);
             sharedDontOffset = atomicAdd(atomicCountDontLocations, sharedDontCount);
+
+            // atomicAdd(atomicFinalSumA, sharedSumValue);
         }
         doBarriers();
     }
@@ -235,7 +267,7 @@ void main()
         if(indexInThreadGroup < sharedDontCount)
         {
             int readIndex = int(indexInThreadGroup);
-            int writeIndex = sharedDoOffset + readIndex;
+            int writeIndex = sharedDontOffset + readIndex;
             outDontPositions[writeIndex] = sharedDontPositions[readIndex];
         }
     }

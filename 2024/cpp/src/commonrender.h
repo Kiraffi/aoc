@@ -12,7 +12,16 @@ bool initData();
 void deinitData();
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index);
 
+struct ComputePipelineInfo
+{
+    const uint32_t* m_code;
+    uint32_t m_codeSize;
+    uint32_t m_bufferAmount;
+    uint32_t m_uniformBufferAmount;
+    uint32_t m_worgroupSize;
+};
 
+#define BUF_N_SIZE(name) name, sizeof(name)
 
 // functions provided by commonrender
 SDL_GPUDevice* getGpuDevice();
@@ -25,3 +34,5 @@ bool downloadGPUBuffer(uint8_t* dstData, SDL_GPUBuffer* srcGpuBuffer, uint32_t s
 
 SDL_GPUComputePipeline* createComputePipeline(const uint32_t* code, uint32_t codeSize,
     uint32_t workgroupSize, uint32_t bufferAmount, uint32_t uniformBufferAmount);
+
+SDL_GPUComputePipeline* createComputePipeline(const ComputePipelineInfo& info);
