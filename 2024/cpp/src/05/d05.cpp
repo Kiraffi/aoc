@@ -109,53 +109,6 @@ bool containsValue(int mapIndex, int value)
     return std::find(v.begin(), v.end(), value) != v.end();
 }
 
-bool testRecursive(const std::vector<int>& row, std::vector<int>& usedIndices, int depth)
-{
-    if(depth == row.size())
-    {
-        return true;
-    }
-    for(int i = 0; i < row.size(); ++i)
-    {
-        if(std::find(usedIndices.begin(), usedIndices.end(), i) == usedIndices.end())
-        {
-            if(containsValue(row[i], row[usedIndices.back()]))
-            {
-                usedIndices.push_back(i);
-                if(testRecursive(row, usedIndices, depth + 1))
-                {
-                    return true;
-                }
-                usedIndices.pop_back();
-            }
-        }
-    }
-    return false;
-}
-
-
-void sortRow(std::vector<int>& row)
-{
-    std::vector<int> usedIndices;
-    usedIndices.reserve(row.size());
-
-    for(int i = 0; i < row.size(); ++i)
-    {
-        usedIndices.push_back(i);
-        if(testRecursive(row, usedIndices, 1))
-        {
-            std::vector tmp = row;
-            for(int j = 0; j < row.size(); ++j)
-            {
-                tmp[j] = row[usedIndices[j]];
-            }
-            row = tmp;
-            return;
-        }
-        usedIndices.pop_back();
-    }
-}
-
 static void a()
 {
     int64_t count = 0;
@@ -191,15 +144,17 @@ static void b()
         {
             if(!containsValue(row[i], row[i - 1]))
             {
-                sortRow(row);
+                std::sort(row.begin(), row.end(), [](int& a, int& b)
+                {
+                    return containsValue(a, b);
+                });
                 assert(row.size() % 2);
                 count += row[row.size() / 2];
-                printf("sum now: %i\n", int(count));
                 break;
             }
         }
     }
-    printf("05-b Sum of invalid middle numbers %i times.\n", int(count));
+    printf("05-b Sum of invalid sorted middle numbers %i times.\n", int(count));
 }
 
 static void doCpu()
