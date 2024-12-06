@@ -65,20 +65,30 @@ include_directories("src")
 #    set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 #endif (MSVC)
 
+add_library(sharedlibs
+    ${SHADERS}
+    src/commons.cpp
+    src/commonrender.cpp
+)
+
+target_link_libraries(sharedlibs PUBLIC
+    SDL3::SDL3
+    #glm::glm
+)
+
 function(make_prog exe prog)
 
     add_executable(${exe}
-        ${SHADERS}
+        #${SHADERS}
         ${prog}
-        src/commons.cpp
-        src/commonrender.cpp
+        #src/commons.cpp
+        #src/commonrender.cpp
     )
 
     add_dependencies(${exe} shadertarget)
 
     target_link_libraries(${exe} PUBLIC
-            SDL3::SDL3
-            #glm::glm
+        sharedlibs
     )
 
 endfunction(make_prog)

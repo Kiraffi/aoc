@@ -18,7 +18,8 @@ struct ComputePipelineInfo
     uint32_t m_codeSize;
     uint32_t m_bufferAmount;
     uint32_t m_uniformBufferAmount;
-    uint32_t m_worgroupSize;
+    uint32_t m_worgroupSizeX;
+    uint32_t m_worgroupSizeY;
 };
 
 #define BUF_N_SIZE(name) name, sizeof(name)
@@ -31,8 +32,5 @@ SDL_GPUBuffer* createGPUWriteBuffer(uint32_t size, const char* debugName);
 
 bool uploadGPUBufferOneTimeInInit(SDL_GPUBuffer* dstGpuBuffer, uint8_t* data, uint32_t size);
 bool downloadGPUBuffer(uint8_t* dstData, SDL_GPUBuffer* srcGpuBuffer, uint32_t size);
-
-SDL_GPUComputePipeline* createComputePipeline(const uint32_t* code, uint32_t codeSize,
-    uint32_t workgroupSize, uint32_t bufferAmount, uint32_t uniformBufferAmount);
 
 SDL_GPUComputePipeline* createComputePipeline(const ComputePipelineInfo& info);

@@ -56,6 +56,19 @@ enum PipelineEnum
 };
 
 
+static ComputePipelineInfo s_pipelineInfos[] =
+{
+    { BUF_N_SIZE(findnumbers_comp), 2, 1, 256 },
+    { BUF_N_SIZE(parsenumbers_comp), 4, 0, 256 },
+    { BUF_N_SIZE(radixsort_comp), 2, 1, 256 },
+    { BUF_N_SIZE(simplesort_comp), 2, 1, 1024 },
+    { BUF_N_SIZE(d01a_comp), 3, 0, 1024 },
+    { BUF_N_SIZE(d01b_comp), 3, 0, 1024 },
+};
+
+static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
+
+
 static const std::string s_Filename = "input/01.input";
 
 
@@ -177,12 +190,10 @@ bool initCompute()
 
     // Create compute pipelines
     {
-        s_pipelines[PipelineInputFindNumbers] = createComputePipeline(findnumbers_comp, sizeof(findnumbers_comp), 256, 2, 1);
-        s_pipelines[PipelineInputParseNumbers] = createComputePipeline(parsenumbers_comp, sizeof(parsenumbers_comp), 256, 4, 0);
-        s_pipelines[PipelineRadix] = createComputePipeline(radixsort_comp, sizeof(radixsort_comp), 256, 2, 1);
-        s_pipelines[PipelineSimpleSort] = createComputePipeline(simplesort_comp, sizeof(simplesort_comp), 1024, 2, 1);
-        s_pipelines[Pipelined01a] = createComputePipeline(d01a_comp, sizeof(d01a_comp), 1024, 3, 0);
-        s_pipelines[Pipelined01b] = createComputePipeline(d01b_comp, sizeof(d01b_comp), 1024, 3, 0);
+        for(int i = 0; i < PipelineCount; ++i)
+        {
+            s_pipelines[i] = createComputePipeline(s_pipelineInfos[i]);
+        }
     }
 
 

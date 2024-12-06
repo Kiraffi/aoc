@@ -36,6 +36,13 @@ enum PipelineEnum
 };
 
 
+static ComputePipelineInfo s_pipelineInfos[] =
+{
+    { BUF_N_SIZE(d02_comp), 2, 1, 256 },
+};
+static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
+
+
 static const std::string s_Filename = "input/02.input";
 
 
@@ -191,7 +198,10 @@ bool initCompute()
 
     // Create compute pipelines
     {
-        s_pipelines[PipelineD02] = createComputePipeline(d02_comp, sizeof(d02_comp), 256, 2, 1);
+        for(int i = 0; i < PipelineCount; ++i)
+        {
+            s_pipelines[i] = createComputePipeline(s_pipelineInfos[i]);
+        }
     }
 
     return true;
