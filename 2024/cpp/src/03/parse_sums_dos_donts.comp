@@ -82,11 +82,11 @@ int makeIntFromChars(int a, int b, int c, int d)
 
 int readDataInput(int index)
 {
-    index /= 4;
     if(index >= dataSizeInputBytes)
     {
         return 0;
     }
+    index /= 4;
     return dataIn1[index];
 }
 

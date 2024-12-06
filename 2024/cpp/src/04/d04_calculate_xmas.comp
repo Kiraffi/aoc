@@ -1,0 +1,246 @@
+#version 450 core
+
+#define THREAD_SIZE_X 256
+#define THREAD_SIZE_Y 1
+
+// Assuming the map is less than 256 tiles to simplify calculating position
+#define ROW_MAX_WIDTH 256
+
+// would actually be 3, reading right, right down, down, left down
+#define EXTRA_NEEDED 4
+
+#define MAP_LOCAL_WIDTH 16
+#define MAP_LOCAL_HEIGHT 16
+
+#define MAP_WIDTH (MAP_LOCAL_WIDTH + 2 * EXTRA_NEEDED)
+#define MAP_HEIGHT (MAP_LOCAL_HEIGHT + 2*  EXTRA_NEEDED)
+#define MAP_SIZE (MAP_WIDTH * MAP_HEIGHT)
+
+shared int sharedMap[MAP_SIZE];
+
+shared int sharedMapWidth;
+
+
+struct DataSumStruct
+{
+    int position;
+    int value;
+};
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn[];
+};
+
+// Output
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    int atomicXmasCount;
+    int atomicX_masCount;
+};
+
+int readCharacter(int byteIndex)
+{
+    if(byteIndex < 0 || byteIndex >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+
+    int value = dataIn[byteIndex / 4];
+
+    return (value >> (8 * (byteIndex % 4))) & 0xff;
+}
+
+int readCharacter2D(ivec2 byteIndex2D)
+{
+    int mapWidth = sharedMapWidth;
+    int byteIndex1D = byteIndex2D.y * mapWidth + byteIndex2D.x;
+    if(byteIndex2D.x < 0
+        || byteIndex2D.x >= mapWidth
+        || byteIndex2D.y < 0
+        || byteIndex1D >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+
+    int value = dataIn[byteIndex1D / 4];
+    return (value >> (8 * (byteIndex1D % 4))) & 0xff;
+}
+
+int makeIntFromChars(int a, int b, int c, int d)
+{
+    return a | (b << 8) | (c << 16) | (d << 24);
+}
+
+int readCharacter2DShared(ivec2 pos)
+{
+    if(pos.x < 0 || pos.y < 0 || pos.x >= MAP_WIDTH || pos.y >= MAP_HEIGHT)
+    {
+        return 0;
+    }
+    return sharedMap[pos.y * MAP_WIDTH + pos.x];
+}
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+layout (local_size_x = THREAD_SIZE_X, local_size_y = THREAD_SIZE_Y, local_size_z = 1) in;
+void main()
+{
+    ivec2 globalIndex2D = ivec2(gl_WorkGroupID.xy * ivec2(MAP_LOCAL_WIDTH, MAP_LOCAL_HEIGHT));
+    int localThreadIndex = int(gl_LocalInvocationID.x);
+    // reset mapwidth
+    {
+        if(localThreadIndex == 0)
+        {
+            sharedMapWidth = 100000;
+        }
+        doBarriers();
+    }
+
+    // Find linebreak
+    {
+        int character = readCharacter(localThreadIndex);
+        if(character == 0xA) // 0xA = new line
+        {
+            atomicMin(sharedMapWidth, localThreadIndex + 1);
+        }
+        doBarriers();
+    }
+    // Initializing position
+    int mapWidth = sharedMapWidth;
+
+    if(globalIndex2D.x < mapWidth && globalIndex2D.y < mapWidth)
+    {
+        // Read values into sharedMemory
+        {
+            ivec2 cornerPos = globalIndex2D - ivec2(EXTRA_NEEDED, EXTRA_NEEDED);
+
+            int currentLocalIndex = localThreadIndex;
+
+            while(currentLocalIndex < MAP_SIZE)
+            {
+                ivec2 localPos = ivec2(currentLocalIndex % MAP_WIDTH, currentLocalIndex / MAP_WIDTH);
+                ivec2 globalPos = cornerPos + localPos;
+
+                int c = readCharacter2D(globalPos);
+                sharedMap[currentLocalIndex] = c;
+
+                currentLocalIndex += THREAD_SIZE_X;
+            }
+            doBarriers();
+        }
+        {
+            int localXMASCount = 0;
+            int currentLocalIndex = localThreadIndex;
+            ivec2 localPos = ivec2(currentLocalIndex % MAP_LOCAL_WIDTH, currentLocalIndex / MAP_LOCAL_WIDTH);
+            localPos += ivec2(EXTRA_NEEDED, EXTRA_NEEDED);
+
+            int xmas = makeIntFromChars(0x58, 0x4D, 0x41, 0x53); // "XMAS"
+            int samx = makeIntFromChars(0x53, 0x41, 0x4D, 0x58); // "SAMX"
+
+            int mas = makeIntFromChars(0x4D, 0x41, 0x53, 0); // "MAS"
+            int sam = makeIntFromChars(0x53, 0x41, 0x4D, 0); // "SAM"
+
+            int curr = readCharacter2DShared(localPos + ivec2(0, 0));
+            {
+                {
+                    int rValue = makeIntFromChars(
+                        curr,
+                        readCharacter2DShared(localPos + ivec2(1, 0)),
+                        readCharacter2DShared(localPos + ivec2(2, 0)),
+                        readCharacter2DShared(localPos + ivec2(3, 0)));
+
+                    if(rValue == xmas || rValue == samx)
+                    {
+                        localXMASCount++;
+                    }
+                }
+                {
+                    int rdValue = makeIntFromChars(
+                        curr,
+                        readCharacter2DShared(localPos + ivec2(1, 1)),
+                        readCharacter2DShared(localPos + ivec2(2, 2)),
+                        readCharacter2DShared(localPos + ivec2(3, 3)));
+
+                    if(rdValue == xmas || rdValue == samx)
+                    {
+                        localXMASCount++;
+                    }
+                }
+                {
+                    int dValue = makeIntFromChars(
+                        curr,
+                        readCharacter2DShared(localPos + ivec2(0, 1)),
+                        readCharacter2DShared(localPos + ivec2(0, 2)),
+                        readCharacter2DShared(localPos + ivec2(0, 3)));
+
+                    if(dValue == xmas || dValue == samx)
+                    {
+                        localXMASCount++;
+                    }
+                }
+                {
+                    int ldValue = makeIntFromChars(
+                        curr,
+                        readCharacter2DShared(localPos + ivec2(-1, 1)),
+                        readCharacter2DShared(localPos + ivec2(-2, 2)),
+                        readCharacter2DShared(localPos + ivec2(-3, 3)));
+
+                    if(ldValue == xmas || ldValue == samx)
+                    {
+                        localXMASCount++;
+                    }
+                }
+                atomicAdd(atomicXmasCount, localXMASCount);
+            }
+            {
+                int localX_MASCount = 0;
+                {
+                    int rdValue = makeIntFromChars(
+                        readCharacter2DShared(localPos + ivec2(-1, -1)),
+                        curr,
+                        readCharacter2DShared(localPos + ivec2(1, 1)),
+                        0);
+
+                    if(rdValue == mas || rdValue == sam)
+                    {
+                        ++localX_MASCount;
+                    }
+
+                }
+                {
+                    int ldValue = makeIntFromChars(
+                        readCharacter2DShared(localPos + ivec2( 1, -1)),
+                        curr,
+                        readCharacter2DShared(localPos + ivec2(-1,  1)),
+                        0);
+
+                    if(ldValue == mas || ldValue == sam)
+                    {
+                        ++localX_MASCount;
+                    }
+
+                }
+                if(localX_MASCount == 2)
+                {
+                    atomicAdd(atomicX_masCount, 1);
+                }
+            }
+        }
+    }
+}
+
