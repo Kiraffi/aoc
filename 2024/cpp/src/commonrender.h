@@ -11,6 +11,7 @@ const char* getTitle();
 bool initData();
 void deinitData();
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index);
+void gpuReadEndBuffers();
 
 struct ComputePipelineInfo
 {
@@ -28,7 +29,7 @@ struct ComputePipelineInfo
 SDL_GPUDevice* getGpuDevice();
 
 SDL_GPUBuffer* createGPUUniformBuffer(uint32_t size, const char* debugName);
-SDL_GPUBuffer* createGPUWriteBuffer(uint32_t size, const char* debugName);
+SDL_GPUBuffer* createGPUWriteBuffer(uint32_t size, const char* debugName, bool isIndirect = false);
 
 bool uploadGPUBufferOneTimeInInit(SDL_GPUBuffer* dstGpuBuffer, uint8_t* data, uint32_t size);
 bool downloadGPUBuffer(uint8_t* dstData, SDL_GPUBuffer* srcGpuBuffer, uint32_t size);

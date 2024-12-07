@@ -13,20 +13,24 @@
 #include <SDL3/SDL_main.h>
 
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
+#include "../atomic_buffers_reset_comp.h"
+#include "calculate_middle_numbers_d05_comp.h"
+#include "parse_d05_comp.h"
+
 #include "commons.h"
 #include "commonrender.h"
-
 
 enum BufferEnum : int
 {
     BufferInput,
+
+    BufferParsedGates,
+    BufferParsedGatesIndices,
+
+    BufferParsedLines,
+    BufferParsedLinesIndices,
+
+    BufferIndirect,
     BufferResult,
 
     BufferCount
@@ -34,20 +38,23 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
+    PipelineAtomicBufferReset,
     PipelineParse,
+    PipelineCalculateMiddleNumbersIndirect,
 
     PipelineCount
 };
 
-/*
+
 static ComputePipelineInfo s_pipelineInfos[] =
 {
     { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(parse_d05_comp), 6, 1, 1024 },
+    //{ BUF_N_SIZE(parse_d05_comp), 6, 1, 1024 },
+    { BUF_N_SIZE(calculate_middle_numbers_d05_comp), 5, 0, 32 },
 };
 
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
 
 static const std::string s_Filename = "input/05.input";
 
@@ -243,18 +250,28 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
-    s_input = readInputFile();
-
+#if 1
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+
+    s_buffers[BufferParsedGates] = (createGPUWriteBuffer(2048 * 2 * sizeof(int), "ParsedGates"));
+    s_buffers[BufferParsedGatesIndices] = (createGPUWriteBuffer(256 * 2 * sizeof(int), "ParsedGatesIndices"));
+
+    s_buffers[BufferParsedLines] = (createGPUWriteBuffer(1024 * 32 * sizeof(int), "ParsedLines"));
+    s_buffers[BufferParsedLinesIndices] = (createGPUWriteBuffer(1024 * 2 * sizeof(int), "ParsedLinesIndices"));
+
+    s_buffers[BufferIndirect] = (createGPUWriteBuffer(1024, "IndirecBuffer", true));
+
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
     // Create compute pipelines
     {
-        s_pipelines[PipelineD02] = createComputePipeline(d02_comp, sizeof(d02_comp), 256, 2, 1);
+        for(int i = 0; i < PipelineCount; ++i)
+        {
+            s_pipelines[i] = createComputePipeline(s_pipelineInfos[i]);
+        }
     }
 #endif
     return true;
@@ -263,12 +280,13 @@ bool initCompute()
 bool initData()
 {
     doCpu();
-#if 0
-
     return initCompute();
-#else
-    return true;
-#endif
+}
+
+void gpuReadEndBuffers()
+{
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 }
 
 void deinitData()
@@ -286,15 +304,18 @@ void deinitData()
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
 
-
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
+    for(int i = 0; i < 256; ++i)
+    {
+        printf("%i: %i\n", i, s_dataBuffer[i]);
+    }
+    printf("05-a compute Sum of valid middle numbers %i times.\n", s_dataBuffer[0]);
+    printf("05-b compute Sum of invalid sorted middle numbers %i times.\n", s_dataBuffer[1]);
 
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -305,10 +326,9 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     };
     SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
     {
-        // Get values
+        // Reset atomic buffer
         {
             SDL_GPUStorageBufferReadWriteBinding buffers[] = {
-                { .buffer = s_buffers[BufferInput] },
                 { .buffer = s_buffers[BufferResult] }
             };
             SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
@@ -319,15 +339,66 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineAtomicBufferReset]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
         }
-    }
 
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
+
+        // Parse values
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferInput] },
+                { .buffer = s_buffers[BufferParsedGates] },
+                { .buffer = s_buffers[BufferParsedGatesIndices] },
+                { .buffer = s_buffers[BufferParsedLines] },
+                { .buffer = s_buffers[BufferParsedLinesIndices] },
+                { .buffer = s_buffers[BufferIndirect] },
+
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineParse]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+#if 1
+        // Indirect calculate dispatch
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferParsedGates] },
+                { .buffer = s_buffers[BufferParsedGatesIndices] },
+                { .buffer = s_buffers[BufferParsedLines] },
+                { .buffer = s_buffers[BufferParsedLinesIndices] },
+                { .buffer = s_buffers[BufferResult] },
+
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineCalculateMiddleNumbersIndirect]);
+            // Indirect call
+            SDL_DispatchGPUComputeIndirect(computePass, s_buffers[BufferIndirect], 0);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+#endif
+    }
+    // Get the data from gpu to cpu, doesnt anymore seem to work here
+    //downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
     //if(index > 100)
     //    return false;

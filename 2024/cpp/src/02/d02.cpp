@@ -233,6 +233,10 @@ void deinitData()
     printf("02-b compute safe: %i\n", s_dataBuffer[1]);
 
 }
+void gpuReadEndBuffers()
+{
+
+}
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {

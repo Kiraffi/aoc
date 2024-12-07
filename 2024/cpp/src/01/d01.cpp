@@ -225,6 +225,10 @@ void deinitData()
     printf("01-a compute difference: %i\n", s_dataBuffer[0]);
     printf("01-b compute simularity: %i\n", s_dataBuffer[1]);
 }
+void gpuReadEndBuffers()
+{
+
+}
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {

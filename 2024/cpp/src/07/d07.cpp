@@ -249,8 +249,6 @@ static void doCpu()
 bool initCompute()
 {
 #if 0
-    s_input = readInputFile();
-
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
@@ -272,6 +270,10 @@ bool initData()
 {
     doCpu();
     return initCompute();
+}
+void gpuReadEndBuffers()
+{
+
 }
 
 void deinitData()

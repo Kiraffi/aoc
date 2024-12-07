@@ -73,9 +73,18 @@ static void clearRenderTargets()
 
 static void shutdownGPU(void)
 {
+    {
+        for(int i = 0; i < 10; ++i)
+        {
+            SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(s_appState.m_device);
+            gpuReadEndBuffers();
+            SDL_SubmitGPUCommandBuffer(cmd);
+        }
+    }
+    deinitData();
+
     clearRenderTargets();
     SDL_GPUDevice* gpuDevice = s_appState.m_device;
-    deinitData();
     SDL_ReleaseWindowFromGPUDevice(gpuDevice, getWindow());
 
     SDL_ReleaseGPUTransferBuffer(s_appState.m_device, s_transferDownloadBuffer);
@@ -388,10 +397,15 @@ SDL_AppResult SDL_AppInit(void** appState, int argc, char* argv[])
     return SDL_APP_CONTINUE;
 }
 
-SDL_GPUBuffer* createGPUWriteBuffer(uint32_t size, const char* debugName)
+SDL_GPUBuffer* createGPUWriteBuffer(uint32_t size, const char* debugName, bool isIndirect)
 {
+    SDL_GPUBufferUsageFlags usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE;
+    if(isIndirect)
+    {
+        usage |= SDL_GPU_BUFFERUSAGE_INDIRECT;
+    }
     SDL_GPUBufferCreateInfo bufferDesc = {
-        .usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE,
+        .usage = usage,
         .size = size,
         .props = 0
     };

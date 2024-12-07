@@ -39,6 +39,14 @@ enum PipelineEnum
     PipelineCount
 };
 
+/*
+static ComputePipelineInfo s_pipelineInfos[] =
+{
+    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
+    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+};
+static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
+*/
 
 static const std::string s_Filename = "input/06.input";
 
@@ -325,8 +333,6 @@ static void doCpu()
 bool initCompute()
 {
 #if 0
-    s_input = readInputFile();
-
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
@@ -335,7 +341,10 @@ bool initCompute()
 
     // Create compute pipelines
     {
-        s_pipelines[PipelineD02] = createComputePipeline(d02_comp, sizeof(d02_comp), 256, 2, 1);
+        for(int i = 0; i < PipelineCount; ++i)
+        {
+            s_pipelines[i] = createComputePipeline(s_pipelineInfos[i]);
+        }
     }
 #endif
     return true;
@@ -344,13 +353,13 @@ bool initCompute()
 bool initData()
 {
     doCpu();
-#if 0
-
     return initCompute();
-#else
-    return true;
-#endif
 }
+void gpuReadEndBuffers()
+{
+
+}
+
 
 void deinitData()
 {

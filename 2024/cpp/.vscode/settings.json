@@ -58,4 +58,5 @@
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}"
     },
+    "editor.renderWhitespace": "all",
 }

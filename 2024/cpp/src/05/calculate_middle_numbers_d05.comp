@@ -1,0 +1,168 @@
+#version 450 core
+
+#define THREAD_SIZE 32
+
+// Maybe it would be faster to load the gate values into shared memory
+// and use them from there. Then the thread size should probably be larger too
+// and assumption would be to actually make the group size something like 32
+// multiplier to use subgroupsizes for data, but it would add some complexity,
+// which might not be worth it.
+// Also means this should probably be solved using intrinsics.
+
+// Assumption there are less than 32 numbers
+shared int sharedNumbersLeft[32];
+
+// Assumption there are less than 32 numbers, we start filling from middle
+shared int sharedWriteNumbers[64];
+
+
+// CurrentHeadValues
+shared int sharedHeadValues[32];
+
+// CurrentTailValues
+shared int sharedTailValues[32];
+
+
+// Written amount of numbers left
+shared int sharedWriteNumberLeftCount;
+
+// Current head for the writeoutbumber for B
+shared int sharedHead;
+
+// Current tail for the writeoutbumber for B
+shared int sharedTail;
+
+shared bool sharedIsSorted;
+
+// { left, right gate }, sorted by left numbers but, right side is random order
+// Basically might be
+// v order            v random order, but matches left
+// 79        |       91
+// 81        |       13
+// 81        |       11
+// 81        |       93
+// 99        |       13
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    ivec2 inGates[];
+};
+
+// { start, amount }
+layout (set = 1, binding = 1) restrict buffer DataIn2
+{
+    ivec2 inGatePrefixSumIndices[];
+};
+
+// Numbers, sequence of numbers
+layout (set = 1, binding = 2) restrict buffer DataIn3
+{
+    int inLineNumbers[];
+};
+
+// Line number indexes, {start, amount} to outLineNumbers
+layout (set = 1, binding = 3) restrict buffer DataIn4
+{
+    ivec2 inLineIndexes[];
+};
+
+
+// Line number indexes, {start, amount} to outLineNumbers
+layout (set = 1, binding = 4) restrict buffer DataOut1
+{
+    int outMiddleSumA;
+    int outMiddleSumB;
+    int outTmp[];
+};
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupIndex = int(gl_WorkGroupID.x);
+
+    ivec2 readIndex = inLineIndexes[groupIndex];
+    int numberCount = readIndex.y % 1000;
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            // Counting that 0th index will start by putting number in middle
+            sharedWriteNumberLeftCount = numberCount - 1;
+            sharedHead = 32;
+            sharedTail = 32;
+
+            sharedIsSorted = true;
+        }
+        doBarriers();
+    }
+    int value = 0;
+    bool hasUsedValue = false;
+    // Read values
+    {
+        if(indexInThreadGroup < numberCount)
+        {
+            value = inLineNumbers[readIndex.x + indexInThreadGroup];
+            sharedNumbersLeft[indexInThreadGroup] = value;
+        }
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            hasUsedValue = true;
+            sharedWriteNumbers[sharedHead] = value;
+            ivec2 gateIndices = inGatePrefixSumIndices[value];
+
+            outTmp[groupIndex] = gateIndices.x + 100000 * gateIndices.y; // + readIndex.y * 1000;
+        }
+        doBarriers();
+    }
+    // check if its sorted
+    #if 1
+    {
+        if(indexInThreadGroup < numberCount - 1)
+        {
+            bool found = false;
+            int right = sharedNumbersLeft[indexInThreadGroup + 1];
+            ivec2 gateIndices = inGatePrefixSumIndices[value];
+            int amount = min(gateIndices.y, 32);
+            for(int i = 0; i < amount; ++i)
+            {
+                ivec2 gate = inGates[gateIndices.x + i];
+                if(gate.y == right && gate.x == value) // the left should always be true
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if(!found)
+            {
+                sharedIsSorted = false;
+            }
+        }
+        doBarriers();
+    }
+    if(sharedIsSorted)
+    {
+        if(indexInThreadGroup == 0)
+        {
+            atomicAdd(outMiddleSumA, sharedNumbersLeft[numberCount / 2]);
+        }
+    }
+    else
+    {
+
+    }
+    #endif
+}
+

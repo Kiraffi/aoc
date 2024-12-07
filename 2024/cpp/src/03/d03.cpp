@@ -9,7 +9,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
-#include "atomic_buffers_reset_comp.h"
+#include "../atomic_buffers_reset_comp.h"
 #include "d03_calculate_sums_comp.h"
 #include "parse_sums_dos_donts_comp.h"
 
@@ -247,6 +247,10 @@ void deinitData()
 
 }
 
+void gpuReadEndBuffers()
+{
+
+}
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
 #if 1

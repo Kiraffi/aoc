@@ -10,7 +10,7 @@
 #include <SDL3/SDL_main.h>
 
 
-#include "atomic_buffers_reset_comp.h"
+#include "../atomic_buffers_reset_comp.h"
 #include "d04_calculate_xmas_comp.h"
 
 #include "commons.h"
@@ -224,6 +224,10 @@ void deinitData()
 
     printf("04-a compute XMAS appears: %i\n", s_dataBuffer[0]);
     printf("04-b compute X-MAS appears: %i\n", s_dataBuffer[1]);
+
+}
+void gpuReadEndBuffers()
+{
 
 }
 

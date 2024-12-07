@@ -3,12 +3,6 @@
 #define THREAD_SIZE 1
 
 
-// Input size.
-layout (set = 2, binding = 0) uniform DataSize
-{
-    int dataSizeInputBytes;
-};
-
 // Atomic value buffer
 layout (set = 1, binding = 0) restrict buffer DataOut4
 {

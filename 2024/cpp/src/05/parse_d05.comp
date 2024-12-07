@@ -1,0 +1,320 @@
+#version 450 core
+
+#define THREAD_SIZE 1024
+
+shared int sharedLinebreaks[2048];
+
+// How many gates are there per value.
+shared int sharedGateCountPerGate[256];
+
+// How many gates are there per value.
+shared int sharedGateCountPerGatePrefixSum[256];
+
+// How many line break found
+shared int sharedLinebreakCount;
+
+// What position has double line break for splitting top and bottom part
+shared int sharedTopBottomIndexBreak;
+
+// How many values are written.
+shared int sharedWriteValuesCount;
+
+// Which row
+shared int sharedNumberRowCount;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// { left, right gate }, sorted by left numbers but, right side is random order
+// Basically might be
+// v order            v random order, but matches left
+// 79        |       91
+// 81        |       13
+// 81        |       11
+// 81        |       93
+// 99        |       13
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    ivec2 outGates[];
+};
+
+// { start, amount }
+layout (set = 1, binding = 2) restrict buffer DataOut2
+{
+    ivec2 outGatePrefixSumIndices[];
+};
+
+// Numbers, sequence of numbers
+layout (set = 1, binding = 3) restrict buffer DataOut3
+{
+    int outLineNumbers[];
+};
+
+// Line number indexes, {start, amount} to outLineNumbers
+layout (set = 1, binding = 4) restrict buffer DataOut4
+{
+    ivec2 outLineIndexes[];
+};
+
+
+// Indirect buffer dispatch values
+layout (set = 1, binding = 5) restrict buffer DataOut5
+{
+    ivec4 outIndirectDispatch;
+};
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool isNumber(int value)
+{
+    // '0' == 48, '9' == 57
+    return value >= 48 && value <= 57;
+}
+
+int findNumberBackwards(int index)
+{
+    /*
+    for(int i = 0; i < 32; ++i)
+    {
+        if(isNumber(readChar(index - i)))
+        {
+            return index - i;
+        }
+    }
+    return index;
+*/
+    // This halted renderdoc, probably because of reading outside memory?
+    // Basically adding check index < dataSizeInputBytes
+
+    while(index >= 0 && index < dataSizeInputBytes && !isNumber(readChar(index)))
+    {
+        --index;
+    }
+    return index;
+}
+
+// number, newIndex
+int parseNumberBackwards(inout int index)
+{
+    int result = 0;
+    // '0' == 48, '9' == 57
+    int c = readChar(index);
+    int multiplier = 1;
+    while(isNumber(c) && index >= 0)
+    {
+        result = (c - 48) * multiplier + result;
+        multiplier *= 10;
+
+        --index;
+        c = readChar(index);
+    }
+    return result;
+}
+
+ivec2 parseLeftRightGate(int index)
+{
+    ivec2 result = ivec2(0);
+
+    index = findNumberBackwards(index);
+    result.y =  parseNumberBackwards(index);
+
+    index = findNumberBackwards(index);
+    result.x = parseNumberBackwards(index);
+    return result;
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedLinebreakCount = 0;
+            sharedTopBottomIndexBreak = 0;
+            sharedWriteValuesCount = 0;
+            sharedNumberRowCount = 0;
+        }
+        if(indexInThreadGroup < 256)
+        {
+            sharedGateCountPerGate[indexInThreadGroup] = 0;
+        }
+        doBarriers();
+    }
+    // Find linebreaks.
+    {
+        int index = indexInThreadGroup;
+        while(index < dataSizeInputBytes)
+        {
+            if(readChar(index) == 0xA) // line break 0xA
+            {
+                int count = atomicAdd(sharedLinebreakCount, 1);
+                sharedLinebreaks[count] = index;
+                if(readChar(index + 1) == 0xA) // another line break
+                {
+                    sharedTopBottomIndexBreak = index;
+                }
+            }
+            index += THREAD_SIZE;
+        }
+        doBarriers();
+    }
+
+    // Parse 'gates'
+    {
+        // could potentially make assumption that each thread has to parse less than 4 l, and 4 r
+        // and save it on registers, for not having to reparse them again for writing.
+        // This means there should be less than 4 * THREAD_SIZE values.
+        ivec2 lr[4];
+        int numberCount = 0;
+
+        // Count how many of each are there
+        {
+            for(int index = indexInThreadGroup; index < sharedLinebreakCount; index += THREAD_SIZE)
+            {
+                int charIndex = sharedLinebreaks[index];
+                // we dont know the order in which the linebreaks are in memory
+                if(charIndex <= sharedTopBottomIndexBreak)
+                {
+                    lr[numberCount] = parseLeftRightGate(charIndex);
+                    atomicAdd(sharedGateCountPerGate[lr[numberCount].x], 1);
+                    ++numberCount;
+                }
+            }
+            doBarriers();
+        }
+
+        // Calculate prefix sum
+        {
+            if(indexInThreadGroup == 0)
+            {
+                int sum = 0;
+                for(int i = 0; i < 256; ++i)
+                {
+                    sharedGateCountPerGatePrefixSum[i] = sum;
+                    sum += sharedGateCountPerGate[i];
+                }
+            }
+            doBarriers();
+        }
+
+        // write the indices into memory
+        {
+            int index = indexInThreadGroup;
+            if(index < 256)
+            {
+                outGatePrefixSumIndices[index] = ivec2(
+                    sharedGateCountPerGatePrefixSum[index],
+                    sharedGateCountPerGate[index]
+                );
+            }
+            // we should not need to do barriers here
+            doBarriers();
+        }
+
+        // Finally write down the gate values into memory
+        {
+            for(int index = 0; index < numberCount; ++index)
+            {
+                int lValue = lr[index].x;
+                // -1 since we have count, and we want to get index.
+                // atomicAdd returns value BEFORE operation
+                int writeIndex = atomicAdd(sharedGateCountPerGate[lValue], -1) - 1;
+                writeIndex += sharedGateCountPerGatePrefixSum[lValue];
+                outGates[writeIndex] = lr[index];
+            }
+        }
+
+    }
+
+    // Parse bottom sequences, very unoptimal since threads are writing
+    // varying number of numbers into memory, and also the amount of work
+    // is very unbalanced per thread.
+    {
+
+        // Calculate the amount of numbers, and parse them
+        {
+            int lineIndex = indexInThreadGroup;
+            int readPos = 0;
+            while(lineIndex < sharedLinebreakCount)
+            {
+                // Assumption, 32 numbers is enough per line. Adds quite some registers.
+                // Since all numbers are < 100, we can pack 4 numbers per int
+                int numbers[32 / 4];
+                for(int tmpI = 0; tmpI < 32 / 4; ++tmpI)
+                {
+                    numbers[tmpI] = 0;
+                }
+                int numberCount = 0;
+                readPos = sharedLinebreaks[lineIndex] - 1;
+                // we dont know the order in which the linebreaks are in memory
+                if(readPos > sharedTopBottomIndexBreak + 1)
+                {
+                    while(readChar(readPos) != 0xA) // while not linebreak
+                    {
+                        readPos = findNumberBackwards(readPos);
+                        numbers[numberCount / 4] |= (parseNumberBackwards(readPos) << (8 * (numberCount % 4)));
+                        numberCount++;
+                    }
+                }
+                // Write numbers into memory
+                if(numberCount > 0)
+                {
+                    int startIndex = atomicAdd(sharedWriteValuesCount, numberCount);
+                    // we dont really care the order here.
+                    int rowNumber = atomicAdd(sharedNumberRowCount, 1);
+                    outLineIndexes[rowNumber] = ivec2(startIndex, numberCount);
+
+                    for(int numberIndex = 0; numberIndex < numberCount; ++numberIndex)
+                    {
+                        // doesnt matter for the task if we write them from back to front
+                        // as long as its in order, but still fixing it to write in same order
+                        // as in the task
+                        int writeIndex = startIndex + numberCount - numberIndex - 1;
+                        outLineNumbers[writeIndex] =
+                            (numbers[numberIndex / 4] >> (8 * (numberIndex % 4))) & 0xff;
+                    }
+                }
+                lineIndex += THREAD_SIZE;
+            }
+        }
+    }
+
+    {
+        doBarriers();
+        outIndirectDispatch = ivec4(sharedNumberRowCount, 1, 1, 0);
+        doBarriers();
+    }
+}
+
