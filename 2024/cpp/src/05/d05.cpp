@@ -147,10 +147,63 @@ static void a()
 
 static void sortRow(std::vector<int>& row)
 {
+#if 0
     std::sort(row.begin(), row.end(), [](int& a, int& b)
     {
         return containsValue(a, b);
     });
+#else
+
+    int buffer[64];
+
+    int head = 32;
+    int tail = 32;
+    buffer[32] = row[0];
+
+    int correctNumbers = 1;
+    std::vector<int> numbersLeft = row;
+
+
+    auto removeIndexSwap = [&numbersLeft](int index)
+    {
+        if(index >= numbersLeft.size())
+        {
+            return;
+        }
+        if(numbersLeft.size() > 1)
+        {
+            numbersLeft[index] = numbersLeft.back();
+        }
+        numbersLeft.pop_back();
+    };
+    removeIndexSwap(0);
+
+    while(correctNumbers < row.size())
+    {
+        for(int i = numbersLeft.size() - 1; i >= 0; --i)
+        {
+            if(containsValue(numbersLeft[i], buffer[head]))
+            {
+                head--;
+                buffer[head] = numbersLeft[i];
+                removeIndexSwap(i);
+            }
+            else if(containsValue(buffer[tail], numbersLeft[i]))
+            {
+                tail++;
+                buffer[tail] = numbersLeft[i];
+                removeIndexSwap(i);
+            }
+        }
+    }
+
+    for(int i = head; i >= tail; ++i)
+    {
+        row[i - head] = buffer[i];
+    }
+
+    assert(isValidRow(row));
+#endif
 }
 
 
