@@ -34,11 +34,20 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineParse,
 
     PipelineCount
 };
 
+/*
+static ComputePipelineInfo s_pipelineInfos[] =
+{
+    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
+    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+};
+
+static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
+*/
 
 static const std::string s_Filename = "input/05.input";
 
@@ -94,19 +103,31 @@ static void parse()
     }
 }
 
-void setBit(uint64_t& value, int bit)
+static void setBit(uint64_t& value, int bit)
 {
     value |= uint64_t(1) << uint64_t(bit % 64);
 }
-bool isSet(uint64_t value, int bit)
+static bool isSet(uint64_t value, int bit)
 {
     return ((value >> uint64_t(bit % 64)) & 1) == 1;
 }
 
-bool containsValue(int mapIndex, int value)
+static bool containsValue(int mapIndex, int value)
 {
     const auto& v = s_map[mapIndex];
     return std::find(v.begin(), v.end(), value) != v.end();
+}
+
+static bool isValidRow(const std::vector<int>& row)
+{
+    for(int i = 1; i < row.size(); ++i)
+    {
+        if(!containsValue(row[i], row[i - 1]))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 static void a()
@@ -115,17 +136,7 @@ static void a()
     std::unordered_set<int> visited;
     for(const auto& row : s_rows )
     {
-        bool valid = true;
-        for(int i = 1; i < row.size(); ++i)
-        {
-            visited.clear();
-            if(!containsValue(row[i], row[i - 1]))
-            {
-                valid = false;
-                break;
-            }
-        }
-        if(valid)
+        if(isValidRow(row))
         {
             assert(row.size() % 2);
             count += row[row.size() / 2];
@@ -134,24 +145,26 @@ static void a()
     printf("05-a Sum of valid middle numbers %i times.\n", int(count));
 }
 
+static void sortRow(std::vector<int>& row)
+{
+    std::sort(row.begin(), row.end(), [](int& a, int& b)
+    {
+        return containsValue(a, b);
+    });
+}
+
+
 static void b()
 {
     int64_t count = 0;
 
     for(auto& row : s_rows )
     {
-        for(int i = 1; i < row.size(); ++i)
+        if(!isValidRow(row))
         {
-            if(!containsValue(row[i], row[i - 1]))
-            {
-                std::sort(row.begin(), row.end(), [](int& a, int& b)
-                {
-                    return containsValue(a, b);
-                });
-                assert(row.size() % 2);
-                count += row[row.size() / 2];
-                break;
-            }
+
+            assert(row.size() % 2);
+            count += row[row.size() / 2];
         }
     }
     printf("05-b Sum of invalid sorted middle numbers %i times.\n", int(count));

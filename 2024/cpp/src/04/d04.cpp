@@ -72,7 +72,7 @@ static void parse2d()
     }
 }
 
-char isChar(int x, int y, char c)
+static char isChar(int x, int y, char c)
 {
     if(y < 0 || y >= s_input2d.size())
     {
@@ -86,7 +86,7 @@ char isChar(int x, int y, char c)
     return (s_input2d[y])[x] == c;
 }
 
-bool checkWord(int x, int y, int dirX, int dirY, const std::string& findWord)
+static bool checkWord(int x, int y, int dirX, int dirY, const std::string& findWord)
 {
     int len = findWord.length();
     for(int i = 0; i < len; ++i)
@@ -100,13 +100,13 @@ bool checkWord(int x, int y, int dirX, int dirY, const std::string& findWord)
     return true;
 }
 
-bool checkMasFromA(int x, int y, int dirX, int dirY)
+static bool checkMasFromA(int x, int y, int dirX, int dirY)
 {
     static std::string s_findWord = "MAS";
     return checkWord(x - dirX, y - dirY, dirX, dirY, s_findWord);
 }
 
-bool checkX_MAS(int x, int y)
+static bool checkX_MAS(int x, int y)
 {
     static std::string s_findWord = "MAS";
     int count = 0;

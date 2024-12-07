@@ -95,7 +95,7 @@ static void parse()
     }
 }
 
-bool testNumbersA(const std::vector<int64_t>& numbers)
+static bool testNumbersA(const std::vector<int64_t>& numbers)
 {
     // binary, 0 means add, 1 means mul
     uint64_t maxCases = (uint64_t(1) << uint64_t(numbers.size() - 2));
@@ -137,7 +137,7 @@ bool testNumbersA(const std::vector<int64_t>& numbers)
     return false;
 }
 
-uint64_t concat(uint64_t l, uint64_t r)
+static uint64_t concatNumbers(uint64_t l, uint64_t r)
 {
     uint64_t mult = 1;
     while(r / mult > 0)
@@ -148,7 +148,7 @@ uint64_t concat(uint64_t l, uint64_t r)
     return result;
 }
 
-bool testNumbersB(const std::vector<int64_t>& numbers)
+static bool testNumbersB(const std::vector<int64_t>& numbers)
 {
     // 3 cases, 0 means add, 1 means mul, 2 means concat
     uint64_t maxCases = std::pow(3, uint64_t(numbers.size() - 2));
@@ -167,7 +167,7 @@ bool testNumbersB(const std::vector<int64_t>& numbers)
             {
                 case 0: sum = sum + numbers[index]; break;
                 case 1: sum = sum * numbers[index]; break;
-                case 2: sum = concat(sum, numbers[index]); break;
+                case 2: sum = concatNumbers(sum, numbers[index]); break;
             }
             localCases /= 3;
         }

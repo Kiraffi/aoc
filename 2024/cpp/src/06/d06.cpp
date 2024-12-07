@@ -145,7 +145,7 @@ static void parse()
 
 }
 
-void moveForward(Position& pos)
+static void moveForward(Position& pos)
 {
     Position tmp = pos;
     tmp.dir = (tmp.dir + 3) % 4;
@@ -159,7 +159,7 @@ void moveForward(Position& pos)
     pos = tmp;
 }
 
-void jumpForward(Position& pos, const Position& wall,
+static void jumpForward(Position& pos, const Position& wall,
     const std::vector<std::vector<std::vector<Position>>>& jumpMap)
 {
     Position goal = jumpMap[pos.y][pos.x][pos.dir];

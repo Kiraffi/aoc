@@ -82,7 +82,7 @@ static std::vector<std::vector<int>> parseInts()
     return result;
 }
 
-bool testSafeA(std::vector<int> values)
+static bool testSafeA(std::vector<int> values)
 {
     int prev = values[0];
     int dir = values[1] > values[0] ? 1 : -1;
@@ -105,7 +105,7 @@ bool testSafeA(std::vector<int> values)
     return true;
 }
 
-int testSafe(std::vector<int> values)
+static int testSafe(std::vector<int> values)
 {
     int growing = 0;
     int dec = 0;
