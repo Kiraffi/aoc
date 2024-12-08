@@ -214,7 +214,7 @@ static void a()
             }
         }
     }
-    printf("06-a Sum of valid middle numbers %i times.\n", int(count));
+    printf("06-a Distinct positions: %i\n", int(count));
 }
 
 static void b()
@@ -309,7 +309,7 @@ static void b()
         moveForward(pos);
     }
 
-    printf("06-b Sum of invalid sorted middle numbers %i times.\n", int(count));
+    printf("06-b Different positions for obstruction: %i\n", int(count));
 }
 
 static void doCpu()
