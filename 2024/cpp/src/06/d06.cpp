@@ -12,7 +12,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
-
+#include "../atomic_buffers_reset_comp.h"
 #include "d06_comp.h"
 
 #include "commons.h"
@@ -29,6 +29,7 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
+    PipelineAtomicBufferReset,
     PipelineD06,
 
     PipelineCount
@@ -37,6 +38,7 @@ enum PipelineEnum
 
 static ComputePipelineInfo s_pipelineInfos[] =
 {
+    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
     { BUF_N_SIZE(d06_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
@@ -395,6 +397,25 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     };
     SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
     {
+        // Reset atomic buffer
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferResult] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineAtomicBufferReset]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+
+        }
+
         // Get values
         {
             SDL_GPUStorageBufferReadWriteBinding buffers[] = {

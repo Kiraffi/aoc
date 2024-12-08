@@ -1,9 +1,17 @@
 #version 450 core
 
+// apparently atomicOr only accepts ints instead of ivec4
+
 #define THREAD_SIZE 1024
 #define MAP_ROW_INTS (256 / 32)
 #define MAP_INTS (256 * MAP_ROW_INTS)
-// apparently atomicOr only accepts ints instead of ivec4
+
+// cannot set too big amount, assumption that we find a loop always in
+// VISITED_POS_MAX * VISITED_DISTANCE_BETWEEN steps. Trying to keep the
+// register pressure lower.
+#define VISITED_POS_MAX (4)
+#define VISITED_DISTANCE_BETWEEN (2000)
+
 
 // Bitset of map walls rows. Assumption mapwidth and height < 256.
 // 2xivec4 = 256 bits, 8 ints = 256bits.
@@ -42,7 +50,6 @@ layout (set = 1, binding = 1) restrict buffer DataOut5
 {
     int outVisitedAmount;
     int outUniqueBlocks;
-    int outData[];
 };
 
 
@@ -157,6 +164,29 @@ int doStepsWithWall(inout ivec2 mapPos, inout int dir, ivec2 wall)
     return 1;
 }
 
+void unpackGarbageData(int carbageData, out ivec2 pos, out int dir, out ivec2 wall)
+{
+    wall = ivec2(carbageData & 0xff, (carbageData >> 8) & 0xff);
+    dir = (carbageData >> 16) & 0xff;
+
+    ivec2 vDir = ivec2(0);
+    switch(dir)
+    {
+        case 0: vDir.y = -1; break;
+        case 1: vDir.x = +1; break;
+        case 2: vDir.y = +1; break;
+        case 3: vDir.x = -1; break;
+    }
+    pos = wall - vDir;
+}
+
+void resetVisited(out int visitedPositions[VISITED_POS_MAX])
+{
+    for(int i = 0; i < VISITED_POS_MAX; ++i)
+    {
+        visitedPositions[i] = -1;
+    }
+}
 
 layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
 void main()
@@ -237,7 +267,6 @@ void main()
     int carbagePositions[8];
     int carbageCount = 0;
 
-    int steps = 1;
     ivec2 pos = sharedStartPoint;
     // Run map first time... very inefficient. Basically this is single threaded execution
     // with barriers on every single step, just to make sure that the "carbage" are added
@@ -246,6 +275,7 @@ void main()
     {
         ivec2 pos = sharedStartPoint;
         int dir = 0;
+        int steps = 0;
         steps += doSteps(pos, dir);
         while(isValidMapPosition(pos))
         {
@@ -281,15 +311,6 @@ void main()
         if(indexInThreadGroup == 0)
         {
             outVisitedAmount = sharedVisitedACount;
-            outData[0] = sharedMapWidth;
-            outData[1] = sharedMapHeight;
-
-            outData[2] = sharedStartPoint.x;
-            outData[3] = sharedStartPoint.y;
-
-            outData[4] = steps;
-            outData[5] = pos.x;
-            outData[6] = pos.y;
         }
         doBarriers();
     }
@@ -298,50 +319,32 @@ void main()
     {
         int validCarbage = 0;
 
-        // cannot set too big amount, assumption that we find a
-        #define VISITED_POS_MAX (4)
         int visitedPositions[VISITED_POS_MAX];
+
         {
-            for(int i = 0; i < VISITED_POS_MAX; ++i)
-            {
-                visitedPositions[i] = -1;
-            }
-        }
+            int carbageIndex = 0;
+            int steps = 0;
 
+            ivec2 pos;
+            int dir;
+            ivec2 wall;
 
-        for(int carbageIndex = 0; carbageIndex < carbageCount; ++carbageIndex)
-        {
-            {
-                for(int j = 0; j < VISITED_POS_MAX; ++j)
-                {
-                    visitedPositions[j] = -1;
-                }
-            }
-            steps = 0;
-            int tmpCarbage = carbagePositions[carbageIndex];
-            ivec2 wall = ivec2(tmpCarbage & 0xff, (tmpCarbage >> 8) & 0xff);
-            int dir = (tmpCarbage >> 16) & 0xff;
-
-            ivec2 vDir = ivec2(0);
-            switch(dir)
-            {
-                case 0: vDir.y = -1; break;
-                case 1: vDir.x = +1; break;
-                case 2: vDir.y = +1; break;
-                case 3: vDir.x = -1; break;
-            }
-            ivec2 pos = wall - vDir;
-
-
+            resetVisited(visitedPositions);
+            unpackGarbageData(carbagePositions[carbageIndex], pos, dir, wall);
             int lastWall = 0;
             int lastWallIndex = 0;
-            bool found = false;
-            while(isValidMapPosition(pos) && !found)
+
+            while(carbageIndex < carbageCount)
             {
                 int oldDir = dir;
                 ivec2 oldPos = pos;
                 steps += doStepsWithWall(pos, dir, wall);
-                if(dir != oldDir)
+                bool nextCarbage = false;
+                if(!isValidMapPosition(pos))
+                {
+                    nextCarbage = true;
+                }
+                else if(dir != oldDir)
                 {
                     for(int i = 0; i < VISITED_POS_MAX; ++i)
                     {
@@ -351,18 +354,25 @@ void main()
                         if(all(equal(vPos, oldPos)) && tmpDir == oldDir)
                         {
                             ++validCarbage;
-                            found = true;
-
-                            break;
+                            steps = lastWall = lastWallIndex = 0;
+                            nextCarbage = true;
                         }
                     }
-                    if(steps - lastWall > 2000)
+                    if(steps - lastWall > VISITED_DISTANCE_BETWEEN)
                     {
                         int bPos = (oldPos.x | (oldPos.y << 8) | (oldDir << 16));
                         visitedPositions[lastWallIndex] = bPos;
                         lastWallIndex = (lastWallIndex + 1) % VISITED_POS_MAX;
                         lastWall = steps;
                     }
+                }
+
+                if(nextCarbage)
+                {
+                    carbageIndex++;
+                    resetVisited(visitedPositions);
+                    unpackGarbageData(carbagePositions[carbageIndex], pos, dir, wall);
+                    steps = lastWall = lastWallIndex = 0;
                 }
             }
         }
