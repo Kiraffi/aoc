@@ -13,13 +13,8 @@
 #include <SDL3/SDL_main.h>
 
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
+#include "d06_comp.h"
+
 #include "commons.h"
 #include "commonrender.h"
 
@@ -34,19 +29,18 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineD06,
 
     PipelineCount
 };
 
-/*
+
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(d06_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
+
 
 static const std::string s_Filename = "input/06.input";
 
@@ -214,6 +208,7 @@ static void a()
             }
         }
     }
+
     printf("06-a Distinct positions: %i\n", int(count));
 }
 
@@ -289,9 +284,14 @@ static void b()
         char visited[MapSizeBytes] = {};
 
         Position tmp = pos;
+#if USE_JUMP_MAP
+        jumpForward(tmp, wall, jumpMap);
+#endif
+
         while(tmp.isValidPos())
         {
             char& c = visited[tmp.y * s_mapSizeX + tmp.x];
+            // if(c) if we start with jump forward, we should only need to check if visited
             if((c >> tmp.dir) & 1)
             {
                 ++count;
@@ -332,7 +332,7 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
+#if 1
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
@@ -355,9 +355,11 @@ bool initData()
     doCpu();
     return initCompute();
 }
+
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 }
 
 
@@ -376,15 +378,13 @@ void deinitData()
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
 
-
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
-
+    printf("06-a compute Distinct positions: %i\n", s_dataBuffer[0]);
+    printf("06-b compute Different positions for obstruction: %i\n", s_dataBuffer[1]);
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -409,18 +409,12 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD06]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
-
-    //if(index > 100)
-    //    return false;
 #endif
     return true;
 }

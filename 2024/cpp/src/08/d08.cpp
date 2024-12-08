@@ -128,17 +128,17 @@ static void drawAntinodes(T&& func)
 int64_t calculateAntinodes(const std::vector<std::string>& antinodes)
 {
     int64_t count = 0;
-    printf("\n");
+    //printf("\n");
     for(const auto row : antinodes)
     {
         for(const auto c : row)
         {
             if(c == '#')
             {
-                ++count;1064
+                ++count;
             }
         }
-        printf("%s\n", row.c_str());
+        //printf("%s\n", row.c_str());
     }
     return count;
 }

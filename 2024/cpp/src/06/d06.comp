@@ -1,0 +1,383 @@
+#version 450 core
+
+#define THREAD_SIZE 1024
+#define MAP_ROW_INTS (256 / 32)
+#define MAP_INTS (256 * MAP_ROW_INTS)
+// apparently atomicOr only accepts ints instead of ivec4
+
+// Bitset of map walls rows. Assumption mapwidth and height < 256.
+// 2xivec4 = 256 bits, 8 ints = 256bits.
+shared int sharedMapRows[MAP_INTS];
+
+// Bitset of same map walls, this time column wise going left to right.
+// Basically its transposed compared to sharedMapRows.
+shared int sharedMapCols[MAP_INTS];
+
+// The tiles that are visited.
+shared int sharedVisitedA[MAP_INTS];
+
+shared int sharedMapWidth;
+shared int sharedMapHeight;
+
+
+shared int sharedVisitedACount;
+shared int sharedUniqueBlockCount;
+
+shared ivec2 sharedStartPoint;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut5
+{
+    int outVisitedAmount;
+    int outUniqueBlocks;
+    int outData[];
+};
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool isValidMapPosition(ivec2 mapPos)
+{
+    return (all(greaterThanEqual(mapPos, ivec2(0)))
+        && all(lessThan(mapPos, ivec2(sharedMapWidth, sharedMapHeight))));
+}
+
+ivec2 getMapPositionFromStringPosition(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return ivec2(-1, -1);
+    }
+    return ivec2(index % sharedMapWidth, index / sharedMapWidth);
+}
+
+bool getBitPositionFromStringPosition(int index, out ivec2 mapPos)
+{
+    mapPos = getMapPositionFromStringPosition(index);
+    return isValidMapPosition(mapPos);
+}
+
+bool hasWall(ivec2 pos)
+{
+    int testSet = (1 << (pos.x % 32));
+    int index = pos.y * MAP_ROW_INTS + (pos.x / 32);
+    int bitset = sharedMapRows[index];
+
+    return (bitset & testSet) != 0;
+}
+
+int doSteps(inout ivec2 mapPos, inout int dir)
+{
+    dir--;
+    ivec2 newPos = mapPos;
+    bool valid = false;
+    while(!valid)
+    {
+        dir = (dir + 1) & 3;
+#if 1 // seems to be a bit faster
+        int xDiff = (dir & 1) * (2 - dir);
+        int yDiff = (((~dir) & 1)) * (dir - 1);
+        ivec2 vDir = ivec2(xDiff, yDiff);
+#else
+        ivec2 vDir = ivec2(0);
+        switch(dir)
+        {
+            case 0: vDir.y = -1; break;
+            case 1: vDir.x = +1; break;
+            case 2: vDir.y = +1; break;
+            case 3: vDir.x = -1; break;
+        }
+#endif
+        newPos = mapPos + vDir;
+        valid = !hasWall(newPos);
+    }
+    mapPos = newPos;
+    return 1;
+}
+
+
+int doStepsWithWall(inout ivec2 mapPos, inout int dir, ivec2 wall)
+{
+    dir--;
+    ivec2 newPos = mapPos;
+    bool valid = false;
+    while(!valid)
+    {
+        dir = (dir + 1) & 3;
+#if 1 // seems to be a bit faster
+        int xDiff = (dir & 1) * (2 - dir);
+        int yDiff = (((~dir) & 1)) * (dir - 1);
+        ivec2 vDir = ivec2(xDiff, yDiff);
+#else
+        ivec2 vDir = ivec2(0);
+        switch(dir)
+        {
+            case 0: vDir.y = -1; break;
+            case 1: vDir.x = +1; break;
+            case 2: vDir.y = +1; break;
+            case 3: vDir.x = -1; break;
+        }
+#endif
+        newPos = mapPos + vDir;
+        valid = !all(equal(newPos, wall));
+        valid = valid && !hasWall(newPos);
+    }
+    mapPos = newPos;
+    return 1;
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedMapWidth = 10000;
+            sharedMapHeight = 0;
+            sharedVisitedACount = 0;
+            sharedUniqueBlockCount = 0;
+        }
+        {
+            for(int index = indexInThreadGroup; index < MAP_INTS; index += THREAD_SIZE)
+            {
+                sharedMapRows[index] = 0;
+                sharedMapCols[index] = 0;
+                sharedVisitedA[index] = 0;
+            }
+        }
+        doBarriers();
+    }
+    // Find biggest linebreak.
+    {
+        if(readChar(indexInThreadGroup) == 0xA) // line break 0xA
+        {
+            atomicMin(sharedMapWidth, indexInThreadGroup + 1);
+        }
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            sharedMapHeight = (dataSizeInputBytes + sharedMapWidth - 1) / sharedMapWidth;
+        }
+        doBarriers();
+    }
+
+    // Fill maps with walls
+    {
+        for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+        {
+            int c = readChar(index);
+            if(c == 0x23) // '#' 0x23
+            {
+                ivec2 pos = ivec2(0);
+                if(getBitPositionFromStringPosition(index, pos))
+                {
+                    int bitset = (1 << (pos.x % 32));
+                    int index = pos.y * MAP_ROW_INTS + (pos.x / 32);
+                    atomicOr(sharedMapRows[index], bitset);
+
+                    bitset = (1 << (pos.y) % 32);
+                    index = pos.x * MAP_ROW_INTS + (pos.y / 32);
+                    atomicOr(sharedMapCols[index], bitset);
+                }
+            }
+            else if(c == 0x5E) // '^' 0x5E
+            {
+                ivec2 pos;
+                if(getBitPositionFromStringPosition(index, pos))
+                {
+                    sharedStartPoint = pos;
+
+                    // Set starting pos.
+                    int bitset = (1 << (pos.x % 32));
+                    int index = pos.y * MAP_ROW_INTS + (pos.x / 32);
+                    int oldSet = atomicOr(sharedVisitedA[index], bitset);
+                }
+            }
+        }
+
+        doBarriers();
+    }
+
+    // saving 8 extra carbage positions... should be enough for THREAD_SIZE * 8 steps per thread
+    int carbagePositions[8];
+    int carbageCount = 0;
+
+    int steps = 1;
+    ivec2 pos = sharedStartPoint;
+    // Run map first time... very inefficient. Basically this is single threaded execution
+    // with barriers on every single step, just to make sure that the "carbage" are added
+    // earliest possible moment.
+    #if 1
+    {
+        ivec2 pos = sharedStartPoint;
+        int dir = 0;
+        steps += doSteps(pos, dir);
+        while(isValidMapPosition(pos))
+        {
+            if((steps % THREAD_SIZE) == indexInThreadGroup)
+            {
+                int bitset = (1 << (pos.x % 32));
+                int index = pos.y * MAP_ROW_INTS + (pos.x / 32);
+                int oldSet = atomicOr(sharedVisitedA[index], bitset);
+                if((oldSet & bitset) == 0 && carbageCount < 8)
+                {
+                    int bPos = (pos.x | (pos.y << 8) | (dir << 16));
+                    carbagePositions[carbageCount] = bPos;
+                    ++carbageCount;
+                }
+            }
+            doBarriers(); // makes this lock step even slower, outer barrier would be a bit faster
+            steps += doSteps(pos, dir);
+        }
+        //doBarriers();
+    }
+    #endif
+    // Count for A
+    {
+        for(int index = indexInThreadGroup; index < MAP_INTS; index += THREAD_SIZE)
+        {
+            int value = sharedVisitedA[index];
+            if(value != 0)
+            {
+                atomicAdd(sharedVisitedACount, bitCount(value));
+            }
+        }
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            outVisitedAmount = sharedVisitedACount;
+            outData[0] = sharedMapWidth;
+            outData[1] = sharedMapHeight;
+
+            outData[2] = sharedStartPoint.x;
+            outData[3] = sharedStartPoint.y;
+
+            outData[4] = steps;
+            outData[5] = pos.x;
+            outData[6] = pos.y;
+        }
+        doBarriers();
+    }
+    // Do B, extremely slow
+    #if 1
+    {
+        int validCarbage = 0;
+
+        // cannot set too big amount, assumption that we find a
+        #define VISITED_POS_MAX (4)
+        int visitedPositions[VISITED_POS_MAX];
+        {
+            for(int i = 0; i < VISITED_POS_MAX; ++i)
+            {
+                visitedPositions[i] = -1;
+            }
+        }
+
+
+        for(int carbageIndex = 0; carbageIndex < carbageCount; ++carbageIndex)
+        {
+            {
+                for(int j = 0; j < VISITED_POS_MAX; ++j)
+                {
+                    visitedPositions[j] = -1;
+                }
+            }
+            steps = 0;
+            int tmpCarbage = carbagePositions[carbageIndex];
+            ivec2 wall = ivec2(tmpCarbage & 0xff, (tmpCarbage >> 8) & 0xff);
+            int dir = (tmpCarbage >> 16) & 0xff;
+
+            ivec2 vDir = ivec2(0);
+            switch(dir)
+            {
+                case 0: vDir.y = -1; break;
+                case 1: vDir.x = +1; break;
+                case 2: vDir.y = +1; break;
+                case 3: vDir.x = -1; break;
+            }
+            ivec2 pos = wall - vDir;
+
+
+            int lastWall = 0;
+            int lastWallIndex = 0;
+            bool found = false;
+            while(isValidMapPosition(pos) && !found)
+            {
+                int oldDir = dir;
+                ivec2 oldPos = pos;
+                steps += doStepsWithWall(pos, dir, wall);
+                if(dir != oldDir)
+                {
+                    for(int i = 0; i < VISITED_POS_MAX; ++i)
+                    {
+                        int tmp = visitedPositions[i];
+                        ivec2 vPos = ivec2(tmp & 0xff, (tmp >> 8) & 0xff);
+                        int tmpDir = (tmp >> 16) & 0xff;
+                        if(all(equal(vPos, oldPos)) && tmpDir == oldDir)
+                        {
+                            ++validCarbage;
+                            found = true;
+
+                            break;
+                        }
+                    }
+                    if(steps - lastWall > 2000)
+                    {
+                        int bPos = (oldPos.x | (oldPos.y << 8) | (oldDir << 16));
+                        visitedPositions[lastWallIndex] = bPos;
+                        lastWallIndex = (lastWallIndex + 1) % VISITED_POS_MAX;
+                        lastWall = steps;
+                    }
+                }
+            }
+        }
+        doBarriers();
+
+        if(validCarbage != 0)
+        {
+            atomicAdd(sharedUniqueBlockCount, validCarbage);
+        }
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            outUniqueBlocks = sharedUniqueBlockCount;
+        }
+    }
+    #endif
+}
+
