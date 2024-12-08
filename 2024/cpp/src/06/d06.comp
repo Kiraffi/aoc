@@ -243,14 +243,10 @@ void unpackGarbageData(int carbageData, out ivec2 pos, out int dir, out ivec2 wa
     wall = ivec2(carbageData & 0xff, (carbageData >> 8) & 0xff);
     dir = (carbageData >> 16) & 0xff;
 
-    ivec2 vDir = ivec2(0);
-    switch(dir)
-    {
-        case 0: vDir.y = -1; break;
-        case 1: vDir.x = +1; break;
-        case 2: vDir.y = +1; break;
-        case 3: vDir.x = -1; break;
-    }
+    int xDiff = (dir & 1) * (2 - dir);
+    int yDiff = (((~dir) & 1)) * (dir - 1);
+    ivec2 vDir = ivec2(xDiff, yDiff);
+
     pos = wall - vDir;
 }
 
