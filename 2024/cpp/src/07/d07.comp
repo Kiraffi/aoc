@@ -1,0 +1,418 @@
+#version 450 core
+
+// Need int64, but not supported.....
+//#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+// not supported by sdlwebgpu by default....
+//#extension GL_EXT_shader_atomic_int64 : enable
+
+#define THREAD_SIZE 1024
+
+shared int sharedLinebreaks[1024];
+
+shared int sharedLinebreakCount;
+
+
+shared uint sharedTemp;
+//shared int64_t sharedSumA;
+//shared int64_t sharedSumB;
+
+shared uvec2 sharedSumA;
+shared uvec2 sharedSumB;
+
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    uvec2 outSumA;
+    uvec2 outSumB;
+
+    uvec2 outData[];
+};
+
+
+uvec2 add64(in uvec2 a, in uvec2 b)
+{
+    uvec2 result = a + b;
+    if(result.x < max(a.x, b.x))
+    {
+        result.y++;
+    }
+    return result;
+}
+
+uvec2 mul64(in uvec2 a, in uvec2 b)
+{
+    uvec2 result = uvec2(0);
+
+    {
+        uint value = b.x;
+        int lsb = findLSB(value);
+        while(lsb != -1)
+        {
+            uint ulsb = uint(lsb);
+            result = add64(result, uvec2(a.x << ulsb, a.x >> (uint(32) - ulsb)));
+
+            value &= ~(uint(1) << ulsb);
+            lsb = findLSB(value);
+        }
+    }
+    result.y += a.x * b.y + a.y * b.x;
+    /*
+    {
+        uint value = b.y;
+        int lsb = findLSB(value);
+        while(lsb != -1)
+        {
+            result = add64(result, uvec2(0, a.x << lsb));
+            //result.y += a.x << lsb;
+
+            value &= ~(uint(1) << uint(lsb));
+            lsb = findLSB(value);
+        }
+    }
+    {
+        uint value = a.y;
+        int lsb = findLSB(value);
+        while(lsb != -1)
+        {
+            result = add64(result, uvec2(0, b.x << lsb));
+            //result.y += b.x << lsb;
+
+            value &= ~(uint(1) << uint(lsb));
+            lsb = findLSB(value);
+        }
+    }
+    */
+    return result;
+}
+
+bool g64(uvec2 a, uvec2 b)
+{
+    if(a.y != b.y)
+    {
+        return a.y > b.y;
+    }
+    return a.x > b.x;
+}
+
+bool ge64(uvec2 a, uvec2 b)
+{
+    if(a.y != b.y)
+    {
+        return a.y > b.y;
+    }
+    return a.x >= b.x;
+}
+
+bool eq64(in uvec2 a, in uvec2 b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool isNumber(uint value)
+{
+    // '0' == 48, '9' == 57
+    return value >= 48 && value <= 57;
+}
+
+int findNumberBackwards(int index)
+{
+    while(index >= 0 && index < dataSizeInputBytes && !isNumber(readChar(index)))
+    {
+        --index;
+    }
+    return index;
+}
+
+int findNumberForwards(int index)
+{
+    while(index >= 0 && index < dataSizeInputBytes && !isNumber(readChar(index)))
+    {
+        ++index;
+    }
+    return index;
+}
+
+// number, newIndex
+uvec2 parseNumberForwards(inout int index)
+{
+    uvec2 result = uvec2(0);
+
+    // '0' == 48, '9' == 57
+    uint c = readChar(index);
+
+    uvec2 multiplier = uvec2(1, 0);
+    uvec2 tenMul = uvec2(10, 0);
+    while(index >= 0 && isNumber(c))
+    {
+        c -= 48;
+
+        uvec2 tmp1 = uvec2(c, 0);
+        result = add64(mul64(result, uvec2(10, 0)), uvec2(c, 0));
+
+        ++index;
+        c = readChar(index);
+    }
+    return result;
+}
+
+// NOTWORKING for some reason
+// number, newIndex
+uvec2 parseNumberBackwards(inout int index)
+{
+    uvec2 result = uvec2(0);
+
+    // '0' == 48, '9' == 57
+    uint c = readChar(index);
+
+    uvec2 multiplier = uvec2(1, 0);
+
+    while(index >= 0 && isNumber(c))
+    {
+        c -= 48;
+        result = add64(mul64(multiplier, uvec2(c, 0)), result);
+        multiplier = mul64(multiplier, uvec2(10, 0));
+
+        --index;
+        c = readChar(index);
+    }
+    return result;
+}
+
+uvec2 concatNumbers(uvec2 l, uvec2 r)
+{
+    uvec2 mult = uvec2(1, 0);
+    while(ge64(r, mult))
+    {
+        mult = mul64(mult, uvec2(10, 0));
+    }
+    uvec2 result = mul64(l, mult);
+    result = add64(l, r);
+    return result;
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedLinebreakCount = 0;
+            sharedSumA = uvec2(0, 0);
+            sharedSumB = uvec2(0, 0);
+
+            sharedTemp = 0;
+        }
+        doBarriers();
+    }
+    // Find linebreaks.
+    {
+        for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+        {
+            if(readChar(index) == 0xA) // line break 0xA
+            {
+                int count = atomicAdd(sharedLinebreakCount, 1);
+                sharedLinebreaks[count] = index;
+            }
+
+        }
+        doBarriers();
+    }
+
+    // Calculate A
+    if(true)
+    {
+        if(indexInThreadGroup < sharedLinebreakCount)
+        {
+            // assumption: less than 24 numbers in any row
+            #define MAX_NUMS (20)
+            uvec2 values[MAX_NUMS];
+            int valueCount = 0;
+
+            {
+                int endCharIndex = sharedLinebreaks[indexInThreadGroup];
+                int beginCharIndex = endCharIndex - 1;
+                while(readChar(beginCharIndex) != 0xA && beginCharIndex >= 0)
+                {
+                    beginCharIndex--;
+                }
+                ++beginCharIndex;
+                while(beginCharIndex < endCharIndex) // linebreak
+                {
+                    beginCharIndex = findNumberForwards(beginCharIndex); //findNumberBackwards(beginCharIndex);
+
+                    uvec2 readValue = parseNumberForwards(beginCharIndex);
+                    values[valueCount] = readValue;
+                    ++valueCount;
+                }
+                /*
+                for(int numIndex = 0; numIndex < valueCount; ++numIndex)
+                {
+                    uvec2 tmp = values[numIndex];
+                    values[numIndex] = values[valueCount - numIndex - 1];
+                    values[valueCount - numIndex - 1] = tmp;
+                }
+                */
+            }
+            int combIndex = 0;
+            #if 1
+            if(true)
+            {
+                // last 1 numbers are the sum value and one less operator than numbers.
+                int maxCombinations = (1 << (valueCount - 2));
+                uvec2 compValue = values[0];
+                //atomicMax(sharedTemp, compValue.y);
+                for(; combIndex < maxCombinations; ++combIndex)
+                {
+                    uvec2 sum = values[1];
+
+
+                    int localCases = combIndex;
+                    for(int caseIndex = 2; caseIndex < valueCount; ++caseIndex)
+                    {
+                        if(g64(sum, compValue))
+                        {
+                            //break;
+                        }
+                        if((localCases & 1) != 0)
+                        {
+                            sum = mul64(sum, values[caseIndex]);
+                        }
+                        else
+                        {
+                            sum = add64(sum, values[caseIndex]);
+                        }
+                        //sum = (localCases & 1) != 0
+                        //    ? sum * values[index]
+                        //    : sum + values[index];
+                        localCases /= 2;
+                    }
+
+                    if(eq64(sum, compValue))
+                    {
+                        sum = compValue;
+                        uint oldValue = atomicAdd(sharedSumA.x, sum.x);
+                        uvec2 tmp = add64(uvec2(oldValue, 0), sum);
+                        atomicAdd(sharedSumA.y, tmp.y);
+                        //if(sum.y > 0)
+                            atomicMax(sharedTemp, compValue.x);
+                        break;
+                    }
+                }
+            }
+            #endif
+
+
+            #if 0
+            if(false)
+            {
+
+                // last number is the sum value and one less operator than numbers.
+                int maxCombinations = 1;
+                for(int j = 0; j < numberCount - 2; ++j)
+                {
+                    maxCombinations *= 3;
+                }
+
+                for(int i = 0; i < maxCombinations; ++i)
+                {
+                    uint sum = values[23];
+                    int localCases = i;
+                    for(int index = 22; index > valueCount + 1; --index)
+                    {
+                        if(sum > values[valueCount + 1])
+                        {
+                            break;
+                        }
+
+                        switch(localCases % 3)
+                        {
+                            case 0: sum = sum + values[index]; break;
+                            case 1: sum = sum * values[index]; break;
+                            case 2: sum = concatNumbers(sum, values[index]); break;
+                        }
+                        localCases /= 3;
+                    }
+
+                    if(sum == values[valueCount +1])
+                    {
+                        uint a = uint(sum);
+                        uint b = uint(sum >> 32);
+
+                        uint oldValue = atomicAdd(sharedSumB[0], a);
+                        if(oldValue < a)
+                        {
+                            ++b;
+                        }
+                        atomicAdd(sharedSumB[1], b);
+                        break;
+                    }
+                }
+            }
+            #endif
+
+
+            doBarriers();
+            if(indexInThreadGroup == 0)
+            //if(indexInThreadGroup == sharedTemp)
+            {
+
+                outSumA = sharedSumA;
+                outSumB = uvec2(sharedLinebreakCount, 0);
+                //outSumB = sharedSumB;
+
+                for(int i = 0; i < valueCount; ++i)
+                {
+                    outData[i] = values[i];
+                }
+                for(int i = valueCount; i < MAX_NUMS; ++i)
+                {
+                    outData[i] = uvec2(9999, 0);
+
+                }
+                outData[21] = uvec2(0, sharedTemp);
+                outData[22] = sharedSumA.yx;
+                outData[23] = uvec2(combIndex, 0);
+
+            }
+        }
+    }
+}
+

@@ -14,13 +14,8 @@
 #include <SDL3/SDL_main.h>
 
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
+#include "d07_comp.h"
+
 #include "commons.h"
 #include "commonrender.h"
 
@@ -35,19 +30,17 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineD07,
 
     PipelineCount
 };
 
-/*
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(d07_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
+
 
 static const std::string s_Filename = "input/07.input";
 
@@ -248,7 +241,7 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
+#if 1
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
@@ -273,7 +266,8 @@ bool initData()
 }
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 }
 
 void deinitData()
@@ -290,16 +284,32 @@ void deinitData()
         if(buffer != nullptr)
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
+    int64_t a = *(((int64_t*)s_dataBuffer) + 0);
+    int64_t b = *(((int64_t*)s_dataBuffer) + 1);
+
+    printf("nums: ");
+    for(int i = 0; i < 24; ++i)
+    {
+        int64_t n = *(((int64_t*)s_dataBuffer) + 2 + i);
+
+/*
+        int32_t *num = (((int32_t*)s_dataBuffer) + (i + 2) * 2);
+        int64_t n = int64_t(*(num + 0)) << int64_t(0);
+        n += int64_t(*(num + 1)) << int64_t(32);
+*/
+        printf("%" SDL_PRIs64 ", ", n);
+
+    }
+    printf("\n");
 
 
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
-
+    printf("07-a Compute Sum of valid operator numbers %" SDL_PRIs64 "\n", a);
+    printf("07-b Compute Sum of valid operator numbers %" SDL_PRIs64 "\n", b);
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -324,15 +334,12 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD07]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
 #endif
     return true;
