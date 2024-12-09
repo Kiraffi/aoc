@@ -1,0 +1,347 @@
+#version 450 core
+
+// Need int64, but not supported.....
+//#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+// not supported by sdlwebgpu by default....
+//#extension GL_EXT_shader_atomic_int64 : enable
+
+#define THREAD_SIZE 32
+
+shared uvec2 sharedSumA;
+shared uvec2 sharedSumB;
+
+shared uvec2 sharedNumbers[32];
+shared int sharedNumberCount;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// input string
+layout (set = 1, binding = 1) restrict buffer DataIn2
+{
+    int linebreakIndexIn[];
+};
+
+
+// Result
+layout (set = 1, binding = 2) restrict buffer DataOut1
+{
+    uvec2 outSumA;
+    uvec2 outSumB;
+
+    uvec2 outData[];
+};
+
+
+uvec2 add64(in uvec2 a, in uvec2 b)
+{
+    uvec2 result = a + b;
+    if(result.x < max(a.x, b.x))
+    {
+        result.y++;
+    }
+    return result;
+}
+
+uvec2 mul64(in uvec2 a, in uvec2 b)
+{
+    uvec2 result = uvec2(0);
+
+    uint lowA = (a.x & 0xffff);
+    uint lowB = (b.x & 0xffff);
+    uint highA = a.x >> 16;
+    uint highB = b.x >> 16;
+
+    result.x = lowA * lowB;
+    result.y = highA * highB;
+    result.y += a.x * b.y;
+    result.y += a.y * b.x;
+
+    uint midA = lowA * highB;
+    uint midB = highA * lowB;
+
+    result = add64(result, uvec2(midA << 16, midA >> 16));
+    result = add64(result, uvec2(midB << 16, midB >> 16));
+
+    return result;
+}
+
+bool g64(uvec2 a, uvec2 b)
+{
+    if(a.y != b.y)
+    {
+        return a.y > b.y;
+    }
+    return a.x > b.x;
+}
+
+bool ge64(uvec2 a, uvec2 b)
+{
+    if(a.y != b.y)
+    {
+        return a.y > b.y;
+    }
+    return a.x >= b.x;
+}
+
+bool eq64(in uvec2 a, in uvec2 b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+
+uvec2 concatNumbers(uvec2 l, uvec2 r)
+{
+    uvec2 mult = uvec2(1, 0);
+    while(ge64(r, mult))
+    {
+        mult = mul64(mult, uvec2(10, 0));
+    }
+    uvec2 result = mul64(l, mult);
+    result = add64(result, r);
+    return result;
+}
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool isNumber(uint value)
+{
+    // '0' == 48, '9' == 57
+    return value >= 48 && value <= 57;
+}
+
+int findNumberBackwards(int index)
+{
+    while(index >= 0 && index < dataSizeInputBytes && !isNumber(readChar(index)))
+    {
+        --index;
+    }
+    return index;
+}
+
+int findNumberForwards(int index)
+{
+    while(index >= 0 && index < dataSizeInputBytes && !isNumber(readChar(index)))
+    {
+        ++index;
+    }
+    return index;
+}
+
+// number, newIndex
+uvec2 parseNumberForwards(inout int index)
+{
+    uvec2 result = uvec2(0);
+
+    // '0' == 48, '9' == 57
+    uint c = readChar(index);
+
+    uvec2 multiplier = uvec2(1, 0);
+    uvec2 tenMul = uvec2(10, 0);
+    while(index >= 0 && isNumber(c))
+    {
+        c -= 48;
+
+        uvec2 tmp1 = uvec2(c, 0);
+        result = add64(mul64(result, uvec2(10, 0)), uvec2(c, 0));
+
+        ++index;
+        c = readChar(index);
+    }
+    return result;
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedNumberCount = 0;
+            sharedSumA = uvec2(0, 0);
+            sharedSumB = uvec2(0, 0);
+        }
+        doBarriers();
+    }
+    // parse numbers, single threaded, slow.
+    {
+        if(indexInThreadGroup == 0)
+        {
+            int numberCount = 0;
+
+            int endCharIndex = linebreakIndexIn[groupId];
+            int beginCharIndex = endCharIndex - 1;
+            while(readChar(beginCharIndex) != 0xA && beginCharIndex >= 0)
+            {
+                beginCharIndex--;
+            }
+            ++beginCharIndex;
+            while(beginCharIndex < endCharIndex) // linebreak
+            {
+                beginCharIndex = findNumberForwards(beginCharIndex);
+
+                uvec2 readValue = parseNumberForwards(beginCharIndex);
+                sharedNumbers[numberCount] = readValue;
+                ++numberCount;
+            }
+            sharedNumberCount = numberCount;
+        }
+        doBarriers();
+    }
+
+    // Calculate A
+    if(true)
+    {
+        #if 1
+        {
+            int numberCount = sharedNumberCount;
+            // last 1 numbers are the sum value and one less operator than numbers.
+            uint maxCombinations = (uint(1) << uint(uint(numberCount) - 2));
+            uvec2 compValue = sharedNumbers[0];
+            //atomicMax(sharedTemp, compValue.y);
+            for(uint combIndex = indexInThreadGroup; combIndex < maxCombinations; combIndex += THREAD_SIZE)
+            {
+                if(any(notEqual(sharedSumA, vec2(0))))
+                {
+                    break;
+                }
+                uvec2 sum = sharedNumbers[1];
+
+
+                uint localCases = combIndex;
+                for(int caseIndex = 2; caseIndex < numberCount; ++caseIndex)
+                {
+                    if(g64(sum, compValue))
+                    {
+                        break;
+                    }
+                    if((localCases & 1) != 0)
+                    {
+                        sum = mul64(sum, sharedNumbers[caseIndex]);
+                    }
+                    else
+                    {
+                        sum = add64(sum, sharedNumbers[caseIndex]);
+                    }
+                    //sum = (localCases & 1) != 0
+                    //    ? sum * sharedNumbers[index]
+                    //    : sum + sharedNumbers[index];
+                    localCases /= 2;
+                }
+
+                if(eq64(sum, compValue))
+                {
+                    sum = compValue;
+                    sharedSumA = sum;
+                    break;
+                }
+            }
+        }
+        #endif
+
+
+        #if 1
+        //B
+        {
+            int numberCount = sharedNumberCount;
+
+            // last number is the sum value and one less operator than numbers.
+            uint maxCombinations = 1;
+            for(int j = 0; j < numberCount - 2; ++j)
+            {
+                maxCombinations *= 3;
+            }
+            uvec2 compValue = sharedNumbers[0];
+
+            for(uint combIndex = indexInThreadGroup; combIndex < maxCombinations; combIndex += THREAD_SIZE)
+            {
+                if(any(notEqual(sharedSumB, vec2(0))))
+                {
+                    break;
+                }
+
+                uvec2 sum = sharedNumbers[1];
+
+                uint localCases = combIndex;
+                for(int index = 2; index < numberCount; ++index)
+                {
+                    if(g64(sum, compValue))
+                    {
+                        break;
+                    }
+
+                    switch(localCases % 3)
+                    {
+                        case 0: sum = mul64(sum, sharedNumbers[index]); break;
+                        case 1: sum = concatNumbers(sum, sharedNumbers[index]); break;
+                        case 2: sum = add64(sum, sharedNumbers[index]); break;
+                    }
+                    localCases /= 3;
+                }
+
+                if(eq64(sum, compValue))
+                {
+                    sharedSumB = sum;
+                    break;
+                }
+            }
+        }
+        #endif
+
+
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            {
+                uint oldValue = atomicAdd(outSumA.x, sharedSumA.x);
+                if(sharedSumA.x + oldValue < max(sharedSumA.x, oldValue))
+                {
+                    atomicAdd(sharedSumA.y, 1);
+                }
+                atomicAdd(outSumA.y, sharedSumA.y);
+            }
+            {
+                uint oldValue = atomicAdd(outSumB.x, sharedSumB.x);
+                if(sharedSumB.x + oldValue < max(sharedSumB.x, oldValue))
+                {
+                    atomicAdd(sharedSumB.y, 1);
+                }
+                atomicAdd(outSumB.y, sharedSumB.y);
+            }
+        }
+    }
+}
+

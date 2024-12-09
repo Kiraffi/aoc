@@ -13,8 +13,10 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
-
+#include "atomic_buffers_reset_comp.h"
+#include "d07_calculate_sum_comp.h"
 #include "d07_comp.h"
+#include "d07_parse_comp.h"
 
 #include "commons.h"
 #include "commonrender.h"
@@ -23,6 +25,8 @@
 enum BufferEnum : int
 {
     BufferInput,
+    BufferLinebreaks,
+    BufferIndirect,
     BufferResult,
 
     BufferCount
@@ -30,14 +34,18 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD07,
+    PipelineBufferReset,
+    PipelineParse,
+    PipelineCalcuclateSum,
 
     PipelineCount
 };
 
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(d07_comp), 2, 1, 1024 },
+    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
+    { BUF_N_SIZE(d07_parse_comp), 3, 1, 1024 },
+    { BUF_N_SIZE(d07_calculate_sum_comp), 3, 1, 32 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
 
@@ -245,6 +253,9 @@ bool initCompute()
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
 
+    s_buffers[BufferLinebreaks] = (createGPUWriteBuffer(1024 * sizeof(int), "Linebreaks"));
+    s_buffers[BufferIndirect] = (createGPUWriteBuffer(1024, "Indirect", true));
+
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
@@ -287,22 +298,6 @@ void deinitData()
     int64_t a = *(((int64_t*)s_dataBuffer) + 0);
     int64_t b = *(((int64_t*)s_dataBuffer) + 1);
 
-    printf("nums: ");
-    for(int i = 0; i < 24; ++i)
-    {
-        int64_t n = *(((int64_t*)s_dataBuffer) + 2 + i);
-
-/*
-        int32_t *num = (((int32_t*)s_dataBuffer) + (i + 2) * 2);
-        int64_t n = int64_t(*(num + 0)) << int64_t(0);
-        n += int64_t(*(num + 1)) << int64_t(32);
-*/
-        printf("%" SDL_PRIs64 ", ", n);
-
-    }
-    printf("\n");
-
-
     printf("07-a Compute Sum of valid operator numbers %" SDL_PRIs64 "\n", a);
     printf("07-b Compute Sum of valid operator numbers %" SDL_PRIs64 "\n", b);
 }
@@ -320,10 +315,48 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     };
     SDL_PushGPUComputeUniformData(cmd, 0, &dataSize, sizeof(dataSize));
     {
-        // Get values
+        // Atomic buffer reset
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferResult] },
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineBufferReset]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+        }
+        // Parse linebreaks
         {
             SDL_GPUStorageBufferReadWriteBinding buffers[] = {
                 { .buffer = s_buffers[BufferInput] },
+                { .buffer = s_buffers[BufferLinebreaks] },
+                { .buffer = s_buffers[BufferIndirect] }
+            };
+            SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
+                cmd,
+                nullptr,
+                0,
+                buffers,
+                sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
+            );
+
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineParse]);
+            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_EndGPUComputePass(computePass);
+        }
+
+        // Calcualte sum
+        {
+            SDL_GPUStorageBufferReadWriteBinding buffers[] = {
+                { .buffer = s_buffers[BufferInput] },
+                { .buffer = s_buffers[BufferLinebreaks] },
                 { .buffer = s_buffers[BufferResult] }
             };
             SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
@@ -334,13 +367,11 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD07]);
-            SDL_DispatchGPUCompute(computePass, 1, 1, 1);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineCalcuclateSum]);
+            SDL_DispatchGPUComputeIndirect(computePass, s_buffers[BufferIndirect], 0);
             SDL_EndGPUComputePass(computePass);
-
         }
     }
-
 #endif
     return true;
 }
