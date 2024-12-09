@@ -56,6 +56,25 @@ uvec2 mul64(in uvec2 a, in uvec2 b)
 {
     uvec2 result = uvec2(0);
 
+    uint lowA = (a.x & 0xffff);
+    uint lowB = (b.x & 0xffff);
+    uint highA = a.x >> 16;
+    uint highB = b.x >> 16;
+
+
+    result.x = lowA * lowB;
+    result.y = highA * highB;
+    result.y += a.x * b.y;
+    result.y += a.y * b.x;
+
+    uint midA = lowA * highB;
+    uint midB = highA * lowB;
+
+    result = add64(result, uvec2(midA << 16, midA >> 16));
+    result = add64(result, uvec2(midB << 16, midB >> 16));
+
+
+/*
     {
         uint value = b.x;
         int lsb = findLSB(value);
@@ -220,7 +239,7 @@ uvec2 concatNumbers(uvec2 l, uvec2 r)
         mult = mul64(mult, uvec2(10, 0));
     }
     uvec2 result = mul64(l, mult);
-    result = add64(l, r);
+    result = add64(result, r);
     return result;
 }
 
@@ -264,7 +283,7 @@ void main()
             // assumption: less than 24 numbers in any row
             #define MAX_NUMS (20)
             uvec2 values[MAX_NUMS];
-            int valueCount = 0;
+            int numberCount = 0;
 
             {
                 int endCharIndex = sharedLinebreaks[indexInThreadGroup];
@@ -279,37 +298,27 @@ void main()
                     beginCharIndex = findNumberForwards(beginCharIndex); //findNumberBackwards(beginCharIndex);
 
                     uvec2 readValue = parseNumberForwards(beginCharIndex);
-                    values[valueCount] = readValue;
-                    ++valueCount;
+                    values[numberCount] = readValue;
+                    ++numberCount;
                 }
-                /*
-                for(int numIndex = 0; numIndex < valueCount; ++numIndex)
-                {
-                    uvec2 tmp = values[numIndex];
-                    values[numIndex] = values[valueCount - numIndex - 1];
-                    values[valueCount - numIndex - 1] = tmp;
-                }
-                */
             }
-            int combIndex = 0;
             #if 1
-            if(true)
             {
                 // last 1 numbers are the sum value and one less operator than numbers.
-                int maxCombinations = (1 << (valueCount - 2));
+                uint maxCombinations = (uint(1) << uint(uint(numberCount) - 2));
                 uvec2 compValue = values[0];
                 //atomicMax(sharedTemp, compValue.y);
-                for(; combIndex < maxCombinations; ++combIndex)
+                for(uint combIndex = 0; combIndex < maxCombinations; ++combIndex)
                 {
                     uvec2 sum = values[1];
 
 
-                    int localCases = combIndex;
-                    for(int caseIndex = 2; caseIndex < valueCount; ++caseIndex)
+                    uint localCases = combIndex;
+                    for(int caseIndex = 2; caseIndex < numberCount; ++caseIndex)
                     {
                         if(g64(sum, compValue))
                         {
-                            //break;
+                            break;
                         }
                         if((localCases & 1) != 0)
                         {
@@ -329,10 +338,11 @@ void main()
                     {
                         sum = compValue;
                         uint oldValue = atomicAdd(sharedSumA.x, sum.x);
-                        uvec2 tmp = add64(uvec2(oldValue, 0), sum);
-                        atomicAdd(sharedSumA.y, tmp.y);
-                        //if(sum.y > 0)
-                            atomicMax(sharedTemp, compValue.x);
+                        if(sum.x + oldValue < max(sum.x, oldValue))
+                        {
+                            sum.y++;
+                        }
+                        atomicAdd(sharedSumA.y, sum.y);
                         break;
                     }
                 }
@@ -340,48 +350,46 @@ void main()
             #endif
 
 
-            #if 0
-            if(false)
+            #if 1
             {
 
                 // last number is the sum value and one less operator than numbers.
-                int maxCombinations = 1;
+                uint maxCombinations = 1;
                 for(int j = 0; j < numberCount - 2; ++j)
                 {
                     maxCombinations *= 3;
                 }
+                uvec2 compValue = values[0];
 
-                for(int i = 0; i < maxCombinations; ++i)
+                for(uint i = 0; i < maxCombinations; ++i)
                 {
-                    uint sum = values[23];
-                    int localCases = i;
-                    for(int index = 22; index > valueCount + 1; --index)
+                    uvec2 sum = values[1];
+
+                    uint localCases = i;
+                    for(int index = 2; index < numberCount; ++index)
                     {
-                        if(sum > values[valueCount + 1])
+                        if(g64(sum, compValue))
                         {
                             break;
                         }
 
                         switch(localCases % 3)
                         {
-                            case 0: sum = sum + values[index]; break;
-                            case 1: sum = sum * values[index]; break;
-                            case 2: sum = concatNumbers(sum, values[index]); break;
+                            case 0: sum = mul64(sum, values[index]); break;
+                            case 1: sum = concatNumbers(sum, values[index]); break;
+                            case 2: sum = add64(sum, values[index]); break;
                         }
                         localCases /= 3;
                     }
 
-                    if(sum == values[valueCount +1])
+                    if(eq64(sum, compValue))
                     {
-                        uint a = uint(sum);
-                        uint b = uint(sum >> 32);
-
-                        uint oldValue = atomicAdd(sharedSumB[0], a);
-                        if(oldValue < a)
+                        uint oldValue = atomicAdd(sharedSumB.x, sum.x);
+                        if(sum.x + oldValue < max(sum.x, oldValue))
                         {
-                            ++b;
+                            sum.y++;
                         }
-                        atomicAdd(sharedSumB[1], b);
+                        atomicAdd(sharedSumB.y, sum.y);
                         break;
                     }
                 }
@@ -395,21 +403,20 @@ void main()
             {
 
                 outSumA = sharedSumA;
-                outSumB = uvec2(sharedLinebreakCount, 0);
+                outSumB = sharedSumB;
                 //outSumB = sharedSumB;
 
-                for(int i = 0; i < valueCount; ++i)
+                for(int i = 0; i < numberCount; ++i)
                 {
                     outData[i] = values[i];
                 }
-                for(int i = valueCount; i < MAX_NUMS; ++i)
+                for(int i = numberCount; i < MAX_NUMS; ++i)
                 {
                     outData[i] = uvec2(9999, 0);
 
                 }
                 outData[21] = uvec2(0, sharedTemp);
                 outData[22] = sharedSumA.yx;
-                outData[23] = uvec2(combIndex, 0);
 
             }
         }
