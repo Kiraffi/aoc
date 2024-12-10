@@ -14,13 +14,8 @@
 #include <SDL3/SDL_main.h>
 
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
+#include "d08_comp.h"
+
 #include "commons.h"
 #include "commonrender.h"
 
@@ -35,19 +30,18 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineD08,
 
     PipelineCount
 };
 
-/*
+
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(d08_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
+
 
 static const std::string s_Filename = "input/08.input";
 
@@ -201,9 +195,9 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
+#if 1
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+    s_buffers[BufferResult] = (createGPUWriteBuffer(8192*sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
@@ -226,7 +220,8 @@ bool initData()
 }
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024 * sizeof(int));
 }
 
 void deinitData()
@@ -244,15 +239,14 @@ void deinitData()
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
 
-
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
+    printf("8-a compute antinodes: %i\n", s_dataBuffer[0]);
+    printf("8-b compute harmonic antinodes: %i\n", s_dataBuffer[1]);
 
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -267,7 +261,7 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
         {
             SDL_GPUStorageBufferReadWriteBinding buffers[] = {
                 { .buffer = s_buffers[BufferInput] },
-                { .buffer = s_buffers[BufferResult] }
+                { .buffer = s_buffers[BufferResult] },
             };
             SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(
                 cmd,
@@ -277,15 +271,12 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD08]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
 #endif
     return true;

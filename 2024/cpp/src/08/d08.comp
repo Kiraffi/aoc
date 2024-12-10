@@ -1,0 +1,172 @@
+#version 450 core
+
+#define THREAD_SIZE 1024
+
+shared ivec4 sharedNodeData[1024];
+shared int sharedNodeCount;
+
+shared int sharedMap[64 * 64 / 32];
+shared int sharedMap2[64 * 64 / 32];
+
+shared int sharedLineWidth;
+
+shared int sharedSumA;
+shared int sharedSumB;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    int outSumA;
+    int outSumB;
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+void setMap(ivec2 pos)
+{
+    int index = pos.y * sharedLineWidth + pos.x;
+    atomicOr(sharedMap[index / 32], (1 << (index % 32)));
+}
+void setMap2(ivec2 pos)
+{
+    int index = pos.y * sharedLineWidth + pos.x;
+    atomicOr(sharedMap2[index / 32], (1 << (index % 32)));
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedLineWidth = 1024;
+            sharedSumA = 0;
+            sharedSumB = 0;
+            sharedNodeCount = 0;
+        }
+        for(int index = indexInThreadGroup; index < 64 * 64 / 32; index += THREAD_SIZE)
+        {
+            sharedMap[index] = 0;
+            sharedMap2[index] = 0;
+        }
+        doBarriers();
+    }
+    // parse line break, .
+    {
+        {
+            int c = readChar(indexInThreadGroup);
+            if(c == 0xA) // linebreak
+            {
+                atomicMin(sharedLineWidth, indexInThreadGroup);
+            }
+            doBarriers();
+        }
+        for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+        {
+            int c = readChar(index);
+            if(c != 0x2E && c != 0xA && c != 0x0) // '.' // linebreak
+            {
+                int writeIndex = atomicAdd(sharedNodeCount, 1);
+                int x = index % (sharedLineWidth + 1);
+                int y = index / (sharedLineWidth + 1);
+                sharedNodeData[writeIndex] = ivec4(x, y, c, 0);
+            }
+        }
+        doBarriers();
+    }
+    {
+        if(indexInThreadGroup < sharedNodeCount)
+        {
+            ivec2 mapSize = ivec2(sharedLineWidth, dataSizeInputBytes / (sharedLineWidth + 1));
+
+            ivec4 data = sharedNodeData[indexInThreadGroup];
+            setMap2(data.xy);
+            for(int i = 0; i < sharedNodeCount; ++i)
+            {
+                if(i == indexInThreadGroup)
+                {
+                    continue;
+                }
+                ivec4 otherData = sharedNodeData[i];
+                if(data.z != otherData.z)
+                {
+                    continue;
+                }
+                ivec2 diff = data.xy - otherData.xy;
+                ivec2 p1 = data.xy + diff.xy;
+
+                if(all(greaterThanEqual(p1, ivec2(0)))
+                    && all(lessThan(p1, mapSize)))
+                {
+                    setMap(p1);
+                }
+
+                while(all(greaterThanEqual(p1, ivec2(0)))
+                    && all(lessThan(p1, mapSize)))
+                {
+                    setMap2(p1);
+                    p1 += diff;
+                }
+            }
+
+        }
+        doBarriers();
+    }
+    {
+        for(int i = indexInThreadGroup; i < 64 * 64 / 32; i += THREAD_SIZE)
+        {
+            atomicAdd(sharedSumA, bitCount(sharedMap[i]));
+            atomicAdd(sharedSumB, bitCount(sharedMap2[i]));
+        }
+        doBarriers();
+    }
+
+    {
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            outSumA = sharedSumA;
+            outSumB = sharedSumB;
+            //outSumB = sharedNodeCount;
+            //outSumB = dataSizeInputBytes / (sharedLineWidth + 1);
+            //outSumB = sharedLineWidth;
+        }
+    }
+}
+
