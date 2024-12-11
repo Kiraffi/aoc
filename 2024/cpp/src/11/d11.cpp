@@ -171,7 +171,7 @@ static void a()
 
     for(uint64_t n : s_numbers)
     {
-        count += simulateStone(n, 75);
+        count += simulateStone(n, 25);
     }
 /*
     for(int i = 0; i < maxBlinks; ++i)
@@ -208,10 +208,153 @@ static void a()
     printf("11-a Stones %" SDL_PRIs64 "\n", count);
 }
 
+std::unordered_map<uint64_t, uint64_t> s_memoization;
+
+uint64_t recurse(uint64_t value, int iterationsLeft)
+{
+    if(iterationsLeft == 0)
+    {
+        return 1;
+    }
+    uint64_t t = (uint64_t(value) << uint64_t(8)) + iterationsLeft;
+    auto f = s_memoization.find(t);
+    if(f != s_memoization.end())
+    {
+        return f->second;
+    }
+    uint64_t result = 0;
+    if(value == 0)
+    {
+        result = recurse(1, iterationsLeft - 1);
+    }
+    else if((countNumbers(value) % 2) == 0)
+    {
+        result = recurse(getLeftNum(value), iterationsLeft - 1);
+        result += recurse(getRightNum(value), iterationsLeft - 1);
+    }
+    else
+    {
+        result = recurse(value * 2024, iterationsLeft - 1);
+    }
+    s_memoization[t] = result;
+    return result;
+}
+
 static void b()
 {
+    /*
+    std::vector<std::vector<std::vector<uint64_t>>> stones;
+    for(int i = 0; i < 10; ++i)
+    {
+        stones.push_back({});
+        stones[i].push_back({});
+        stones[i][0].push_back(i);
+        stones[i].push_back({});
+        stones[i][1].push_back(i > 0 ? i * 2024 : 1);
+        int j = 1;
+        if(i == 0)
+        {
+            j = 2;
+            stones[i].push_back({});
+            stones[i][2].push_back(2024);
+        }
+        while(true)
+        {
+            bool allUnderTen = true;
+            for(int k = 0; k < stones[i][j].size(); ++k)
+            {
+                int n = stones[i][j][k];
+                if(n >= 10)
+                {
+                    allUnderTen = false;
+                    if(stones[i].size() < j + 2)
+                    {
+                        stones[i].push_back({});
+                    }
+
+                    if(n == 0)
+                    {
+                        stones[i][j+1].push_back(1);
+                    }
+                    else if((countNumbers(n) % 2) == 0)
+                    {
+                        stones[i][j + 1].push_back(getLeftNum(n));
+                        stones[i][j + 1].push_back(getRightNum(n));
+                    }
+                    else
+                    {
+                        stones[i][j+1].push_back(n * 2024);
+                    }
+                }
+            }
+            if(allUnderTen)
+            {
+                break;
+            }
+            ++j;
+        }
+
+    }
+    struct NumIter
+    {
+        uint64_t m_num;
+        int m_iterations;
+    };
+    std::vector<NumIter> numsLeft;
+
+    static const int ITERATIONS = 75;
+
     int64_t count = 0;
-    printf("11-b ratings of trailheads %" SDL_PRIs64 "\n", count);
+    for(uint64_t n : s_numbers)
+    {
+        numsLeft.push_back(NumIter{n, 0});
+        bool done = false;
+        while(!numsLeft.empty())
+        {
+            NumIter numIter = numsLeft.back();
+            numsLeft.pop_back();
+            if(numIter.m_iterations == 75)
+            {
+                count += 1;
+                continue;
+            }
+            if(numIter.m_num < 10)
+            {
+                if(ITERATIONS - numIter.m_iterations < stones[numIter.m_num].size())
+                {
+                    count += stones[numIter.m_num][ITERATIONS - numIter.m_iterations].size();
+                    continue;
+                }
+                for(auto v : stones[numIter.m_num].back())
+                {
+                    numsLeft.push_back(NumIter{v, numIter.m_iterations + 1});
+                }
+                continue;
+            }
+
+            if((countNumbers(numIter.m_num) % 2) == 0)
+            {
+                numsLeft.push_back(NumIter{getLeftNum(numIter.m_num), numIter.m_iterations + 1});
+                numsLeft.push_back(NumIter{getRightNum(numIter.m_num), numIter.m_iterations + 1});
+            }
+            else
+            {
+                numsLeft.push_back(NumIter{numIter.m_num * 2024, numIter.m_iterations + 1});
+            }
+
+        }
+
+
+        //count += simulateStone(n, 25);
+    }
+    */
+    uint64_t count = 0;
+    for(uint64_t n : s_numbers)
+    {
+        count += recurse(n, 75);
+
+    }
+    printf("11-b stones %" SDL_PRIs64 "\n", count);
 }
 
 static void doCpu()
