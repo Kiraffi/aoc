@@ -49,7 +49,7 @@ static ComputePipelineInfo s_pipelineInfos[] =
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
 */
 
-static const std::string s_Filename = "input/10.input";
+static const std::string s_Filename = "input/11.input";
 
 
 static SDL_GPUComputePipeline* s_pipelines[PipelineCount] = {};
@@ -58,18 +58,14 @@ static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 
 static std::string s_input = readInputFile(s_Filename);
 
-static std::vector<std::string> s_map;
+static std::vector<uint64_t> s_numbers;
 
-
-
-static int s_mapWidth = 0;
-static int s_mapHeight = 0;
 
 static int s_dataBuffer[1024] = {};
 
 const char* getTitle()
 {
-    return "AOC 2024 day 10";
+    return "AOC 2024 day 11";
 }
 
 static void parse()
@@ -79,89 +75,143 @@ static void parse()
 
     while(std::getline(iss, line))
     {
-        s_map.push_back(line);
-    }
-    s_mapWidth = s_map[0].length();
-    s_mapHeight = s_map.size();
-}
-
-
-static int64_t findTrailheads(
-    int x,
-    int y,
-    int expectedNumber,
-    int visitedNumber,
-    std::vector<std::vector<int>>& visited)
-{
-    if(x < 0 || x >= s_mapWidth || y < 0 || y >= s_mapHeight)
-    {
-        return 0;
-    }
-    int number = s_map[y][x] - '0';
-    if(number != expectedNumber)
-    {
-        return 0;
-    }
-    if(number == 9)
-    {
-        if(visited[y][x])
+        uint64_t numb;
+        std::istringstream iss2(line);
+        while(iss2 >> numb)
         {
-            return 0;
+            s_numbers.push_back(numb);
         }
-        visited[y][x] = visitedNumber;
-        return 1;
     }
-
-    int64_t sum = 0;
-    sum += findTrailheads(x - 1, y, expectedNumber + 1, visitedNumber, visited);
-    sum += findTrailheads(x + 1, y, expectedNumber + 1, visitedNumber, visited);
-    sum += findTrailheads(x, y - 1, expectedNumber + 1, visitedNumber, visited);
-    sum += findTrailheads(x, y + 1, expectedNumber + 1, visitedNumber, visited);
-    return sum;
 }
 
-
-static void a()
+int countNumbers(uint64_t n)
 {
-    std::vector<int> numbers;
+    int result = 0;
+    while(n)
+    {
+        ++result;
+        n /= 10;
+    }
+    return result;
+}
+
+uint64_t getLeftNum(uint64_t n)
+{
+    int count = 0;
+    uint64_t c = n;
+    while(c)
+    {
+        ++count;
+        c /= 10;
+    }
+    c = n;
+    for(int i = 0; i < count / 2; ++i)
+    {
+        c /= 10;
+    }
+
+    return c;
+}
+
+uint64_t getRightNum(uint64_t n)
+{
+    int count = 0;
+    uint64_t c = n;
+    while(c)
+    {
+        ++count;
+        c /= 10;
+    }
+    c = 1;
+    for(int i = 0; i < count / 2; ++i)
+    {
+        c *= 10;
+    }
+
+    return n % c;
+}
+
+uint64_t simulateStone(uint64_t n, int amount)
+{
+    std::vector<uint64_t> numbers;
+    std::vector<uint64_t> numbers2;
+    numbers.push_back(n);
 
     int64_t count = 0;
-
-    for(int y = 0; y < s_mapHeight; ++y)
+    for(int i = 0; i < amount; ++i)
     {
-        for(int x = 0; x < s_mapWidth; ++x)
-        {
-            if(s_map[y][x] == '0')
-            {
-                std::vector<std::vector<int>> visited(s_mapHeight, std::vector<int>(s_mapWidth, 0));
-                int64_t heads = findTrailheads(x, y, 0, 1, visited);
-                count += heads;
+        auto& numbersIn = (i % 2) == 0 ? numbers : numbers2;
+        auto& numbersOut = (i % 2) == 0 ? numbers2 : numbers;
+        numbersOut.clear();
 
+        for(uint64_t n : numbersIn)
+        {
+            if(n == 0)
+            {
+                numbersOut.push_back(1);
+            }
+            else if((countNumbers(n) % 2) == 0)
+            {
+                numbersOut.push_back(getLeftNum(n));
+                numbersOut.push_back(getRightNum(n));
+            }
+            else
+            {
+                numbersOut.push_back(n * 2024);
             }
         }
     }
+    auto& numbersIn = (amount % 2) == 0 ? numbers : numbers2;
+    return numbersIn.size();
+}
 
-    printf("10-a Trailheads %" SDL_PRIs64 "\n", count);
+static void a()
+{
+    int64_t count = 0;
+
+    for(uint64_t n : s_numbers)
+    {
+        count += simulateStone(n, 75);
+    }
+/*
+    for(int i = 0; i < maxBlinks; ++i)
+    {
+        auto& numbersIn = (i % 2) == 0 ? numbers : numbers2;
+        auto& numbersOut = (i % 2) == 0 ? numbers2 : numbers;
+        numbersOut.clear();
+
+        for(uint64_t n : numbersIn)
+        {
+            if(n == 0)
+            {
+                numbersOut.push_back(1);
+            }
+            else if((countNumbers(n) % 2) == 0)
+            {
+                numbersOut.push_back(getLeftNum(n));
+                numbersOut.push_back(getRightNum(n));
+            }
+            else
+            {
+                numbersOut.push_back(n * 2024);
+            }
+        }
+    }
+    auto& numbersIn = (maxBlinks % 2) == 0 ? numbers : numbers2;
+
+    for(uint64_t n : numbersIn)
+    {
+        printf("%" SDL_PRIs64 ", ", n);
+    }
+    printf("\n");
+    */
+    printf("11-a Stones %" SDL_PRIs64 "\n", count);
 }
 
 static void b()
 {
     int64_t count = 0;
-    for(int y = 0; y < s_mapHeight; ++y)
-    {
-        for(int x = 0; x < s_mapWidth; ++x)
-        {
-            if(s_map[y][x] == '0')
-            {
-                std::vector<std::vector<int>> visited(s_mapHeight, std::vector<int>(s_mapWidth, 0));
-                int64_t heads = findTrailheads(x, y, 0, 0, visited);
-                count += heads;
-
-            }
-        }
-    }
-
-    printf("10-b ratings of trailheads %" SDL_PRIs64 "\n", count);
+    printf("11-b ratings of trailheads %" SDL_PRIs64 "\n", count);
 }
 
 static void doCpu()
