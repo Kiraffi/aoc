@@ -201,53 +201,8 @@ static void a()
     printf("13-a Cost %" SDL_PRIs64 "\n", count);
 }
 
-static int64_t getLoopCount(const Machine& m)
-{
-    V2 prize = m.m_prize;
-    prize.m_x += 10000000000000;
-    prize.m_y += 10000000000000;
 
-    V2 aButton = m.m_aButton;
-    V2 bButton = m.m_bButton;
-
-    int64_t ix = prize.m_x / m.m_aButton.m_x;
-    int64_t iy = prize.m_y / m.m_aButton.m_y;
-    int64_t i = std::min(ix, iy);
-
-    int64_t j1 = (prize.m_x - (m.m_aButton.m_x * i)) / m.m_bButton.m_x;
-
-    V2 locA1 = { i * m.m_aButton.m_x, i * m.m_aButton.m_y };
-    V2 locB1 = { j1 * m.m_bButton.m_x, j1 * m.m_bButton.m_y };
-
-    V2 loc1 = { locA1.m_x + locB1.m_x, locA1.m_y + locB1.m_y };
-
-    int64_t loopCount = 1;
-    --i;
-
-    while(i >= 0)
-    {
-        int64_t j = (prize.m_x - (m.m_aButton.m_x * i)) / m.m_bButton.m_x;
-
-        V2 locA = { i * m.m_aButton.m_x, i * m.m_aButton.m_y };
-        V2 locB = { j * m.m_bButton.m_x, j * m.m_bButton.m_y };
-
-        V2 loc = { locA.m_x + locB.m_x, locA.m_y + locB.m_y };
-
-
-
-        if(loc.m_x == loc1.m_x && loc.m_y == loc1.m_y)
-        {
-            return loopCount;
-        }
-
-        ++loopCount;
-        --i;
-    }
-
-    return -1;
-}
-
-static int compare(const Machine& m, int index, V2 prize)
+static bool compare(const Machine& m, int index, V2 prize)
 {
     int64_t j = (prize.m_x - (m.m_aButton.m_x * index)) / m.m_bButton.m_x;
 
@@ -256,15 +211,7 @@ static int compare(const Machine& m, int index, V2 prize)
 
     V2 loc = { locA.m_x + locB.m_x, locA.m_y + locB.m_y };
 
-    if(loc.m_x == prize.m_x && loc.m_y == prize.m_y)
-    {
-        return 0;
-    }
-    if(loc.m_y < prize.m_y)
-    {
-        return -1;
-    }
-    return 1;
+    return loc.m_x == prize.m_x && loc.m_y == prize.m_y;
 }
 
 static void b()
@@ -278,10 +225,8 @@ static void b()
 
         V2 aButton = m.m_aButton;
         V2 bButton = m.m_bButton;
-
-        double diffA = double(aButton.m_x) / double(aButton.m_y);
-        double diffB = double(bButton.m_x) / double(bButton.m_y);
-        assert(diffA != diffB);
+        // check if y grows when we replace aButtons with bButtons.
+        bool aXPerYSmallerThanB = ((100000 * aButton.m_x) / aButton.m_y) < ((100000 * bButton.m_x) / bButton.m_y);
 
         int aPresses = 0;
         int bPresses = 0;
@@ -294,7 +239,7 @@ static void b()
         int64_t i0 = 0;
         int64_t i2 = prize.m_x / m.m_aButton.m_x;
 
-        if(compare(m, 0, prize) == 0)
+        if(compare(m, 0, prize))
         {
             int64_t j = (prize.m_x - (m.m_aButton.m_x * 0)) / m.m_bButton.m_x;
 
@@ -302,7 +247,7 @@ static void b()
             lowestCost = cost; //std::min(cost, lowestCost);
             found = true;
         }
-        else if(compare(m, i2, prize) == 0)
+        else if(compare(m, i2, prize))
         {
             int64_t j = (prize.m_x - (m.m_aButton.m_x * i2)) / m.m_bButton.m_x;
             int64_t cost = i2 * 3 + j * 1;
@@ -329,9 +274,11 @@ static void b()
                     found = true;
                     break;
                 }
-                double a = double(prize.m_x - (m.m_aButton.m_x * mid)) / double(m.m_bButton.m_x);
-                if((a * m.m_bButton.m_y + locA.m_y) > prize.m_y == diffA < diffB)
-                //if(loc.m_y > prize.m_y == diffA < diffB)
+                // add the remaining ys, to get correct amount.
+                int64_t yValue = loc.m_y;
+                yValue += ((prize.m_x - loc.m_x) * m.m_bButton.m_y + m.m_bButton.m_y - 1) / m.m_bButton.m_x;
+
+                if(yValue > prize.m_y == aXPerYSmallerThanB)
                 {
                     i2 = mid;
                 }
