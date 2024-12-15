@@ -1,0 +1,208 @@
+#version 450 core
+
+#define THREAD_SIZE 1024
+
+shared int sharedLinebreaks[1024];
+shared int sharedLinebrakCount;
+
+// assumption there less than 4096 simultaneous numbers
+shared int sharedNumbers[4096];
+shared int sharedNumberCount;
+
+
+// The calculated checksum. 64 bits.
+shared uvec2 sharedSumA;
+shared uvec2 sharedSumB;
+
+shared int sharedValuesWrittenCount;
+
+shared int sharedWidth;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    int outSumA;
+    int outSumB;
+    int outDebugValueCount;
+    int outDebugValues[];
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+int readNumber(int index)
+{
+    int c = readChar(index);
+    c = c != 0 ? c - 48 : -1;
+    return c;
+}
+
+void resetEverything(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        sharedLinebrakCount = 0;
+        sharedWidth = dataSizeInputBytes;
+        sharedNumberCount = 0;
+    }
+
+    doBarriers();
+}
+
+void findLinebreaks(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes - 1; index += THREAD_SIZE)
+    {
+        if(readChar(index) == 0xA) // lb
+        {
+            int lbIndex = atomicAdd(sharedLinebrakCount, 1);
+            sharedLinebreaks[lbIndex] = index;
+            atomicMin(sharedWidth, index);
+        }
+    }
+    doBarriers();
+}
+
+void findZeroes(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes - 1; index += THREAD_SIZE)
+    {
+        if(readChar(index) == 0x48) // '0'
+        {
+            int zeroIndex = atomicAdd(sharedNumberCount, 1);
+            sharedNumbers[zeroIndex] = index;
+        }
+    }
+    doBarriers();
+}
+
+int getIndex(ivec2 pos)
+{
+    if(pos.x < 0 || pos.y < 0 || pos.x >= sharedWidth - 1 || pos.y >= dataSizeInputBytes / sharedWidth)
+    {
+        return -1;
+    }
+    return pos.x + pos.y * sharedWidth;
+}
+
+int checkNumber(ivec2 pos)
+{
+    int index = getIndex(pos);
+    int result = -1;
+    if(index >= 0 && index < dataSizeInputBytes)
+    {
+        result= readNumber(index);
+    }
+    return readNumber(result);
+}
+
+void addNumber(ivec2 pos, int number)
+{
+    if(checkNumber(pos) == number)
+    {
+        int writeIndex = atomicAdd(sharedNumberCount, 1);
+        sharedNumbers[writeIndex] = getIndex(pos);
+    }
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+
+
+    #if 1
+    // Count checksumA moved values
+    {
+        resetEverything(indexInThreadGroup);
+        findLinebreaks(indexInThreadGroup);
+        findZeroes(indexInThreadGroup);
+        if(indexInThreadGroup == 0)
+        {
+            outDebugValues[0] = sharedNumberCount;
+        }
+
+        int number = 1;
+        while(number < 10)
+        {
+            int numberCount = sharedNumberCount;
+            doBarriers();
+            if(indexInThreadGroup == 0)
+            {
+                sharedNumberCount = 0;
+            }
+            for(int index = indexInThreadGroup; index < numberCount; index += THREAD_SIZE)
+            {
+                int p = sharedNumbers[index];
+                ivec2 pos = ivec2(p % sharedWidth, p / sharedWidth);
+                addNumber(pos + ivec2(+1, 0), number);
+                addNumber(pos + ivec2(-1, 0), number);
+                addNumber(pos + ivec2(0, +1), number);
+                addNumber(pos + ivec2(0, -1), number);
+            }
+            doBarriers();
+            if(indexInThreadGroup == 0)
+            {
+                outDebugValues[number] = sharedNumberCount;
+            }
+            ++number;
+        }
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            outDebugValueCount = 10;
+            outSumB = sharedNumberCount;
+        }
+    }
+    #endif
+
+    #if 1
+    // Calculate checksumB
+    {
+        doBarriers();
+/*
+        {
+            doBarriers();
+            if(indexInThreadGroup == 0)
+            {
+                outSumB = result;
+            }
+        }
+        */
+    }
+    #endif
+}
+

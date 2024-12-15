@@ -160,8 +160,6 @@ static void a()
         printf("09-a originals %" SDL_PRIs64 "\n", tmpValue);
     }
     */
-    printf("inputlen: %i, %c\n", int(s_input.length()), s_input[s_input.length() - 1]);
-
     printf("09-a Checksum %" SDL_PRIs64 "\n", count);
 }
 

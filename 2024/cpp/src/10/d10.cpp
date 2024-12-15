@@ -13,6 +13,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
+#include "d10_comp.h"
 
 #include "commons.h"
 #include "commonrender.h"
@@ -34,14 +35,13 @@ enum PipelineEnum
 
     PipelineCount
 };
-/*
+
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(d10_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
+
 static const std::string s_Filename = "input/10.input";
 
 
@@ -183,7 +183,7 @@ bool initCompute()
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
-#if 0
+#if 1
     // Create compute pipelines
     {
         for(int i = 0; i < PipelineCount; ++i)
@@ -220,16 +220,21 @@ void deinitData()
         if(buffer != nullptr)
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
+    int computeDebugNumbers = s_dataBuffer[2];
+    printf("Compute debug number count: %i\n", computeDebugNumbers);
+    for(int i = 0; i < computeDebugNumbers; ++i)
+    {
+        printf("%i\n", s_dataBuffer[i + 4]);
+    }
 
-
-    printf("10-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("10-b compute safe: %i\n", s_dataBuffer[1]);
+    printf("10-a compute Trailheads: %i\n", s_dataBuffer[0]);
+    printf("10-b compute ratings of trailheads: %i\n", s_dataBuffer[1]);
 
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -254,7 +259,7 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD10]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
