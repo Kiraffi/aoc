@@ -234,48 +234,71 @@ void checkFences(int indexInThreadGroup, int areaIndex)
             continue;
         }
 
+        // Outer corners for X-axis. X marks the counted corners
+        // +----
+        // |XOOO
+        // |OOOO
+        // |XOOO
+        // +----
         if(!isLocal(pos + ivec2(-1, 0)) && !isLocal(pos + ivec2(0, -1)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
         {
             atomicAdd(sharedUniqueFencesCount, 1);
         }
         if(!isLocal(pos + ivec2(-1, 0)) && !isLocal(pos + ivec2(0, +1)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+        // Corners that come from inwards
+        // OO|
+        // OO|
+        // OO+---
+        // OOXOOO
+        // OOOOOO
+        // OOXOOO
+        // OO+---
+        // OO|
+        // OO|
+        if(isLocal(pos + ivec2(-1, 0)) && isLocal(pos + ivec2(-1, -1)) && !isLocal(pos + ivec2(0, -1)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+        if(isLocal(pos + ivec2(-1, 0)) && isLocal(pos + ivec2(-1, +1)) && !isLocal(pos + ivec2(0, +1)))
         {
             atomicAdd(sharedUniqueFencesCount, 1);
         }
 
-        if(isLocal(pos + ivec2(-1, -1)) && !isLocal(pos + ivec2(0, -1)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
-        {
-            atomicAdd(sharedUniqueFencesCount, 1);
-        }
-        if(isLocal(pos + ivec2(-1, +1)) && !isLocal(pos + ivec2(0, +1)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
-        {
-            atomicAdd(sharedUniqueFencesCount, 1);
-        }
 
 
+
+
+
+
+        // Outer corners for y
+        // +----
+        // |XOOO
+        // |OOOO
+        // |XOOO
+        // +----
         if(!isLocal(pos + ivec2(0, -1)) && !isLocal(pos + ivec2(+1, 0)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
         {
             atomicAdd(sharedUniqueFencesCount, 1);
         }
         if(!isLocal(pos + ivec2(0, -1)) && !isLocal(pos + ivec2(-1, 0)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
         {
             atomicAdd(sharedUniqueFencesCount, 1);
         }
 
-
-        if(isLocal(pos + ivec2(+1, -1)) && !isLocal(pos + ivec2(+1, 0)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
+        // Inward corners
+        // OO|   |OO
+        // OO|   |OO
+        // OX+---+XO
+        // OOOOOOOOO
+        // OOOOOOOOO
+         if(isLocal(pos + ivec2(0, -1)) && isLocal(pos + ivec2(+1, -1)) && !isLocal(pos + ivec2(+1, 0)))
         {
             atomicAdd(sharedUniqueFencesCount, 1);
         }
-        if(isLocal(pos + ivec2(-1, -1)) && !isLocal(pos + ivec2(-1, 0)))
-        //if(!isLocal(pos + ivec2(-1, 0)))
+        if(isLocal(pos + ivec2(0, -1)) && isLocal(pos + ivec2(-1, -1)) && !isLocal(pos + ivec2(-1, 0)))
         {
             atomicAdd(sharedUniqueFencesCount, 1);
         }
@@ -408,7 +431,7 @@ void main()
             markLocalArea(indexInThreadGroup);
             checkFences(indexInThreadGroup, currentIndex);
             doBarriers();
-
+/*
             if(indexInThreadGroup == 0)
             {
                 outDebugValues[currentIndex * 4 + 0] = int(sharedAreaCount);
@@ -417,7 +440,7 @@ void main()
                 outDebugValues[currentIndex * 4 + 3] = sharedLowestUnmarkedRegion;
             }
             doBarriers();
-
+*/
             findLowestUnmarkedRegion(indexInThreadGroup);
             ++currentIndex;
         }
@@ -427,7 +450,7 @@ void main()
         {
             outSumA = sharedSumA;
             outSumB = sharedSumB;
-            outDebugValueCount = currentIndex * 4; // + int(sharedArea[0]);
+            outDebugValueCount = 0; // currentIndex * 4;
         }
     }
     #endif

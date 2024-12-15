@@ -74,7 +74,7 @@ static void clearRenderTargets()
 static void shutdownGPU(void)
 {
     {
-        for(int i = 0; i < 8; ++i)
+        for(int i = 0; i < 4; ++i)
         {
             SDL_Delay(100);
             SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(s_appState.m_device);

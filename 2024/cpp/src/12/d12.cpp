@@ -221,10 +221,10 @@ static void a()
                 uint64_t perimeter = calculatePerimeter(x, y, c, visited, corners);
                 uint64_t cost = area * perimeter;
                 count += cost;
-
+/*
                 printf("[%i, %i], %c: area = %" SDL_PRIs64 ", perimeter: %" SDL_PRIs64 " = %" SDL_PRIs64 "\n",
                     x, y, c, area, perimeter, cost);
-
+*/
                 //drawPerimeter(corners);
             }
         }
@@ -403,7 +403,7 @@ static void b()
                 markRegion(x, y, c, regionIndex, visited);
                 int edges = countEdges(x, y, regionIndex, visited);
                 int area = calculateMarkedArea(regionIndex, visited);
-                printf("b: edges: %i\n", edges);
+                //printf("b: edges: %i\n", edges);
 
                 count += edges * area;
             }
