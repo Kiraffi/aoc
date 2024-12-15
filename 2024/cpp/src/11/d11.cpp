@@ -422,6 +422,12 @@ void deinitData()
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
 
+    int computeDebugNumbers = s_dataBuffer[2];
+    printf("Compute debug number count: %i\n", computeDebugNumbers);
+    for(int i = 0; i < computeDebugNumbers; ++i)
+    {
+        printf("%i\n", s_dataBuffer[i + 4]);
+    }
 
     printf("03-a compute safe: %i\n", s_dataBuffer[0]);
     printf("03-b compute safe: %i\n", s_dataBuffer[1]);
