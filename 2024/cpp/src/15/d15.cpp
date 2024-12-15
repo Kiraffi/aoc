@@ -26,6 +26,7 @@
 #include "commons.h"
 #include "commonrender.h"
 
+static const int ValuesBufferSize = 1024;
 
 enum BufferEnum : int
 {
@@ -68,7 +69,7 @@ static std::string s_input = readInputFile(s_Filename);
 
 
 
-static int s_dataBuffer[1024] = {};
+static int s_dataBuffer[ValuesBufferSize] = {};
 
 
 static std::vector<std::string> s_map;
@@ -435,7 +436,7 @@ bool initCompute()
 {
 #if 0
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+    s_buffers[BufferResult] = (createGPUWriteBuffer(ValuesBufferSize * sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
@@ -517,7 +518,7 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
     }
 
     // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], ValuesBufferSize * sizeof(int));
 
 #endif
     return true;

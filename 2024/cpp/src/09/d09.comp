@@ -1,0 +1,482 @@
+#version 450 core
+
+#define THREAD_SIZE 1024
+
+#define MAX_EMPTY_SLOTS (10000)
+#define MAX_EMPTY_INTS (MAX_EMPTY_SLOTS / (32 / 8))
+// Assumption the amount of numbers is 20000.
+// Half of them are empty and using 4 bits per slot (numbers 0-9).
+// 5000 bytes
+shared int sharedEmpties[MAX_EMPTY_INTS];
+shared int sharedNumbers[MAX_EMPTY_INTS];
+
+// Which index on the right side we are at.
+shared int sharedRightIndex;
+
+// Using atomicMin to find a empty slot.
+shared int sharedLeftEmptySlot;
+
+// For counting how many items are before the new empty slot.
+shared int sharedSlotCount;
+
+// The calculated checksum. 64 bits.
+shared uvec2 sharedSumA;
+shared uvec2 sharedSumB;
+
+shared int sharedValuesWrittenCount;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    uvec2 outSumA;
+    uvec2 outSumB;
+    uvec2 outValues[];
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+int readNumber(int index)
+{
+    int c = readChar(index);
+    c = c != 0 ? c - 48 : 0;
+    return c;
+}
+
+// Copied from day07 the 64 bit sum and mul
+uvec2 add64(in uvec2 a, in uvec2 b)
+{
+    uvec2 result = a + b;
+    if(result.x < max(a.x, b.x))
+    {
+        result.y++;
+    }
+    return result;
+}
+
+uvec2 mul64(in uvec2 a, in uvec2 b)
+{
+    uvec2 result = uvec2(0);
+
+    uint lowA = (a.x & 0xffff);
+    uint lowB = (b.x & 0xffff);
+    uint highA = a.x >> 16;
+    uint highB = b.x >> 16;
+
+    result.x = lowA * lowB;
+    result.y = highA * highB;
+    result.y += a.x * b.y;
+    result.y += a.y * b.x;
+
+    uint midA = lowA * highB;
+    uint midB = highA * lowB;
+
+    result = add64(result, uvec2(midA << 16, midA >> 16));
+    result = add64(result, uvec2(midB << 16, midB >> 16));
+    return result;
+}
+
+void setEmptySlotAmount(int index, int amount)
+{
+    uint shiftAmount = ((index % 8) * 4);
+    // reset bits.
+    atomicAnd(sharedEmpties[index / 8], ~(0xf << shiftAmount));
+    // set bits.
+    atomicOr(sharedEmpties[index / 8], amount << shiftAmount);
+}
+
+int getEmptySlotAmount(int index)
+{
+    uint shiftAmount = ((index % 8) * 4);
+    return (sharedEmpties[index / 8] >> shiftAmount) & 0xf;
+}
+
+
+
+
+void setNumberSlotAmount(int index, int amount)
+{
+    uint shiftAmount = ((index % 8) * 4);
+    // reset bits.
+    atomicAnd(sharedNumbers[index / 8], ~(0xf << shiftAmount));
+    // set bits.
+    atomicOr(sharedNumbers[index / 8], amount << shiftAmount);
+}
+
+int getNumberSlotAmount(int index)
+{
+    uint shiftAmount = ((index % 8) * 4);
+    return (sharedNumbers[index / 8] >> shiftAmount) & 0xf;
+}
+
+
+void resetEmpties(int indexInThreadGroup)
+{
+    for(int i = indexInThreadGroup; i < MAX_EMPTY_INTS; i += THREAD_SIZE)
+    {
+        sharedEmpties[i] = 0;
+    }
+    doBarriers();
+}
+
+void resetNumbers(int indexInThreadGroup)
+{
+    for(int i = indexInThreadGroup; i < MAX_EMPTY_INTS; i += THREAD_SIZE)
+    {
+        sharedNumbers[i] = 0;
+    }
+    doBarriers();
+}
+
+
+void parseEmpties(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index * 2 + 1 < dataSizeInputBytes - 1; index += THREAD_SIZE)
+    {
+        int c = readNumber(index * 2 + 1);
+        setEmptySlotAmount(index, c);
+    }
+    doBarriers();
+}
+
+void parseNumbers(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index * 2 < dataSizeInputBytes - 1; index += THREAD_SIZE)
+    {
+        int c = readNumber(index * 2 + 0);
+        setNumberSlotAmount(index, c);
+    }
+    doBarriers();
+}
+
+void resetSharedValues(int indexInThreadGroup)
+{
+    // Reset the emptySlot to high value
+    if(indexInThreadGroup == 0)
+    {
+        sharedLeftEmptySlot = 999999;
+        sharedSlotCount = 0;
+    }
+    doBarriers();
+}
+
+void findSingleLowestEmptySlot(int indexInThreadGroup, int numberCount)
+{
+    // Find earliest empty slot
+    for(int index = indexInThreadGroup; index < MAX_EMPTY_SLOTS; index += THREAD_SIZE)
+    {
+        if(getEmptySlotAmount(index) >= numberCount)
+        {
+            atomicMin(sharedLeftEmptySlot, index);
+        }
+    }
+    doBarriers();
+
+}
+
+void calculateEmptySlotIndex(int indexInThreadGroup)
+{
+    // calculate how many items are before
+    for(int index = indexInThreadGroup; index <= sharedLeftEmptySlot * 2 + 1; index += THREAD_SIZE)
+    {
+        int c = readNumber(index);
+        if(index == sharedLeftEmptySlot * 2 + 1)
+        {
+            c -= getEmptySlotAmount(sharedLeftEmptySlot);
+        }
+        atomicAdd(sharedSlotCount, c);
+    }
+    doBarriers();
+
+}
+
+uvec2 moveNumbersToEmptySlot(int indexInThreadGroup)
+{
+    uvec2 result = uvec2(0);
+    if(indexInThreadGroup == 0)
+    {
+        int leftEmptyAmount = getEmptySlotAmount(sharedLeftEmptySlot);
+        int currRightIndex = sharedRightIndex;
+        int rightNumberAmount = getNumberSlotAmount(currRightIndex);
+
+        int moveAmount = min(leftEmptyAmount, rightNumberAmount);
+
+        setNumberSlotAmount(currRightIndex, rightNumberAmount - moveAmount);
+        setEmptySlotAmount(sharedLeftEmptySlot, leftEmptyAmount - moveAmount);
+
+        uvec2 totalSum = uvec2(0);
+        for(int i = 0; i < moveAmount; ++i)
+        {
+            uvec2 m = mul64(uvec2(sharedSlotCount + i, 0), uvec2(currRightIndex, 0));
+            totalSum = add64(totalSum, m);
+        }
+        result = add64(result, totalSum);
+/*
+        int writeIndex = atomicAdd(sharedValuesWrittenCount, 4);
+        outValues[writeIndex + 0] = totalSum;
+        outValues[writeIndex + 1] = uvec2(sharedLeftEmptySlot, sharedSlotCount);
+        outValues[writeIndex + 2] = uvec2(leftEmptyAmount, rightNumberAmount);
+        outValues[writeIndex + 3] = uvec2(getNumberSlotAmount(sharedRightIndex), sharedRightIndex);
+*/
+    }
+    doBarriers();
+    return result;
+}
+
+void writeDebugEmpties(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        atomicAdd(sharedValuesWrittenCount, 4);
+        for(int i = 0; i < 16; ++i)
+        {
+            int writeIndex = atomicAdd(sharedValuesWrittenCount, 1);
+            outValues[writeIndex] = uvec2(0, getEmptySlotAmount(i));
+        }
+        atomicAdd(sharedValuesWrittenCount, 4);
+    }
+    doBarriers();
+}
+
+void writeDebugNumbers(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        atomicAdd(sharedValuesWrittenCount, 4);
+        for(int i = 0; i < 16; ++i)
+        {
+            int writeIndex = atomicAdd(sharedValuesWrittenCount, 1);
+            outValues[writeIndex] = uvec2(0, getNumberSlotAmount(i));
+        }
+        atomicAdd(sharedValuesWrittenCount, 4);
+    }
+    doBarriers();
+}
+
+void resetEverything(int indexInThreadGroup)
+{
+    // Reset shared atomic values
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedSumA = uvec2(0);
+            sharedSumB = uvec2(0);
+            sharedRightIndex = 0;
+            sharedLeftEmptySlot = 0;
+
+            sharedValuesWrittenCount = 0;
+        }
+        resetEmpties(indexInThreadGroup);
+        resetNumbers(indexInThreadGroup);
+        doBarriers();
+    }
+    // Parse empty slots, .
+    {
+        //writeDebugEmpties(indexInThreadGroup);
+        //writeDebugNumbers(indexInThreadGroup);
+        parseEmpties(indexInThreadGroup);
+        parseNumbers(indexInThreadGroup);
+    }
+    // Set start values
+    {
+        //writeDebugEmpties(indexInThreadGroup);
+        //writeDebugNumbers(indexInThreadGroup);
+        if(indexInThreadGroup == 0)
+        {
+            // Last char is line break. Find last paired value
+            sharedRightIndex = ((dataSizeInputBytes - 2) & (~1)) / 2;
+            int numberCount = getNumberSlotAmount(sharedRightIndex);
+            while(numberCount == 0)
+            {
+                atomicAdd(sharedRightIndex, -1);
+                numberCount = getNumberSlotAmount(sharedRightIndex);
+            }
+
+/*
+            int writeIndex = atomicAdd(sharedValuesWrittenCount, 4);
+            outValues[writeIndex + 0] = uvec2(sharedRightIndex, sharedRightNumberCount);
+            outValues[writeIndex + 1] = uvec2(dataSizeInputBytes, 0);
+            outValues[writeIndex + 2] = uvec2(0);
+            outValues[writeIndex + 3] = uvec2(0);
+*/
+
+        }
+        doBarriers();
+    }
+
+}
+
+uvec2 countUnmovedValues()
+{
+    //atomicAdd(sharedValuesWrittenCount, 4);
+    int mulIndex = 0;
+    uvec2 totalSum = uvec2(0);
+    for(int index = 0; index < dataSizeInputBytes - 1; index++)
+    {
+        int value = readNumber(index);
+        if((index % 2) == 0)
+        {
+            int amount = getNumberSlotAmount(index / 2);
+            uvec2 sum = uvec2(0);
+            for(int j = 0; j < amount; ++j)
+            {
+                uvec2 m = mul64(uvec2(mulIndex + j, 0), uvec2(index / 2, 0));
+                sum = add64(sum, m);
+            }
+            /*
+            int writeIndex = atomicAdd(sharedValuesWrittenCount, 1);
+            outValues[writeIndex] = uvec2(sum.x, mulIndex);
+            */
+            totalSum = add64(totalSum, sum);
+        }
+        mulIndex += value;
+    }
+    //atomicAdd(sharedValuesWrittenCount, 4);
+    return totalSum;
+}
+
+void findNextNumber(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        while(sharedRightIndex > 0 && getNumberSlotAmount(sharedRightIndex) == 0)
+        {
+            atomicAdd(sharedRightIndex, -1);
+        }
+    }
+    doBarriers();
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+
+
+    #if 1
+    // Count checksumA moved values
+    {
+        resetEverything(indexInThreadGroup);
+        uvec2 result = uvec2(0);
+        while(true)
+        {
+            resetSharedValues(indexInThreadGroup);
+            findSingleLowestEmptySlot(indexInThreadGroup, 1);
+            if(sharedLeftEmptySlot >= sharedRightIndex)
+            {
+                break;
+            }
+            calculateEmptySlotIndex(indexInThreadGroup);
+            result = add64(result, moveNumbersToEmptySlot(indexInThreadGroup));
+            findNextNumber(indexInThreadGroup);
+            //writeDebugEmpties(indexInThreadGroup);
+
+        }
+        doBarriers();
+
+        // add the unmoved values
+        {
+            if(indexInThreadGroup == 0)
+            {
+                uvec2 totalSum = countUnmovedValues();
+                result = add64(result, totalSum);
+                //outValues[sharedValuesWrittenCount] = totalSum;
+            }
+        }
+
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            outSumA = result;
+        }
+    }
+    #endif
+
+    #if 1
+    // Calculate checksumB
+    {
+        uvec2 result = uvec2(0);
+
+        resetEverything(indexInThreadGroup);
+        while(sharedRightIndex > 0)
+        {
+            resetSharedValues(indexInThreadGroup);
+            findSingleLowestEmptySlot(indexInThreadGroup, getNumberSlotAmount(sharedRightIndex));
+            bool slotFound = sharedLeftEmptySlot < sharedRightIndex;
+
+            if(indexInThreadGroup == 0)
+            {
+                if(!slotFound)
+                {
+                    atomicAdd(sharedRightIndex, -1);
+                }
+            }
+            doBarriers();
+            if(slotFound)
+            {
+                calculateEmptySlotIndex(indexInThreadGroup);
+                result = add64(result, moveNumbersToEmptySlot(indexInThreadGroup));
+                //writeDebugEmpties(indexInThreadGroup);
+            }
+            findNextNumber(indexInThreadGroup);
+        }
+        doBarriers();
+
+        // add the unmoved values
+        {
+            if(indexInThreadGroup == 0)
+            {
+
+                uvec2 totalSum = countUnmovedValues();
+                result = add64(result, totalSum);
+                //int writeIndex = atomicAdd(sharedValuesWrittenCount, 1);
+                //outValues[writeIndex] = totalSum;
+            }
+        }
+        //writeDebugEmpties(indexInThreadGroup);
+        //writeDebugNumbers(indexInThreadGroup);
+
+        {
+            doBarriers();
+            if(indexInThreadGroup == 0)
+            {
+                outSumB = result;
+            }
+        }
+    }
+    #endif
+}
+

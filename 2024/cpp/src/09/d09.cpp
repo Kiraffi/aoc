@@ -13,17 +13,13 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
+#include "d09_comp.h"
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
 #include "commons.h"
 #include "commonrender.h"
 
+
+static const int ValuesBufferSize = 1024 * 8;
 
 enum BufferEnum : int
 {
@@ -35,19 +31,17 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineD09,
 
     PipelineCount
 };
 
-/*
+
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(d09_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
 
 static const std::string s_Filename = "input/09.input";
 
@@ -64,7 +58,7 @@ static std::string s_input = readInputFile(s_Filename);
 static int s_mapWidth = 0;
 static int s_mapHeight = 0;
 
-static int s_dataBuffer[1024] = {};
+static int s_dataBuffer[ValuesBufferSize] = {};
 
 const char* getTitle()
 {
@@ -138,11 +132,35 @@ static void a()
 
     count = 0;
     index = 0;
-    for(index = 0; index < rIndex + 1; ++index)
+    for(index = 0; index < rIndex + 1; index += 1)
     {
         count += index * numbers[index];
 
     }
+    /*
+    {
+        uint64_t tmpValue = 0;
+        int currentIndex = 0;
+        uint64_t mulIndex = 0;
+        for(auto numb : s_input)
+        {
+            uint64_t value = numb - '0';
+            if((currentIndex % 2) == 0)
+            {
+                for(int i = 0; i < value; ++i)
+                {
+                    tmpValue += ((mulIndex + i) * value);
+                }
+            }
+            ++currentIndex;
+            mulIndex += value;
+
+        }
+
+        printf("09-a originals %" SDL_PRIs64 "\n", tmpValue);
+    }
+    */
+    printf("inputlen: %i, %c\n", int(s_input.length()), s_input[s_input.length() - 1]);
 
     printf("09-a Checksum %" SDL_PRIs64 "\n", count);
 }
@@ -221,7 +239,8 @@ static void b()
             }
         }
     }
-    /*
+/*
+    printf("B end:\n");
     for(int numb : numbers)
     {
         if(numb != -1)
@@ -230,7 +249,7 @@ static void b()
             printf("-");
     }
     printf("\n");
-    */
+*/
     count = 0;
     for(int index = 0; index < numbers.size(); ++index)
     {
@@ -264,9 +283,9 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
+#if 1
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+    s_buffers[BufferResult] = (createGPUWriteBuffer(ValuesBufferSize * sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
@@ -289,7 +308,8 @@ bool initData()
 }
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], ValuesBufferSize * sizeof(int));
 }
 
 void deinitData()
@@ -307,15 +327,33 @@ void deinitData()
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
 
+    int64_t a = *(((int64_t*)s_dataBuffer) + 0);
+    int64_t b = *(((int64_t*)s_dataBuffer) + 1);
 
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
+/*
+    for(int i = 4; i < ValuesBufferSize; i += 8)
+    {
+        printf("%i: value: ", i);
+        for(int j = 0; j < 8; ++j)
+        {
+            printf("%i, ", s_dataBuffer[i + j]);
+            if((j % 2) != 0)
+            {
+                printf("  ");
+            }
+        }
+        printf("\n");
+    }
+*/
+
+    printf("09-a Compute Antinodes %" SDL_PRIs64 "\n", a);
+    printf("09-b Compute Harmpnic Antinodes %" SDL_PRIs64 "\n", b);
 
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -340,16 +378,12 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD09]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
-
 #endif
     return true;
 }
