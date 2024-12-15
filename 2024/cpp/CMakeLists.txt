@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(aoc2024)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 #set(CMAKE_UNITY_BUILD ON)
 set(SDL_STATIC ON)
 set(SDL_SHARED OFF)
@@ -107,3 +107,4 @@ make_prog("11" "src/11/d11.cpp")
 make_prog("12" "src/12/d12.cpp")
 make_prog("13" "src/13/d13.cpp")
 make_prog("14" "src/14/d14.cpp")
+make_prog("15" "src/15/d15.cpp")

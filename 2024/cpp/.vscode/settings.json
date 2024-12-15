@@ -53,7 +53,9 @@
         "iostream": "cpp",
         "ratio": "cpp",
         "chrono": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "bitset": "cpp",
+        "map": "cpp"
     },
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}"
