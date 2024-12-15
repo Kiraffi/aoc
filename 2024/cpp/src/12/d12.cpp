@@ -24,6 +24,7 @@
 #include "commons.h"
 #include "commonrender.h"
 
+static const int ValuesBufferSize = 1024;
 
 enum BufferEnum : int
 {
@@ -62,7 +63,7 @@ static std::vector<std::string> s_map;
 static int s_mapWidth;
 static int s_mapHeight;
 
-static int s_dataBuffer[1024] = {};
+static int s_dataBuffer[ValuesBufferSize] = {};
 
 const char* getTitle()
 {
@@ -438,13 +439,13 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+    s_buffers[BufferResult] = (createGPUWriteBuffer(ValuesBufferSize * sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
+#if 0
     // Create compute pipelines
     {
         for(int i = 0; i < PipelineCount; ++i)
@@ -463,7 +464,8 @@ bool initData()
 }
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], ValuesBufferSize * sizeof(int));
 }
 
 void deinitData()
@@ -520,9 +522,6 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
 #endif
     return true;

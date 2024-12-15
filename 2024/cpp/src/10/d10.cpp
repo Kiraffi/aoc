@@ -14,15 +14,10 @@
 #include <SDL3/SDL_main.h>
 
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
 #include "commons.h"
 #include "commonrender.h"
+
+static const int ValuesBufferSize = 1024;
 
 
 enum BufferEnum : int
@@ -35,11 +30,10 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineD10,
 
     PipelineCount
 };
-
 /*
 static ComputePipelineInfo s_pipelineInfos[] =
 {
@@ -48,7 +42,6 @@ static ComputePipelineInfo s_pipelineInfos[] =
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
 */
-
 static const std::string s_Filename = "input/10.input";
 
 
@@ -65,7 +58,7 @@ static std::vector<std::string> s_map;
 static int s_mapWidth = 0;
 static int s_mapHeight = 0;
 
-static int s_dataBuffer[1024] = {};
+static int s_dataBuffer[ValuesBufferSize] = {};
 
 const char* getTitle()
 {
@@ -184,13 +177,13 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+    s_buffers[BufferResult] = (createGPUWriteBuffer(ValuesBufferSize * sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
+#if 0
     // Create compute pipelines
     {
         for(int i = 0; i < PipelineCount; ++i)
@@ -209,7 +202,8 @@ bool initData()
 }
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], ValuesBufferSize * sizeof(int));
 }
 
 void deinitData()
@@ -228,8 +222,8 @@ void deinitData()
     }
 
 
-    printf("03-a compute safe: %i\n", s_dataBuffer[0]);
-    printf("03-b compute safe: %i\n", s_dataBuffer[1]);
+    printf("10-a compute safe: %i\n", s_dataBuffer[0]);
+    printf("10-b compute safe: %i\n", s_dataBuffer[1]);
 
 }
 
@@ -266,9 +260,6 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
 #endif
     return true;

@@ -14,6 +14,8 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
+static const int ValuesBufferSize = 1024;
+
 
 /*
 #include "d02_comp.h"
@@ -76,7 +78,7 @@ static std::string s_input = readInputFile(s_Filename);
 
 
 
-static int s_dataBuffer[1024] = {};
+static int s_dataBuffer[ValuesBufferSize] = {};
 
 const char* getTitle()
 {
@@ -269,13 +271,13 @@ static void doCpu()
 
 bool initCompute()
 {
-#if 0
     s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
-    s_buffers[BufferResult] = (createGPUWriteBuffer(1024, "ResultBuffer"));
+    s_buffers[BufferResult] = (createGPUWriteBuffer(ValuesBufferSize * sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
+#if 0
     // Create compute pipelines
     {
         for(int i = 0; i < PipelineCount; ++i)
@@ -294,7 +296,8 @@ bool initData()
 }
 void gpuReadEndBuffers()
 {
-
+    // Get the data from gpu to cpu
+    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], ValuesBufferSize * sizeof(int));
 }
 
 void deinitData()
@@ -351,9 +354,6 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 
         }
     }
-
-    // Get the data from gpu to cpu
-    downloadGPUBuffer((uint8_t*)s_dataBuffer, s_buffers[BufferResult], 1024);
 
 #endif
     return true;
