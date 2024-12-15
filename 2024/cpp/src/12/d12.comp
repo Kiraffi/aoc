@@ -1,0 +1,436 @@
+#version 450 core
+
+#define THREAD_SIZE 1024
+
+#define ROWS (256)
+#define COL_INTS (8)
+#define MAPSIZE (ROWS * COL_INTS)
+
+// assumption there is less than 256x256 tiles
+shared uint sharedFences[MAPSIZE];
+
+shared uint sharedGlobalRegions[MAPSIZE];
+shared uint sharedLocalRegions[MAPSIZE];
+
+shared uint sharedAreaCount;
+shared uint sharedAreaFencesCount;
+shared uint sharedUniqueFencesCount;
+
+shared int sharedLowestUnmarkedRegion;
+shared int sharedLocalMarked;
+
+shared uint sharedSumA;
+shared uint sharedSumB;
+
+shared int sharedValuesWrittenCount;
+
+shared int sharedWidth;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    uint outSumA;
+    uint outSumB;
+    int outDebugValueCount;
+    int outPadding;
+    int outDebugValues[];
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+int readNumber(int index)
+{
+    int c = readChar(index);
+    return c - 48;
+}
+
+void resetLocalArea(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < MAPSIZE; index += THREAD_SIZE)
+    {
+        sharedLocalRegions[index] = 0;
+    }
+    doBarriers();
+}
+
+void resetEverything(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        //sharedLinebrakCount = 0;
+        sharedValuesWrittenCount = 0;
+        sharedWidth = dataSizeInputBytes;
+        sharedSumA = 0;
+        sharedSumB = 0;
+        sharedLowestUnmarkedRegion = 0;
+        sharedAreaCount = 0;
+        sharedAreaFencesCount = 0;
+        sharedUniqueFencesCount = 0;
+    }
+    for(int index = indexInThreadGroup; index < MAPSIZE; index += THREAD_SIZE)
+    {
+        sharedFences[index] = 0;
+        sharedGlobalRegions[index] = 0;
+    }
+
+    resetLocalArea(indexInThreadGroup);
+    doBarriers();
+}
+
+void findLinebreaks(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes - 1; index += THREAD_SIZE)
+    {
+        if(readChar(index) == 0xA) // lb
+        {
+            /*
+            int lbIndex = atomicAdd(sharedLinebrakCount, 1);
+            sharedLinebreaks[lbIndex] = index;
+            */
+            atomicMin(sharedWidth, index  + 1);
+        }
+    }
+    doBarriers();
+}
+
+bool isValidPos(ivec2 pos)
+{
+    if(pos.x < 0 || pos.y < 0 || pos.x >= sharedWidth - 1 || pos.y >= dataSizeInputBytes / sharedWidth)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool isLocal(ivec2 pos)
+{
+    if(!isValidPos(pos))
+    {
+        return false;
+    }
+
+    return ((sharedLocalRegions[pos.y * COL_INTS + pos.x / 32] >> (pos.x % 32)) & 1) != 0;
+}
+
+bool isGlobal(ivec2 pos)
+{
+    if(!isValidPos(pos))
+    {
+        return false;
+    }
+
+    return ((sharedGlobalRegions[pos.y * COL_INTS + pos.x / 32] >> (pos.x % 32)) & 1) != 0;
+}
+
+
+void setLocal(ivec2 pos)
+{
+    if(!isValidPos(pos))
+    {
+        return;
+    }
+
+    atomicOr(sharedLocalRegions[pos.y * COL_INTS + pos.x / 32], uint(1) << uint(pos.x % 32));
+}
+
+void setGlobal(ivec2 pos)
+{
+    if(!isValidPos(pos))
+    {
+        return;
+    }
+
+    atomicOr(sharedGlobalRegions[pos.y * COL_INTS + pos.x / 32], uint(1) << uint(pos.x % 32));
+}
+
+
+int getIndex(ivec2 pos)
+{
+    if(!isValidPos(pos))
+    {
+        return -1;
+    }
+    return pos.x + pos.y * sharedWidth;
+}
+
+ivec2 getPosition(int index)
+{
+    return ivec2(index % sharedWidth, index / sharedWidth);
+}
+
+int getChar(ivec2 pos)
+{
+    int index = getIndex(pos);
+    return readChar(index);
+}
+
+int addFence(int c, ivec2 pos)
+{
+    int cOther = getChar(pos);
+    if(c == cOther)
+    {
+        return 0;
+    }
+
+    pos += ivec2(1, 1);
+    uint fence = (uint(1) << uint(pos.x % 32));
+
+    atomicOr(sharedFences[pos.y * COL_INTS + (pos.x / 32)], fence);
+    return 1;
+}
+
+void checkFences(int indexInThreadGroup, int areaIndex)
+{
+    if(indexInThreadGroup == 0)
+    {
+        sharedAreaCount = 0;
+        sharedAreaFencesCount = 0;
+        sharedUniqueFencesCount = 0;
+    }
+    doBarriers();
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+    {
+        ivec2 pos = getPosition(index);
+        if(!isValidPos(pos))
+        {
+            continue;
+        }
+
+        if(!isLocal(pos))
+        {
+            continue;
+        }
+
+        if(!isLocal(pos + ivec2(-1, 0)) && !isLocal(pos + ivec2(0, -1)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+        if(!isLocal(pos + ivec2(-1, 0)) && !isLocal(pos + ivec2(0, +1)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+
+        if(isLocal(pos + ivec2(-1, -1)) && !isLocal(pos + ivec2(0, -1)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+        if(isLocal(pos + ivec2(-1, +1)) && !isLocal(pos + ivec2(0, +1)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+
+
+        if(!isLocal(pos + ivec2(0, -1)) && !isLocal(pos + ivec2(+1, 0)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+        if(!isLocal(pos + ivec2(0, -1)) && !isLocal(pos + ivec2(-1, 0)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+
+
+        if(isLocal(pos + ivec2(+1, -1)) && !isLocal(pos + ivec2(+1, 0)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+        if(isLocal(pos + ivec2(-1, -1)) && !isLocal(pos + ivec2(-1, 0)))
+        //if(!isLocal(pos + ivec2(-1, 0)))
+        {
+            atomicAdd(sharedUniqueFencesCount, 1);
+        }
+
+
+        uint writeIndex = atomicAdd(sharedAreaCount, 1);
+
+        //outDebugValues[4 + writeIndex] = index;
+
+        int c0 = readChar(index);
+        int f0 = addFence(c0, pos + ivec2(+1, 0));
+        int f1 = addFence(c0, pos + ivec2(-1, 0));
+        int f2 = addFence(c0, pos + ivec2(0, +1));
+        int f3 = addFence(c0, pos + ivec2(0, -1));
+
+        int fenceCount = f0 + f1 + f2 + f3;
+        if(fenceCount > 0)
+        {
+            atomicAdd(sharedAreaFencesCount, fenceCount);
+        }
+    }
+    doBarriers();
+
+    if(indexInThreadGroup == 0)
+    {
+        atomicAdd(sharedSumA, sharedAreaCount * sharedAreaFencesCount);
+        atomicAdd(sharedSumB, sharedAreaCount * sharedUniqueFencesCount);
+    }
+    doBarriers();
+
+}
+
+void findLowestUnmarkedRegion(int indexInThreadGroup)
+{
+    int localLowest = 1000000;
+    if(indexInThreadGroup == 0)
+    {
+        sharedLowestUnmarkedRegion = localLowest;
+    }
+    doBarriers();
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+    {
+        ivec2 pos = getPosition(index);
+        if(!isValidPos(pos))
+        {
+            continue;
+        }
+
+        if(!isGlobal(pos))
+        {
+            localLowest = min(localLowest, index);
+        }
+    }
+    atomicMin(sharedLowestUnmarkedRegion, localLowest);
+    doBarriers();
+}
+
+void markLocalArea(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        ivec2 pos = getPosition(sharedLowestUnmarkedRegion);
+        setGlobal(pos);
+        setLocal(pos);
+        sharedLocalMarked = 1;
+    }
+    doBarriers();
+    int originalChar = readChar(sharedLowestUnmarkedRegion);
+
+    while(sharedLocalMarked > 0)
+    {
+        if(indexInThreadGroup == 0)
+        {
+            sharedLocalMarked = 0;
+        }
+        doBarriers();
+        for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+        {
+            ivec2 pos = getPosition(index);
+
+            if(!isValidPos(pos))
+            {
+                continue;
+            }
+            if(getChar(pos) != originalChar)
+            {
+                continue;
+            }
+            if(isLocal(pos))
+            {
+                continue;
+            }
+
+            if(    isLocal(pos + ivec2(+1, 0))
+                || isLocal(pos + ivec2(-1, 0))
+                || isLocal(pos + ivec2(0, -1))
+                || isLocal(pos + ivec2(0, +1)))
+            {
+                //atomicAdd(sharedLocalMarked, 1);
+                sharedLocalMarked = 1;
+                setLocal(pos);
+                setGlobal(pos);
+            }
+
+        }
+        doBarriers();
+    }
+
+
+    doBarriers();
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+
+
+    #if 1
+    {
+        resetEverything(indexInThreadGroup);
+        findLinebreaks(indexInThreadGroup);
+        findLowestUnmarkedRegion(indexInThreadGroup);
+        int currentIndex = 0;
+        while(sharedLowestUnmarkedRegion < 40000 && currentIndex < 1000)
+        {
+            resetLocalArea(indexInThreadGroup);
+            markLocalArea(indexInThreadGroup);
+            checkFences(indexInThreadGroup, currentIndex);
+            doBarriers();
+
+            if(indexInThreadGroup == 0)
+            {
+                outDebugValues[currentIndex * 4 + 0] = int(sharedAreaCount);
+                outDebugValues[currentIndex * 4 + 1] = int(sharedAreaFencesCount);
+                outDebugValues[currentIndex * 4 + 2] = int(sharedUniqueFencesCount);
+                outDebugValues[currentIndex * 4 + 3] = sharedLowestUnmarkedRegion;
+            }
+            doBarriers();
+
+            findLowestUnmarkedRegion(indexInThreadGroup);
+            ++currentIndex;
+        }
+
+        doBarriers();
+        if(indexInThreadGroup == 0)
+        {
+            outSumA = sharedSumA;
+            outSumB = sharedSumB;
+            outDebugValueCount = currentIndex * 4; // + int(sharedArea[0]);
+        }
+    }
+    #endif
+
+}
+

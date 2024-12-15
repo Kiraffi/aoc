@@ -13,18 +13,12 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 
+#include "d12_comp.h"
 
-/*
-#include "d02_comp.h"
-#include "d01b_comp.h"
-#include "findnumbers_comp.h"
-#include "parsenumbers_comp.h"
-#include "radixsort_comp.h"
-*/
 #include "commons.h"
 #include "commonrender.h"
 
-static const int ValuesBufferSize = 1024;
+static const int ValuesBufferSize = 1024 * 8;
 
 enum BufferEnum : int
 {
@@ -36,19 +30,18 @@ enum BufferEnum : int
 
 enum PipelineEnum
 {
-    PipelineD02,
+    PipelineD12,
 
     PipelineCount
 };
 
-/*
+
 static ComputePipelineInfo s_pipelineInfos[] =
 {
-    { BUF_N_SIZE(atomic_buffers_reset_comp), 1, 0, 1 },
-    { BUF_N_SIZE(d04_calculate_xmas_comp), 2, 1, 256 },
+    { BUF_N_SIZE(d12_comp), 2, 1, 1024 },
 };
 static_assert(sizeof(s_pipelineInfos) / sizeof(ComputePipelineInfo) == PipelineCount);
-*/
+
 
 static const std::string s_Filename = "input/12.input";
 
@@ -229,8 +222,8 @@ static void a()
                 uint64_t cost = area * perimeter;
                 count += cost;
 
-                //printf("%c: area = %" SDL_PRIs64 ", perimeter: %" SDL_PRIs64 " = %" SDL_PRIs64 "\n",
-                 //   c, area, perimeter, cost);
+                printf("[%i, %i], %c: area = %" SDL_PRIs64 ", perimeter: %" SDL_PRIs64 " = %" SDL_PRIs64 "\n",
+                    x, y, c, area, perimeter, cost);
 
                 //drawPerimeter(corners);
             }
@@ -410,7 +403,7 @@ static void b()
                 markRegion(x, y, c, regionIndex, visited);
                 int edges = countEdges(x, y, regionIndex, visited);
                 int area = calculateMarkedArea(regionIndex, visited);
-
+                printf("b: edges: %i\n", edges);
 
                 count += edges * area;
             }
@@ -445,7 +438,7 @@ bool initCompute()
     // upload the input data to a buffer
     uploadGPUBufferOneTimeInInit(s_buffers[BufferInput], (uint8_t*)s_input.data(), s_input.size());
 
-#if 0
+#if 1
     // Create compute pipelines
     {
         for(int i = 0; i < PipelineCount; ++i)
@@ -482,22 +475,25 @@ void deinitData()
         if(buffer != nullptr)
             SDL_ReleaseGPUBuffer(gpuDevice, buffer);
     }
+
     int computeDebugNumbers = s_dataBuffer[2];
     printf("Compute debug number count: %i\n", computeDebugNumbers);
-    for(int i = 0; i < computeDebugNumbers; ++i)
+    for(int i = 0; i < computeDebugNumbers; i += 4)
     {
-        printf("%i\n", s_dataBuffer[i + 4]);
+        int value0 = s_dataBuffer[i + 4];
+        int value1 = s_dataBuffer[i + 5];
+        int value2 = s_dataBuffer[i + 6];
+        int value3 = s_dataBuffer[i + 7];
+        printf("%i, %i, %i, %i\n", value0, value1, value2, value3);
     }
-
 
     printf("03-a compute safe: %i\n", s_dataBuffer[0]);
     printf("03-b compute safe: %i\n", s_dataBuffer[1]);
-
 }
 
 bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
 {
-#if 0
+#if 1
     struct DataSize
     {
         int inputBytes;
@@ -522,7 +518,7 @@ bool renderFrame(SDL_GPUCommandBuffer* cmd, int index)
                 sizeof(buffers) / sizeof(SDL_GPUStorageBufferReadWriteBinding)
             );
 
-            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD02]);
+            SDL_BindGPUComputePipeline(computePass, s_pipelines[PipelineD12]);
             SDL_DispatchGPUCompute(computePass, 1, 1, 1);
             SDL_EndGPUComputePass(computePass);
 
