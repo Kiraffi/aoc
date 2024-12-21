@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(SDL_STATIC ON)
 set(SDL_SHARED OFF)
 
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
 #set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Adding SDL
@@ -47,7 +49,7 @@ foreach(SHADER IN LISTS SHADERS)
     add_custom_command(OUTPUT ${SHADER_OUT_FILE}
         COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} -V ${SHADER} -o ${SHADER_OUT_FILE} --vn ${FILENAME_UNDERSCORE}
         DEPENDS ${SHADER}
-        COMMENT "Compiling $DIR"/"${FILENAME}")
+        COMMENT "Compiling $DIR / ${FILENAME}")
 
     list(APPEND HEADER_SHADERS ${SHADER_OUT_FILE})
 endForeach()
@@ -115,3 +117,4 @@ make_prog("17" "src/17/d17.cpp")
 make_prog("18" "src/18/d18.cpp")
 make_prog("19" "src/19/d19.cpp")
 make_prog("20" "src/20/d20.cpp")
+make_prog("21" "src/21/d21.cpp")

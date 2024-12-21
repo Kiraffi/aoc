@@ -55,7 +55,8 @@
         "chrono": "cpp",
         "fstream": "cpp",
         "bitset": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "unordered_set": "cpp"
     },
     "cmake.debugConfig": {
         "cwd": "${workspaceFolder}"
