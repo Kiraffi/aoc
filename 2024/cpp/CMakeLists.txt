@@ -32,12 +32,14 @@ endfunction()
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 file(GLOB_RECURSE SHADERS ${SHADER_DIR}/*.vert ${SHADER_DIR}/*.frag ${SHADER_DIR}/*.comp)
 
+#remove the included shaders.
+list(REMOVE_ITEM SHADERS ${SHADER_DIR}/int64.comp)
+
 find_package(Vulkan)
 
 foreach(SHADER IN LISTS SHADERS)
     get_filename_component(FILENAME ${SHADER} NAME)
     get_filename_component(DIR ${SHADER} DIRECTORY)
-
     string(REPLACE "." "_" FILENAME_UNDERSCORE "${FILENAME}")
     message("Shader: " ${FILENAME_UNDERSCORE} " array: " ${FILENAME_UNDERSCORE})
 
@@ -112,3 +114,4 @@ make_prog("16" "src/16/d16.cpp")
 make_prog("17" "src/17/d17.cpp")
 make_prog("18" "src/18/d18.cpp")
 make_prog("19" "src/19/d19.cpp")
+make_prog("20" "src/20/d20.cpp")
