@@ -129,14 +129,11 @@ uvec4 mul128(uvec2 a, uvec2 b)
     uvec2 highA = uvec2(a.y, 0);
     uvec2 highB = uvec2(b.y, 0);
 
+    uvec2 midA = mul64(lowA, highB);
+    uvec2 midB = mul64(highA, lowB);
 
     result.xy = mul64(lowA, lowB);
     result.zw = mul64(highA, highB);
-    result.zw = add64(result.zw, mul64(lowA, highB));
-    result.zw = add64(result.zw, mul64(lowB, highA));
-
-    uvec2 midA = mul64(lowA, highB);
-    uvec2 midB = mul64(highA, lowB);
 
     result = add128(result, uvec4(uvec2(0, midA.x), uvec2(midA.y, 0)));
     result = add128(result, uvec4(uvec2(0, midB.x), uvec2(midB.y, 0)));
@@ -146,7 +143,7 @@ uvec4 mul128(uvec2 a, uvec2 b)
 
 
 
-/*
+#if 0
 uvec2 div64(uvec2 a, uvec2 b)
 {
     uvec2 result = uvec2(0);
@@ -158,13 +155,8 @@ uvec2 div64(uvec2 a, uvec2 b)
         uint lr = ((minValue.x & 1) + (maxValue.x & 1)) >> 1;
         uvec2 mid = add64(shiftR64(minValue, 1), shiftR64(maxValue, 1));
         mid = add64(mid, uvec2(lr, 0));
+
         uvec4 t1 = mul128(mid, b);
-        //uvec2 t1 = mul64(mid, b);
-
-        //uvec2 t2 = mul64(uvec2{mid.y, 0}, b);
-        //uvec2 t3 = mul64(uvec2{b.y, 0}, mid);
-
-        //uvec2 t4 = add64(uvec2(t1.y, 0), add64(t2, t3));
         // if it overflows any way.
         if((mid.y > 0 && b.y > 0)
             || t1.z > 0
@@ -180,8 +172,8 @@ uvec2 div64(uvec2 a, uvec2 b)
     }
     return minValue;
 }
-*/
 
+#else
 
 uvec2 div64(uvec2 a, uvec2 b)
 {
@@ -213,3 +205,4 @@ uvec2 div64(uvec2 a, uvec2 b)
     return minValue;
 }
 
+#endif

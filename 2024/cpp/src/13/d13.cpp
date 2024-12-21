@@ -213,9 +213,21 @@ struct uvec4
 {
     uvec4(uint32_t aa) : a(aa), b(aa) {}
     uvec4(uvec2 aa, uvec2 bb) : a(aa), b(bb) {}
-
-    uvec2 a;
-    uvec2 b;
+    union
+    {
+        struct
+        {
+            uvec2 a;
+            uvec2 b;
+        };
+        struct
+        {
+            uint32_t x;
+            uint32_t y;
+            uint32_t z;
+            uint32_t w;
+        };
+    };
 };
 
 
@@ -322,7 +334,7 @@ uvec4 add128(uvec4 a, uvec4 b)
     {
         result.b.x++;
     }
-    if(result.b.y < std::max(a.b.x, b.b.x))
+    if(result.b.x < std::max(a.b.x, b.b.x))
     {
         result.b.y++;
     }
@@ -339,13 +351,11 @@ uvec4 mul128(uvec2 a, uvec2 b)
     uvec2 highA = uvec2(a.y, 0);
     uvec2 highB = uvec2(b.y, 0);
 
-    result.a = mul64(lowA, lowB);
-    result.b = mul64(highA, highB);
-    result.b = add64(result.b, mul64(lowA, highB));
-    result.b = add64(result.b, mul64(lowB, highA));
-
     uvec2 midA = mul64(lowA, highB);
     uvec2 midB = mul64(highA, lowB);
+
+    result.a = mul64(lowA, lowB);
+    result.b = mul64(highA, highB);
 
     result = add128(result, uvec4(uvec2(0, midA.x), uvec2(midA.y, 0)));
     result = add128(result, uvec4(uvec2(0, midB.x), uvec2(midB.y, 0)));
@@ -508,6 +518,19 @@ static void b()
 
 static void doCpu()
 {
+    uvec2 a1(1122342234, 1234223);
+    uvec2 b1(223432464, 1264363);
+    uvec4 c = mul128(a1, b1);
+
+    uint64_t aa = get64(a1);
+    uint64_t bb = get64(b1);
+    uint64_t c1 = get64(c.a);
+    uint64_t c2 = get64(c.b);
+
+    __uint128_t cc = __uint128_t(aa) * __uint128_t(bb);
+    __uint128_t cc1 = __uint128_t(cc) & __uint128_t(0xffff'ffff'ffff'ffffu);
+    __uint128_t cc2 = __uint128_t(cc) >> __uint128_t(64);
+
     parse();
     a();
     b();
