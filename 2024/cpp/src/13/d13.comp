@@ -1,0 +1,293 @@
+#version 450 core
+#extension GL_GOOGLE_include_directive: enable
+
+#include "../int64.comp"
+
+#define THREAD_SIZE 1024
+
+shared int sharedLinebreaks[2048];
+
+shared int sharedLinebreakCount;
+
+shared uint sharedSumA;
+shared uvec2 sharedSumB;
+
+shared int sharedValuesWrittenCount;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    uint outSumA;
+    int outDebugValueCount;
+    uvec2 outSumB;
+    uint outDebugValues[];
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool charIsNumber(int index)
+{
+    int c = readChar(index);
+    return c >= 48 && c <= 57;
+}
+
+int readNumber(int index)
+{
+    int c = readChar(index);
+    return c - 48;
+}
+
+int parseInteger(int index)
+{
+    int result = 0;
+    int c = readNumber(index);
+    while(c >= 0 && c <= 9)
+    {
+        index++;
+        result = result * 10 + c;
+        c = readNumber(index);
+    }
+    return result;
+}
+
+void resetEverything(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        sharedLinebreakCount = 0;
+        sharedValuesWrittenCount = 0;
+        sharedSumA = 0;
+        sharedSumB = uvec2(0);
+    }
+    doBarriers();
+}
+
+void findLinebreaks(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+    {
+        if(readChar(index) == 0xA &&
+            (readChar(index + 1) == 0xA || index + 3 >= dataSizeInputBytes))
+        {
+
+            int lbIndex = atomicAdd(sharedLinebreakCount, 1);
+            sharedLinebreaks[lbIndex] = index;
+        }
+    }
+    /*
+    if(indexInThreadGroup == 0)
+    {
+        int lbIndex = atomicAdd(sharedLinebreakCount, 1);
+        sharedLinebreaks[lbIndex] = dataSizeInputBytes - 1;
+    }
+    */
+    doBarriers();
+}
+
+int findCharBackwards(int index, int c)
+{
+    while(index >= 0 && readChar(index) != c)
+    {
+        index--;
+    }
+    return index;
+}
+
+void parseButton(int indexInThreadGroup)
+{
+    for(int i = indexInThreadGroup; i < sharedLinebreakCount; i += THREAD_SIZE)
+    {
+        ivec2 aButton = ivec2(0);
+        ivec2 bButton = ivec2(0);
+        ivec2 prize = ivec2(0);
+
+        int currIndex = sharedLinebreaks[i];
+
+        currIndex = findCharBackwards(currIndex - 1, 0x3D); // 0x3D '='
+        prize.y = parseInteger(currIndex + 1);
+        currIndex = findCharBackwards(currIndex - 1, 0x3D); // 0x3D '='
+        prize.x = parseInteger(currIndex + 1);
+
+        currIndex = findCharBackwards(currIndex - 1, 0x2B); // 0x2B '+'
+        bButton.y = parseInteger(currIndex + 1);
+        currIndex = findCharBackwards(currIndex - 1, 0x2B); // 0x2B '+'
+        bButton.x = parseInteger(currIndex + 1);
+
+        currIndex = findCharBackwards(currIndex - 1, 0x2B); // 0x2B '+'
+        aButton.y = parseInteger(currIndex + 1);
+        currIndex = findCharBackwards(currIndex - 1, 0x2B); // 0x2B '+'
+        aButton.x = parseInteger(currIndex + 1);
+
+        int d = aButton.x * bButton.y - aButton.y * bButton.x;
+        int dx = prize.x * bButton.y - prize.y * bButton.x;
+        int dy = prize.y * aButton.x - prize.x * aButton.y;
+/*
+        if(indexInThreadGroup== 0)
+        {
+            outDebugValues[0] = aButton.x;
+            outDebugValues[1] = aButton.y;
+
+            outDebugValues[2] = bButton.x;
+            outDebugValues[3] = bButton.y;
+
+            outDebugValues[4] = prize.x;
+            outDebugValues[5] = prize.y;
+
+            outDebugValues[6] = 3 * dx / d + 1 * dy / d;
+
+            outDebugValueCount = 9;
+        }
+*/
+
+        if(d != 0 && all(equal((aButton * dx / d + bButton * dy / d), prize)))
+        {
+            int x = dx / d;
+            int y = dy / d;
+            if(x >= 0 && y >= 0 && x < 100 && y < 100)
+            {
+                int res = 3 * x + y;
+                atomicAdd(sharedSumA, res);
+
+                /*
+                {
+                    int outIndex = atomicAdd(sharedValuesWrittenCount, 9);
+
+                    outDebugValues[outIndex + 0] = prize.x;
+                    outDebugValues[outIndex + 1] = prize.y;
+
+                    outDebugValues[outIndex + 2] = 3 * dx / d + 1 * dy / d;
+                    outDebugValues[outIndex + 3] = dx / d;
+                    outDebugValues[outIndex + 4] = dy / d;
+                    outDebugValues[outIndex + 5] = aButton.x;
+                    outDebugValues[outIndex + 6] = aButton.y;
+                    outDebugValues[outIndex + 7] = bButton.x;
+                    outDebugValues[outIndex + 8] = bButton.y;
+                }
+                */
+            }
+        }
+
+        {
+
+            uvec2 px = add64(uvec2(prize.x, 0), uvec2(1316134912, 2328)); //10000000000000
+            uvec2 py = add64(uvec2(prize.y, 0), uvec2(1316134912, 2328));
+
+            uvec2 ppxx = mul64(px, uvec2(bButton.y, 0));
+            uvec2 ppxy = mul64(py, uvec2(bButton.x, 0));
+
+            uvec2 ppyx = mul64(py, uvec2(aButton.x, 0));
+            uvec2 ppyy = mul64(px, uvec2(aButton.y, 0));
+
+                uvec2 ddx = uvec2(0);
+                if(g64(ppxx, ppxy))
+                    ddx = sub64(ppxx, ppxy);
+                else
+                    ddx = sub64(ppxy, ppxx);
+                uvec2 ddy = uvec2(0);
+                if(g64(ppyx, ppyy))
+                    ddy = sub64(ppyx, ppyy);
+                else
+                    ddy = sub64(ppyy, ppyx);
+
+            int dd =  int(aButton.x) * int(bButton.y) - int(aButton.y) * int(bButton.x);
+
+
+            if(dd != 0)
+            {
+                uvec2 x = div64(ddx, uvec2(uint(abs(dd)), 0));
+                uvec2 y = div64(ddy, uvec2(uint(abs(dd)), 0));
+
+                if(all(equal(add64(mul64(uvec2(aButton.x, 0), x), mul64(uvec2(bButton.x, 0), y)), px))
+                    && all(equal(add64(mul64(uvec2(aButton.y, 0), x), mul64(uvec2(bButton.y, 0), y)), py)))
+                {
+                    uvec2 res = add64(mul64(uvec2(3, 0), x), y);
+                    uint tmp = atomicAdd(sharedSumB.x, res.x);
+
+                    /*
+                    if(false)
+                    {
+                        int wIndex = atomicAdd(sharedValuesWrittenCount, 12);
+                        outDebugValues[wIndex + 0] = px.x;
+                        outDebugValues[wIndex + 1] = px.y;
+                        outDebugValues[wIndex + 2] = py.x;
+                        outDebugValues[wIndex + 3] = py.y;
+                        outDebugValues[wIndex + 4] = res.x;
+                        outDebugValues[wIndex + 5] = res.y;
+                        outDebugValues[wIndex + 6] = x.x;
+                        outDebugValues[wIndex + 7] = x.y;
+                        outDebugValues[wIndex + 8] = y.x;
+                        outDebugValues[wIndex + 9] = y.y;
+                        outDebugValues[wIndex + 10] = ddx.x;
+                        outDebugValues[wIndex + 11] = ddx.y;
+                    }
+                    */
+                    if(res.x + tmp < max(res.x, tmp))
+                    {
+                        res.y++;
+                    }
+                    atomicAdd(sharedSumB.y, res.y);
+                }
+            }
+        }
+    }
+    doBarriers();
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+
+
+    #if 1
+    {
+        resetEverything(indexInThreadGroup);
+        findLinebreaks(indexInThreadGroup);
+
+        parseButton(indexInThreadGroup);
+
+        if(indexInThreadGroup == 0)
+        {
+            outSumA = sharedSumA;
+            outSumB = sharedSumB;
+            outDebugValueCount = sharedValuesWrittenCount; // currentIndex * 4;
+        }
+    }
+    #endif
+
+}
+
