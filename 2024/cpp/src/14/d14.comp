@@ -1,0 +1,285 @@
+#version 450 core
+
+#extension GL_GOOGLE_include_directive: enable
+
+#include "d14_shared.h"
+
+#define THREAD_SIZE 1024
+
+#define COLS 101
+#define ROWS 103
+
+shared int sharedLinebreaks[1024];
+
+shared int sharedLinebreakCount;
+
+// more than cols and rows
+shared uint sharedCols[128];
+shared uint sharedRows[128];
+
+shared uint sharedTL;
+shared uint sharedTR;
+shared uint sharedBL;
+shared uint sharedBR;
+
+shared uint sharedSumA;
+shared uint sharedSumB;
+
+shared int sharedValuesWrittenCount;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    uvec2 outSumA;
+    uvec2 outSumB;
+
+    int outDebugValueCount;
+    int outPadding;
+    ivec2 outPadding2;
+
+    D14TempData outDebugValues[];
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool charIsNumber(int index)
+{
+    int c = readChar(index);
+    return c >= 48 && c <= 57;
+}
+
+int readNumber(int index)
+{
+    int c = readChar(index);
+    return c - 48;
+}
+
+int parseInteger(int index)
+{
+    int result = 0;
+    int c = readChar(index);
+    bool isNegative = false;
+    if(c == 0x2D) // '-'
+    {
+        ++index;
+        isNegative = true;
+        c = readChar(index);
+    }
+    while(c >= 48 && c <= 57)
+    {
+        index++;
+        result = result * 10 + (c - 48);
+        c = readChar(index);
+    }
+    return isNegative ? -result : result;
+}
+
+void resetColsRows(int indexInThreadGroup)
+{
+    if(indexInThreadGroup < 128)
+    {
+        sharedRows[indexInThreadGroup] = 0;
+        sharedCols[indexInThreadGroup] = 0;
+    }
+    doBarriers();
+}
+
+void resetEverything(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        sharedLinebreakCount = 0;
+        sharedValuesWrittenCount = 0;
+        sharedSumA = 0;
+        sharedSumB = 0;
+        sharedTL = 0;
+        sharedTR = 0;
+        sharedBL = 0;
+        sharedBR = 0;
+    }
+    resetColsRows(indexInThreadGroup);
+    doBarriers();
+}
+
+void findLinebreaks(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+    {
+        if(readChar(index) == 0xA)
+        {
+
+            int lbIndex = atomicAdd(sharedLinebreakCount, 1);
+            sharedLinebreaks[lbIndex] = index;
+        }
+    }
+    doBarriers();
+}
+
+int findCharBackwards(int index, int c)
+{
+    while(index >= 0 && readChar(index) != c)
+    {
+        index--;
+    }
+    return index;
+}
+
+void calculateQuaters(int indexInThreadGroup, ivec2 pos, ivec2 vel, int amount)
+{
+    if(indexInThreadGroup < sharedLinebreakCount)
+    {
+        ivec2 roomSize = ivec2(COLS, ROWS);
+        // no overflow handling
+        for(int i = 0; i < amount; ++i)
+        {
+            pos += vel + roomSize;
+            pos %= roomSize;
+        }
+
+        if(pos.x < roomSize.x / 2 && pos.y < roomSize.y / 2) atomicAdd(sharedTL, 1);
+        if(pos.x < roomSize.x / 2 && pos.y > roomSize.y / 2) atomicAdd(sharedBL, 1);
+        if(pos.x > roomSize.x / 2 && pos.y < roomSize.y / 2) atomicAdd(sharedTR, 1);
+        if(pos.x > roomSize.x / 2 && pos.y > roomSize.y / 2) atomicAdd(sharedBR, 1);
+    }
+    doBarriers();
+}
+
+void markColAndRow(int indexInThreadGroup, inout ivec2 pos, inout ivec2 vel)
+{
+    if(indexInThreadGroup < sharedLinebreakCount)
+    {
+        ivec2 roomSize = ivec2(COLS, ROWS);
+        // no overflow handling
+        pos += vel + roomSize;
+        pos %= roomSize;
+
+        atomicAdd(sharedCols[pos.x], 1);
+        atomicAdd(sharedRows[pos.y], 1);
+    }
+    doBarriers();
+}
+
+
+void parseRobot(int indexInThreadGroup, out ivec2 pos, out ivec2 vel)
+{
+    pos = ivec2(0);
+    vel = ivec2(0);
+
+    for(int i = indexInThreadGroup; i < sharedLinebreakCount; i += THREAD_SIZE)
+    {
+        int currIndex = sharedLinebreaks[i];
+
+        currIndex = findCharBackwards(currIndex - 1, 0x2C); // 0x2C ','
+        vel.y = parseInteger(currIndex + 1);
+        currIndex = findCharBackwards(currIndex - 1, 0x3D); // 0x3D '='
+        vel.x = parseInteger(currIndex + 1);
+
+        currIndex = findCharBackwards(currIndex - 1, 0x2C); // 0x2C ','
+        pos.y = parseInteger(currIndex + 1);
+        currIndex = findCharBackwards(currIndex - 1, 0x3D); // 0x3D '='
+        pos.x = parseInteger(currIndex + 1);
+        /*
+        {
+            int writeIndex = atomicAdd(sharedValuesWrittenCount, 1);
+            D14TempData writeData;
+            writeData.posX = pos.x;
+            writeData.posY = pos.y;
+            writeData.velX = vel.x;
+            writeData.velY = vel.y;
+
+            outDebugValues[writeIndex] = writeData;
+        }
+        */
+
+    }
+}
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+
+
+    #if 1
+    {
+        resetEverything(indexInThreadGroup);
+        findLinebreaks(indexInThreadGroup);
+
+        ivec2 pos;
+        ivec2 vel;
+        parseRobot(indexInThreadGroup, pos, vel);
+        calculateQuaters(indexInThreadGroup, pos, vel, 100);
+
+        if(indexInThreadGroup == 0)
+        {
+            outSumA.x = sharedTL * sharedTR * sharedBL * sharedBR;
+        }
+        doBarriers();
+        int frameIndex = 1;
+        for(; frameIndex < 10000; ++frameIndex)
+        {
+            markColAndRow(indexInThreadGroup, pos, vel);
+            uint maxRows = 0;
+            uint maxCols = 0;
+
+            for(int y = 0; y < ROWS; ++y)
+            {
+                maxRows = max(maxRows, sharedRows[y]);
+            }
+
+            for(int x = 0; x < COLS; ++x)
+            {
+                maxCols = max(maxCols, sharedCols[x]);
+            }
+            if(maxCols > 30 && maxRows > 30)
+            {
+                break;
+            }
+            resetColsRows(indexInThreadGroup);
+        }
+
+        if(indexInThreadGroup == 0)
+        {
+            outSumB.x = frameIndex;
+            outDebugValueCount = sharedValuesWrittenCount; // currentIndex * 4;
+        }
+        doBarriers();
+    }
+    #endif
+
+}
+
