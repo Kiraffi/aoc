@@ -1,7 +1,7 @@
 #version 450 core
 #extension GL_GOOGLE_include_directive: enable
 
-#include "../int64.comp"
+#include "../int64_shared.h"
 
 #define THREAD_SIZE 1024
 

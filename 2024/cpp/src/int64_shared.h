@@ -1,5 +1,75 @@
 
-// this is meant for included file
+// this is meant for included file for both compute and c++
+
+#ifdef __cplusplus
+
+#include <cmath>
+#include <cstdint>
+using uint = uint32_t;
+#define max std::max
+struct uvec2
+{
+    uvec2(uint32_t xx) : x(xx), y(xx) {}
+    uvec2(uint32_t xx, uint32_t yy) : x(xx), y(yy) {}
+    uint32_t x;
+    uint32_t y;
+};
+
+struct uvec4
+{
+    uvec4(uint32_t aa) : a(aa), b(aa) {}
+    uvec4(uvec2 aa, uvec2 bb) : a(aa), b(bb) {}
+    uvec4(uint32_t aa, uint32_t bb, uint32_t cc, uint32_t dd) : x(aa), y(bb), z(cc), w(dd) {}
+    union
+    {
+        struct
+        {
+            uvec2 a;
+            uvec2 b;
+        };
+        struct
+        {
+            uvec2 xy;
+            uvec2 zw;
+        };
+        struct
+        {
+            uint32_t x;
+            uint32_t y;
+            uint32_t z;
+            uint32_t w;
+        };
+    };
+};
+
+uvec2 operator+(uvec2 a, uvec2 b)
+{
+    return uvec2(a.x + b.x, a.y + b.y);
+}
+uvec2 operator-(uvec2 a, uvec2 b)
+{
+    return uvec2(a.x - b.x, a.y - b.y);
+}
+
+uvec4 operator+(uvec4 a, uvec4 b)
+{
+    return uvec4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+}
+uvec4 operator-(uvec4 a, uvec4 b)
+{
+    return uvec4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
+}
+
+static uint64_t get64(uvec2 a)
+{
+    return *((uint64_t*)&a);
+}
+static uvec2 getuvec2(uint64_t a)
+{
+    return *((uvec2*)&a);
+}
+
+#endif
 
 bool l64(uvec2 a, uvec2 b)
 {
@@ -38,7 +108,7 @@ bool ge64(uvec2 a, uvec2 b)
     return a.x >= b.x;
 }
 
-bool eq64(in uvec2 a, in uvec2 b)
+bool eq64(uvec2 a, uvec2 b)
 {
     return a.x == b.x && a.y == b.y;
 }
@@ -55,7 +125,7 @@ uvec2 shiftR64(uvec2 a, uint bits)
 }
 
 
-uvec2 add64(in uvec2 a, in uvec2 b)
+uvec2 add64(uvec2 a, uvec2 b)
 {
     uvec2 result = a + b;
     if(result.x < max(a.x, b.x))
@@ -76,7 +146,7 @@ uvec2 sub64(uvec2 a, uvec2 b)
     return result;
 }
 
-uvec2 mul64(in uvec2 a, in uvec2 b)
+uvec2 mul64(uvec2 a, uvec2 b)
 {
     uvec2 result = uvec2(0);
 
