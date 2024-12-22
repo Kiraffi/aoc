@@ -192,7 +192,7 @@ static void doCpu()
 bool initCompute()
 {
 #if 1
-    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
+    s_buffers[BufferInput] = (createGPUWriteBuffer(((s_input.size() + 15) / 16) * 16, "Input"));
 
     s_buffers[BufferSums] = (createGPUWriteBuffer(4096 * sizeof(int), "Sums"));
     s_buffers[BufferDos] = (createGPUWriteBuffer(1024 * sizeof(int), "Dos"));
