@@ -16,7 +16,7 @@ set(FETCHCONTENT_QUIET FALSE)
 FetchContent_Declare(
         SDL
         GIT_REPOSITORY "https://github.com/libsdl-org/SDL.git"
-        GIT_TAG acf0f09
+        GIT_TAG 3344270
 )
 
 FetchContent_MakeAvailable(SDL)
@@ -43,7 +43,7 @@ foreach(SHADER IN LISTS SHADERS)
     get_filename_component(FILENAME ${SHADER} NAME)
     get_filename_component(DIR ${SHADER} DIRECTORY)
     string(REPLACE "." "_" FILENAME_UNDERSCORE "${FILENAME}")
-    message("Shader: " ${FILENAME_UNDERSCORE} " array: " ${FILENAME_UNDERSCORE})
+    message("Found shader: ${DIR}/${FILENAME_UNDERSCORE}")
 
     set(SHADER_OUT_FILE ${DIR}/${FILENAME_UNDERSCORE}.h)
     add_custom_command(OUTPUT ${SHADER_OUT_FILE}

@@ -15,9 +15,14 @@
 #include "commonrender.h"
 #include "gputexture.h"
 
+#include <render/SDL_render_debug_font.h>
+
 
 static const int s_WindowWidth = 800;
 static const int s_WindowHeight = 600;
+
+static const int s_FontTextureWidth = 1024;
+static const int s_FontTextureHeight = 1024;
 
 struct WindowState
 {
@@ -35,6 +40,13 @@ struct AppState
     bool m_running;
 };
 
+enum TextureTypes : int
+{
+    TextureTypeFontTexture,
+
+    TextureTypeCount,
+};
+
 enum RenderTextureTypes : int
 {
     RenderTextureColor,
@@ -44,6 +56,7 @@ enum RenderTextureTypes : int
 };
 
 static GpuTexture s_renderTargets[RenderTextureCount] = {};
+static GpuTexture s_textures[TextureTypeCount] = {};
 
 static WindowState s_windowState = {};
 static AppState s_appState = {};
@@ -71,6 +84,18 @@ static void clearRenderTargets()
     }
 }
 
+static void destroyTextures()
+{
+    for (GpuTexture& texture : s_textures)
+    {
+        if(texture.m_texture)
+        {
+            SDL_ReleaseGPUTexture(s_appState.m_device, texture.m_texture);
+        }
+        texture = GpuTexture{};
+    }
+}
+
 static void shutdownGPU(void)
 {
     {
@@ -85,6 +110,7 @@ static void shutdownGPU(void)
     deinitData();
 
     clearRenderTargets();
+    destroyTextures();
     SDL_GPUDevice* gpuDevice = s_appState.m_device;
     SDL_ReleaseWindowFromGPUDevice(gpuDevice, getWindow());
 
@@ -169,12 +195,14 @@ static GpuTexture createTexture(uint32_t w, uint32_t h, SDL_GPUTextureFormat for
     return result;
 }
 
-static bool createTextures(uint32_t w, uint32_t h)
+static bool createRenderTargets(uint32_t w, uint32_t h)
 {
     clearRenderTargets();
 
     s_renderTargets[RenderTextureColor] = createTexture(w, h, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
     s_renderTargets[RenderTextureDepth] = createTexture(w, h, SDL_GPU_TEXTUREFORMAT_D32_FLOAT);
+
+
 
     for (const GpuTexture& renderTarget : s_renderTargets)
     {
@@ -182,6 +210,59 @@ static bool createTextures(uint32_t w, uint32_t h)
         {
             return false;
         }
+    }
+
+    return true;
+}
+
+static std::vector<uint8_t> createFontTexture()
+{
+    std::vector<uint8_t> pixelData(s_FontTextureWidth * s_FontTextureHeight * 4, 0);
+
+    // 32 chars per row, using 16 pixels with 8 pixel padding on all directions = 32 pixels per char
+
+    auto fn = [&pixelData](int charIndex, int endCharIndex, int fontOffsetData)
+    {
+        for(;charIndex < endCharIndex; ++charIndex)
+        {
+            int x = (charIndex % 32) * 32 + 8;
+            int y = (charIndex / 32) * 32 + 8;
+            for(int row = 0; row < 8; ++row)
+            {
+                uint8_t rowPixels = SDL_RenderDebugTextFontData[(charIndex - fontOffsetData) * 8 + row];
+                for(int col = 0; col < 8; ++col)
+                {
+                    if((rowPixels >> col) & 1)
+                    {
+                        // 2x2
+                        for(int py = 0; py < 2; ++py)
+                        {
+                            uint8_t* pData = &pixelData[(((row * 2) + y + py) * s_FontTextureWidth + x + (col * 2)) * 4];
+
+                            // 2x2, rgba = 4 channels
+                            for(int px = 0; px < 2 * 4; ++px)
+                            {
+                                pData[px] = 255;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+    fn(33, 127, 33);
+    fn(161, 257, (161 - 127) + 33);
+
+    return pixelData;
+}
+
+static bool createTextures()
+{
+    if(!s_textures[TextureTypeFontTexture].isValid())
+    {
+        s_textures[TextureTypeFontTexture] = createTexture(s_FontTextureWidth, s_FontTextureHeight, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
+        auto fontData = createFontTexture();
+        uploadGPUTextureOneTimeInInit(s_textures + TextureTypeFontTexture, fontData.data(), fontData.size() * sizeof(fontData[0]));
     }
 
     return true;
@@ -238,7 +319,7 @@ static void render(SDL_Window* window)
 
     if (s_windowState.m_drawablew != drawablew || s_windowState.m_drawableh != drawableh)
     {
-        createTextures(drawablew, drawableh);
+        createRenderTargets(drawablew, drawableh);
     }
     s_windowState.m_drawablew = drawablew;
     s_windowState.m_drawableh = drawableh;
@@ -252,9 +333,13 @@ static void render(SDL_Window* window)
     {
         SDL_GPUBlitInfo blitInfo;
         SDL_zero(blitInfo);
-        blitInfo.source.texture = s_renderTargets[RenderTextureColor].m_texture;
-        blitInfo.source.w = s_renderTargets[RenderTextureColor].m_width;
-        blitInfo.source.h = s_renderTargets[RenderTextureColor].m_height;
+        //blitInfo.source.texture = s_renderTargets[RenderTextureColor].m_texture;
+        //blitInfo.source.w = s_renderTargets[RenderTextureColor].m_width;
+        //blitInfo.source.h = s_renderTargets[RenderTextureColor].m_height;
+
+        blitInfo.source.texture = s_textures[TextureTypeFontTexture].m_texture;
+        blitInfo.source.w = s_textures[TextureTypeFontTexture].m_width;
+        blitInfo.source.h = s_textures[TextureTypeFontTexture].m_height;
 
         blitInfo.destination.texture = swapchainTexture;
         blitInfo.destination.w = drawablew;
@@ -301,7 +386,8 @@ static bool initRenderState()
     /* create a depth texture for the window */
     Uint32 drawablew, drawableh;
     SDL_GetWindowSizeInPixels(getWindow(), (int*) &drawablew, (int*) &drawableh);
-    createTextures(drawablew, drawableh);
+    createRenderTargets(drawablew, drawableh);
+    createTextures();
 
     createBuffers();
 
@@ -450,6 +536,55 @@ bool uploadGPUBufferOneTimeInInit(SDL_GPUBuffer* dstGpuBuffer, uint8_t* data, ui
             .size = size
         };
         SDL_UploadToGPUBuffer(copyPass, &bufLocation, &dstRegion, false);
+        SDL_EndGPUCopyPass(copyPass);
+        SDL_SubmitGPUCommandBuffer(cmd);
+        SDL_ReleaseGPUTransferBuffer(s_appState.m_device, bufTransfer);
+    }
+    return true;
+
+}
+
+bool uploadGPUTextureOneTimeInInit(GpuTexture* dstGpuTexture, uint8_t* data, uint32_t size)
+{
+        SDL_GPUTransferBufferCreateInfo transferBufferDesc = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = size,
+        .props = 0
+    };
+    SDL_GPUTransferBuffer* bufTransfer = SDL_CreateGPUTransferBuffer(
+        s_appState.m_device,
+        &transferBufferDesc
+    );
+
+    {
+        void* map = SDL_MapGPUTransferBuffer(s_appState.m_device, bufTransfer, false);
+        SDL_memcpy(map, data, size);
+        SDL_UnmapGPUTransferBuffer(s_appState.m_device, bufTransfer);
+    }
+    {
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(s_appState.m_device);
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTransferBufferLocation bufLocation = {
+            .transfer_buffer = bufTransfer,
+            .offset = 0
+        };
+
+        SDL_GPUTextureTransferInfo srcInfo = {};
+        SDL_zero(srcInfo);
+        srcInfo.transfer_buffer = bufTransfer;
+        srcInfo.rows_per_layer = dstGpuTexture->m_height;
+        srcInfo.pixels_per_row = dstGpuTexture->m_width;
+
+        SDL_GPUTextureRegion dstRegion = {};
+        SDL_zero(dstRegion);
+        dstRegion.texture = dstGpuTexture->m_texture;
+        dstRegion.x = 0;
+        dstRegion.y = 0;
+        dstRegion.w = dstGpuTexture->m_width;
+        dstRegion.h = dstGpuTexture->m_height;
+        dstRegion.d = 1;
+
+        SDL_UploadToGPUTexture(copyPass, &srcInfo, &dstRegion, false);
         SDL_EndGPUCopyPass(copyPass);
         SDL_SubmitGPUCommandBuffer(cmd);
         SDL_ReleaseGPUTransferBuffer(s_appState.m_device, bufTransfer);

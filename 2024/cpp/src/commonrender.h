@@ -1,10 +1,10 @@
 #pragma once
 
-#include <span>
-
 struct SDL_GPUBuffer;
 struct SDL_GPUDevice;
 struct SDL_GPUCommandBuffer;
+
+struct GpuTexture;
 
 // functions on aoc dailies
 const char* getTitle();
@@ -33,5 +33,7 @@ SDL_GPUBuffer* createGPUWriteBuffer(uint32_t size, const char* debugName, bool i
 
 bool uploadGPUBufferOneTimeInInit(SDL_GPUBuffer* dstGpuBuffer, uint8_t* data, uint32_t size);
 bool downloadGPUBuffer(uint8_t* dstData, SDL_GPUBuffer* srcGpuBuffer, uint32_t size);
+
+bool uploadGPUTextureOneTimeInInit(GpuTexture* dstGpuTexture, uint8_t* data, uint32_t size);
 
 SDL_GPUComputePipeline* createComputePipeline(const ComputePipelineInfo& info);
