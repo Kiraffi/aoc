@@ -72,6 +72,7 @@ static SDL_GPUBuffer* s_buffers[BufferCount] = {};
 static std::string s_input = readInputFile(s_Filename);
 
 static std::unordered_map<uint16_t, std::unordered_set<uint16_t>> s_pairMap;
+static std::unordered_set<uint16_t> s_computer;
 
 static int s_dataBuffer[ValuesBufferSize] = {};
 
@@ -94,67 +95,14 @@ static void parse()
         uint16_t rv = uint16_t(r[0]) | (uint16_t(r[1] << 8));
         s_pairMap[lv].insert(rv);
         s_pairMap[rv].insert(lv);
+        s_computer.insert(lv);
+        s_computer.insert(rv);
         /*
         if(!s_pairMap[l].contains(r) && !s_pairMap[r].contains(l))
         {
             printf("%s - %s\n", l.c_str(), r.c_str());
         }
         */
-    }
-}
-template <typename Fn>
-//static std::unordered_set<std::string> getConnects(Fn&& fn, const std::unordered_set<std::string>& ss)
-static void getConnects(const std::unordered_set<uint16_t>& ss, Fn&& fn)
-{
-    //std::unordered_set<std::string> result;
-    for(auto iter : s_pairMap)
-    {
-        uint16_t s = iter.first;
-        if(ss.contains(s))
-        {
-            continue;
-        }
-        bool allContains = true;
-        for(uint16_t str : ss)
-        {
-            if(!iter.second.contains(str))
-            {
-                allContains = false;
-                break;
-            }
-        }
-        if(allContains)
-        {
-            fn(s);
-            //result.insert(s);
-        }
-    }
-    //return result;
-}
-
-static void addConnects(
-    const std::unordered_set<uint16_t>& connects,
-    std::vector<std::unordered_set<uint16_t>>& combos)
-{
-
-    //printf("connects size: %i\n", int(connects.size()));
-    if(connects.size() == 0)
-    {
-        return;
-    }
-    bool isUnique = true;
-    for(const auto& hset : combos)
-    {
-        if(hset == connects)
-        {
-            isUnique = false;
-            break;
-        }
-    }
-
-    if(isUnique)
-    {
-        combos.push_back(connects);
     }
 }
 
@@ -174,30 +122,32 @@ static void a()
     std::unordered_set<uint16_t> seen;
     std::vector<std::unordered_set<uint16_t>> combos;
 
-    for(const auto& v : s_pairMap)
+    for(const auto& s : s_computer)
     {
-        const auto& s = v.first;
         if(seen.contains(s))
         {
             continue;
         }
         seen.insert(s);
-
-        for(uint16_t ss : v.second)
+        const auto& v1Map = s_pairMap[s];
+        for(uint16_t ss : v1Map)
         {
             if(seen.contains(ss))
             {
                 continue;
             }
-
-            std::unordered_set<uint16_t> tmp = {s, ss};
-            getConnects(tmp, [&tmp, &combos](uint16_t value)
+            const auto& v2Map = s_pairMap[ss];
+            for(const auto& sss : s_computer)
             {
-                std::unordered_set<uint16_t> tmp2 = tmp;
-                tmp2.insert(value);
-                addConnects(tmp2, combos);
-
-            });
+                if(seen.contains(sss))
+                {
+                    continue;
+                }
+                if(v1Map.contains(sss) && v2Map.contains(sss))
+                {
+                    combos.push_back({s, ss, sss});
+                }
+            }
         }
     }
 
@@ -217,10 +167,12 @@ static void a()
         }
         if(amount)
         {
-            printf("%s, %s, %s\n", s[0].c_str(), s[1].c_str(), s[2].c_str());
+            //printf("%s, %s, %s\n", s[0].c_str(), s[1].c_str(), s[2].c_str());
             result++;
         }
     }
+    // a, b, c and a, c, b
+    result /= 2;
 
     printf("22-a Three computer groups having computer starting with 't' %" SDL_PRIs64 "\n", result);
 }
@@ -229,58 +181,39 @@ static void b()
 {
     //int64_t result = 0;
 
-    std::unordered_set<uint16_t> seen;
-
     std::vector<std::unordered_set<uint16_t>> combos;
+
 
     for(const auto& v : s_pairMap)
     {
-        const auto& s = v.first;
-        if(seen.contains(s))
-        {
-            continue;
-        }
-        seen.insert(s);
+        const auto& value = v.first;
 
-        for(uint16_t ss : v.second)
+        auto& vMap = v.second;
+        bool found = false;
+        for(auto& c : combos)
         {
-            if(seen.contains(ss))
+            bool allContains = true;
+            for(uint16_t comboValue : c)
             {
-                continue;
+
+                if(!vMap.contains(comboValue))
+                {
+                    allContains = false;
+                    break;
+                }
             }
-
-            std::unordered_set<uint16_t> tmp = {s, ss};
-            getConnects(tmp, [&tmp, &combos](uint16_t value)
+            if(allContains)
             {
-                std::unordered_set<uint16_t> tmp2 = tmp;
-                tmp2.insert(value);
-                addConnects(tmp2, combos);
-
-            });
+                found = true;
+                c.insert(value);
+                break;
+            }
+        }
+        if(!found)
+        {
+            combos.push_back({value});
         }
     }
-    while (true)
-    {
-        std::vector<std::unordered_set<uint16_t>> to;
-        for(const auto& hset : combos)
-        {
-            getConnects(hset, [&hset, &combos, &to](uint16_t value)
-            {
-                std::unordered_set<uint16_t> tmp2 = hset;
-                tmp2.insert(value);
-                addConnects(tmp2, to);
-
-            });
-        }
-        if(to.size() == 0)
-        {
-            break;
-        }
-        combos = to;
-        printf("size of to: %i\n", int(to.size()));
-    }
-
-
 
     size_t highestAmount = 0;
     std::unordered_set<std::string> best;
@@ -293,10 +226,10 @@ static void b()
             for(uint16_t value : hset)
             {
                 std::string s = getValueAsString(value);
-                printf("%s, ", s.c_str());
+                //printf("%s, ", s.c_str());
                 best.insert(s);
             }
-            printf("\n");
+            //printf("\n");
             highestAmount = hset.size();
         }
     }
