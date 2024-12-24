@@ -174,7 +174,7 @@ static void a()
     // a, b, c and a, c, b
     result /= 2;
 
-    printf("22-a Three computer groups having computer starting with 't' %" SDL_PRIs64 "\n", result);
+    printf("23-a Three computer groups having computer starting with 't' %" SDL_PRIs64 "\n", result);
 }
 
 static void b()
