@@ -121,5 +121,5 @@ make_prog("21" "src/21/d21.cpp")
 make_prog("22" "src/22/d22.cpp")
 make_prog("23" "src/23/d23.cpp")
 make_prog("24" "src/24/d24.cpp")
-#make_prog("25" "src/25/d25.cpp")
+make_prog("25" "src/25/d25.cpp")
 
