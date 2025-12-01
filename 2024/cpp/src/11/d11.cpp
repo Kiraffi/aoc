@@ -355,6 +355,7 @@ static void b()
         count += recurse(n, 75);
 
     }
+
     printf("11-b stones %" SDL_PRIs64 "\n", count);
 }
 
@@ -378,7 +379,7 @@ static void doCpu()
 
 bool initCompute()
 {
-    s_buffers[BufferInput] = (createGPUWriteBuffer(s_input.size(), "Input"));
+    s_buffers[BufferInput] = (createGPUWriteBuffer(((s_input.size() + 15) / 16) * 16, "Input"));
     s_buffers[BufferResult] = (createGPUWriteBuffer(ValuesBufferSize * sizeof(int), "ResultBuffer"));
 
     // upload the input data to a buffer

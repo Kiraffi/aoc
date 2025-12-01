@@ -1,0 +1,272 @@
+#version 450 core
+
+#extension GL_GOOGLE_include_directive: enable
+
+#include "../chars_shared.h"
+#include "d15_shared.h"
+
+#define THREAD_SIZE 256
+
+// Enough room for the map
+#define COLS 128
+#define ROWS 128
+
+// Calculating how many bits we have for row.
+#define INTS_PER_ROW (COLS / 32)
+
+#define MAP_SIZE (INTS_PER_ROW * ROWS)
+
+// Just making sure we have enough room. There are more than likely less than 128 line breaks.
+shared int sharedLinebreaks[ROWS * 2];
+shared int sharedLinebreakCount;
+shared int sharedDoubleLinebreak;
+
+// more than cols and rows
+shared uvec4 sharedMapWalls[ROWS];
+shared uvec4 sharedMapBoxes[ROWS];
+shared uint sharedMapWidth;
+
+shared uint sharedCharPos;
+
+shared uint sharedSumA;
+shared uint sharedSumB;
+
+shared int sharedValuesWrittenCount;
+
+// Input size.
+layout (set = 2, binding = 0) uniform DataSize
+{
+    int dataSizeInputBytes;
+};
+
+// input string
+layout (set = 1, binding = 0) restrict buffer DataIn1
+{
+    int dataIn1[];
+};
+
+// Result
+layout (set = 1, binding = 1) restrict buffer DataOut1
+{
+    uvec2 outSumA;
+    uvec2 outSumB;
+
+    int outDebugValueCount;
+    int outPadding;
+    ivec2 outPadding2;
+
+    D15TempData outDebugValues[];
+};
+
+
+
+// not sure which barriers need to be checked
+void doBarriers()
+{
+    memoryBarrierShared();
+    groupMemoryBarrier();
+    memoryBarrier();
+    barrier();
+}
+
+int readChar(int index)
+{
+    if(index < 0 || index >= dataSizeInputBytes)
+    {
+        return 0;
+    }
+    int value = dataIn1[index / 4];
+    int result = (value >> ((index % 4) * 8)) & 0xff;
+
+    return result;
+}
+
+bool charIsNumber(int index)
+{
+    int c = readChar(index);
+    return c >= 48 && c <= 57;
+}
+
+int readNumber(int index)
+{
+    int c = readChar(index);
+    return c - 48;
+}
+
+int parseInteger(int index)
+{
+    int result = 0;
+    int c = readChar(index);
+    bool isNegative = false;
+    if(c == CHAR_MINUS)
+    {
+        ++index;
+        isNegative = true;
+        c = readChar(index);
+    }
+    while(c >= 48 && c <= 57)
+    {
+        index++;
+        result = result * 10 + (c - 48);
+        c = readChar(index);
+    }
+    return isNegative ? -result : result;
+}
+void resetMaps(int indexInThreadGroup)
+{
+    if(indexInThreadGroup < ROWS)
+    {
+        sharedMapBoxes[indexInThreadGroup] = uvec4(0);
+        sharedMapWalls[indexInThreadGroup] = uvec4(0);
+    }
+    doBarriers();
+}
+
+void resetEverything(int indexInThreadGroup)
+{
+    if(indexInThreadGroup == 0)
+    {
+        sharedLinebreakCount = 0;
+        sharedValuesWrittenCount = 0;
+        sharedSumA = 0;
+        sharedSumB = 0;
+        sharedDoubleLinebreak = 0;
+        sharedCharPos = 0;
+        sharedMapWidth = 0x3fffffff;
+    }
+    resetMaps(indexInThreadGroup);
+
+    doBarriers();
+}
+
+
+void findLinebreaks(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < dataSizeInputBytes; index += THREAD_SIZE)
+    {
+        if(readChar(index) == CHAR_LB)
+        {
+            int lbIndex = atomicAdd(sharedLinebreakCount, 1);
+            sharedLinebreaks[lbIndex] = index;
+            // since the
+            atomicMin(sharedMapWidth, index);
+            if(readChar(index + 1) == CHAR_LB)
+            {
+                sharedDoubleLinebreak = index + 1;
+            }
+        }
+    }
+    doBarriers();
+}
+
+int findCharBackwards(int index, int c)
+{
+    while(index >= 0 && readChar(index) != c)
+    {
+        index--;
+    }
+    return index;
+}
+
+ivec2 getMapIndexAsPos(int index)
+{
+    return ivec2(index % (sharedMapWidth + 1), index / (sharedMapWidth + 1));
+}
+
+int getPosAsMapIndex(ivec2 pos)
+{
+    return int(pos.x + pos.y * (sharedMapWidth + 1));
+}
+
+void sortLinebreaks(int indexInThreadGroup)
+{
+    int lbIndex = 0;
+    int outIndex = 0;
+    if(indexInThreadGroup < sharedLinebreakCount)
+    {
+        lbIndex = sharedLinebreaks[indexInThreadGroup];
+        int i = 0;
+        for(; i < indexInThreadGroup; ++i)
+        {
+            int otherLbIndex = sharedLinebreaks[i];
+            // Increase for every equal too.
+            if(otherLbIndex <= lbIndex)
+            {
+                ++outIndex;
+            }
+        }
+        for(; i < sharedLinebreakCount; ++i)
+        {
+            int otherLbIndex = sharedLinebreaks[i];
+            if(otherLbIndex < lbIndex)
+            {
+                ++outIndex;
+            }
+        }
+    }
+    doBarriers();
+    if(indexInThreadGroup < sharedLinebreakCount)
+    {
+        sharedLinebreaks[outIndex] = lbIndex;
+    }
+    doBarriers();
+}
+
+
+void makeSharedMap1(int indexInThreadGroup)
+{
+    for(int index = indexInThreadGroup; index < sharedDoubleLinebreak; index += THREAD_SIZE)
+    {
+        int c = readChar(index);
+        ivec2 pos = getMapIndexAsPos(index);
+
+        if(c == CHAR_NUMBER_SIGN)
+        {
+            atomicOr(sharedMapWalls[pos.y][pos.x / 32], pos.x % 32);
+        }
+        else if(c == CHAR_AT_SIGN)
+        {
+            sharedCharPos = index;
+        }
+        else if(c == CHAR_O)
+        {
+
+        }
+    }
+}
+
+
+layout (local_size_x = THREAD_SIZE, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    int indexInThreadGroup = int(gl_LocalInvocationID.x);
+    int groupId = int(gl_WorkGroupID.x);
+
+
+    #if 1
+    {
+        resetEverything(indexInThreadGroup);
+        findLinebreaks(indexInThreadGroup);
+        sortLinebreaks(indexInThreadGroup);
+
+        /*
+        if(indexInThreadGroup < sharedLinebreakCount)
+        {
+            outDebugValues[indexInThreadGroup].charPosLinebreak = sharedLinebreaks[indexInThreadGroup];
+        }
+        */
+        makeSharedMap1(indexInThreadGroup);
+
+
+        if(indexInThreadGroup == 0)
+        {
+            outSumA.x = 0;
+            outSumB.x = 0;
+            outDebugValueCount = sharedValuesWrittenCount; // currentIndex * 4;
+        }
+        doBarriers();
+    }
+    #endif
+
+}
+
