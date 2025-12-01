@@ -35,20 +35,20 @@ def b():
             added_number = dir * amount
             if added_number > 0:
                 current_number += added_number
-                while current_number >= 100:
-                    current_number -= 100
-                    counter += 1
+                # int division
+                counter += current_number // 100
+
             if added_number < 0:
                 # add 100 if starting from zero, so we dont instantly
                 # add one to counter when rotating left.
                 if current_number == 0:
                     current_number = 100
                 current_number += added_number
-                while current_number <= 0:
-                    current_number += 100
-                    counter += 1
-                # if stop at 0, current_number is at 100...
-                current_number %= 100
+                if current_number <= 0:
+                    divs = (-current_number) // 100
+                    counter += divs + 1
+
+            current_number %= 100
 
         print(f"1b - Number of zeroes: {counter}")
 
