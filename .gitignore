@@ -41,3 +41,4 @@ zig-out
 build/
 
 */*/data.txt
+**/test*.txt
