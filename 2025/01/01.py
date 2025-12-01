@@ -46,6 +46,8 @@ def b():
                 current_number += added_number
                 if current_number <= 0:
                     divs = (-current_number) // 100
+                    # because of the add by 100 if starting from 0,
+                    # the amount of hit 0s is divs + 1
                     counter += divs + 1
 
             current_number %= 100
