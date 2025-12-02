@@ -6,11 +6,9 @@ file_path = dir_path + "data.txt"
 def parse_values():
     values = []
     with open(file_path, "r") as file:
-        for line in file:
-            numbers = line.split(',')
-            for num in numbers:
-                s = num.split('-')
-                values.append((int(s[0].strip()), int(s[1].strip())))
+        for nums in file.read().split(','):
+            for l, u in [nums.split('-')]:
+                values.append((int(l.strip()), int(u.strip())))
     values = sorted(values, key = lambda num : num[0])
     return values
 
