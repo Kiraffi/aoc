@@ -1,4 +1,7 @@
 import os
+# Import math Library
+import math
+
 dir_path = os.path.dirname(os.path.realpath(__file__)) + "/"
 
 file_path = dir_path + "data.txt"
@@ -46,15 +49,9 @@ def b():
 
     def get_multiple_value(value, mult):
         result = 0
-        tens = 1
-        v = value
-        while v > 0:
-            v //= 10
-            tens *= 10
-
+        tens = pow(10, int(math.log10(value) + 1))
         for i in range(mult):
             result = result * tens + value
-
         return result
 
     def get_next_value(value, mult):
@@ -66,7 +63,7 @@ def b():
 
     mult = 2
     hits = []
-    while mult <= 6:
+    while mult <= 8:
         value = 1
         multi_value = get_multiple_value(value, mult)
 
