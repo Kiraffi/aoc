@@ -47,11 +47,17 @@ def b():
     values = parse_values()
 
     def get_multiple_value(value, mult):
-        result = ""
-        for i in range(mult):
-            result += str(value)
+        result = 0
+        tens = 1
+        v = value
+        while v > 0:
+            v //= 10
+            tens *= 10
 
-        return int(result)
+        for i in range(mult):
+            result = result * tens + value
+
+        return result
 
     def get_next_value(value, mult):
         value += 1
@@ -62,7 +68,7 @@ def b():
 
     mult = 2
     hits = []
-    while mult <= 10:
+    while mult <= 6:
         value = 1
         multi_value = get_multiple_value(value, mult)
 
