@@ -33,7 +33,9 @@ def b():
             dir = -1 if l[0] == 'L' else 1
             amount = int(l[1:])
 
-            # invert the current value when changing rotation
+            # invert the current value when changing rotation,
+            # (dir * prev_dir) == 1 if prev_dir == dir else -1
+            # if prev_dir != dir: current_number = (100 - current_number) % 100
             current_number = 100 + current_number * dir * prev_dir
             current_number %= 100
 
