@@ -28,7 +28,6 @@ def a():
                         if lines[yp][xp] == '@':
                             rolls += 1
                 if lines[y][x] == '@' and rolls < 4:
-                    print(f"{x}, {y} = {rolls}")
                     accessed_rolls += 1
         print(f"4a - Forklift can access {accessed_rolls} rolls")
 
@@ -43,17 +42,19 @@ def b():
     while accessed_new_rolls:
         accessed_new_rolls = False
         for (y, x) in [(y, x) for y in range(len(map)) for x in range(len(map[y]))]:
+            if map[y][x] != '@':
+                continue
             rolls = 0
             for yp, xp in [(yp + y, xp + x) for yp in range(-1, 2) for xp in range(-1, 2)]:
                 if xp < 0 or xp >= len(map[y]) or yp < 0 or yp >= len(map):
                     continue
                 if map[yp][xp] == '@':
                     rolls += 1
-            if map[y][x] == '@' and rolls < 5: #less than 4 adjacent + itself
+            if rolls < 5: #less than 4 adjacent + itself
                 map[y][x] = '.'
                 total_accessed_rolls += 1
                 accessed_new_rolls = True
     print(f"4b - Forklift can remove {total_accessed_rolls} rolls")
 
-#a()
+a()
 b()
