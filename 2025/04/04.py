@@ -3,9 +3,6 @@ dir_path = os.path.dirname(os.path.realpath(__file__)) + "/"
 
 file_path = dir_path + "data.txt"
 
-
-
-
 def a():
     accessed_rolls = 0
 
