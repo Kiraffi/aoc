@@ -10,7 +10,6 @@ def a():
     fresh_ingredients = 0
     ranges = []
     with open(file_path, "r") as file:
-        parsing_ranges = True
         for line in file:
             if '-' in line:
                 values = line.split('-')
