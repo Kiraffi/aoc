@@ -4,7 +4,7 @@ import math
 import re
 dir_path = os.path.dirname(os.path.realpath(__file__)) + "/"
 
-file_path = dir_path + "test.txt"
+file_path = dir_path + "data.txt"
 
 def a():
     sum_of_numbers = 0
