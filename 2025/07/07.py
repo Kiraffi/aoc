@@ -26,24 +26,19 @@ def a():
 
 def b():
     map = open(file_path, "r").readlines()
-    beams = defaultdict(lambda: 0)
-    beams[(re.search(r"[S]", map[0]).span(0)[0], 0)] = 1
-    splits = {}
-    while len(beams) > 0:
-        new_beams = defaultdict(lambda: 0)
-        for key, value in beams.items():
-            c, r = key[0], key[1] + 1
-            if r >= len(map): continue
-            if map[r][c] == '^':
-                new_beams[(c - 1, r)] = new_beams[(c - 1, r)] + value
-                new_beams[(c + 1, r)] = new_beams[(c + 1, r)] + value
+    split_points = set()
+    beams = [defaultdict(lambda: 0) for _ in range(len(map))]
+    beams[0][map[0].find('S')] = 1
+    for row in range(1, len(map)):
+        for col, amount in beams[row - 1].items():
+            if map[row][col] == '^':
+                beams[row][col - 1] += amount
+                beams[row][col + 1] += amount
+                split_points.add((col, row))
             else:
-                new_beams[(c, r)] = new_beams[(c, r)] + value
-        split_count = 0
-        for s in beams.values():
-            split_count += s
-        beams = new_beams
-    print(f"7b - Splits: {split_count}")
+                beams[row][col] += amount
+    print(f"7a - Splits: {len(split_points)}")
+    print(f"7b - Timelines: {sum(beams[-1].values())}")
 
 a()
 b()
