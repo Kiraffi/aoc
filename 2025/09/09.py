@@ -18,18 +18,16 @@ def b():
     rect_v2 = lambda v0, v1 : (abs(v1[0] - v0[0]) + 1) * (abs(v1[1] - v0[1]) + 1)
     min_v2 = lambda v0, v1 : [min(v0[0], v1[0]), min(v0[1], v1[1])]
     max_v2 = lambda v0, v1 : [max(v0[0], v1[0]), max(v0[1], v1[1])]
+    pairs = ((c0, c1) for i1, c0 in enumerate(corners) for c1 in corners[i1 + 1:])
 
     distances = []
-    for i1, j1 in enumerate(corners):
-        for j2 in corners[i1 + 1:]:
-            c0, c1 = [min_v2(j1, j2), max_v2(j1, j2)]
-            if all( (p0[0] <= c0[0] and p1[0] <= c0[0]) or \
-                    (p0[0] >= c1[0] and p1[0] >= c1[0]) or \
-                    (p0[1] <= c0[1] and p1[1] <= c0[1]) or \
-                    (p0[1] >= c1[1] and p1[1] >= c1[1]) \
-                for p0, p1 in ((p0, corners[i - 1]) for i, p0 in enumerate(corners))):
-
-                distances.append(rect_v2(j1, j2))
+    for j1, j2 in pairs:
+        c0, c1 = [min_v2(j1, j2), max_v2(j1, j2)]
+        if all( (p0[0] <= c0[0] and p1[0] <= c0[0]) or (p0[0] >= c1[0] and p1[0] >= c1[0]) or \
+                (p0[1] <= c0[1] and p1[1] <= c0[1]) or (p0[1] >= c1[1] and p1[1] >= c1[1]) \
+                for p0, p1 in ((p0, corners[i - 1]) for i, p0 in enumerate(corners)) \
+        ):
+            distances.append(rect_v2(j1, j2))
 
     print(f"9b - Biggest rectangle: {sorted(distances)[-1]}")
 
