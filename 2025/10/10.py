@@ -2,6 +2,7 @@ import os
 import math
 import re
 import copy
+import functools
 from collections import defaultdict
 
 from timeit import default_timer as timer
@@ -112,6 +113,13 @@ frozen = []
 limits = []
 presses = 2**60
 
+@functools.cache
+def gdc(a, b):
+    if min(a, b) == 0: return 1
+    v = max(a, b) % min(a, b)
+    if v == 0: return min(a, b)
+    return gdc(min(a, b), v)
+
 def b():
     global eqs
     global frozen
@@ -130,7 +138,7 @@ def b():
 
 
 
-        #if line_num != 45:
+        #if line_num != 1:
         #    continue
         eqs = [[[0] * len(buttons), 0, 0] for _ in range(len(jolts))]
         for count, b in enumerate(buttons):
@@ -222,14 +230,19 @@ def b():
                     min_pos_val = next((i for i, v in enumerate(use_row[0]) if not is_zero(v)), variable_count) # min(k if item[row] > 0 else len(eqs) for k, item in enumerate(eqs))
                     if min_pos_val >= variable_count:
                         continue
+                    mult = use_row[0][min_pos_val]
                     for k, item in enumerate(eqs):
                         if k <= row:
                             continue
-                        diff = item[0][min_pos_val] / use_row[0][min_pos_val]
+                        diff = item[0][min_pos_val] #/ mult
+
                         if is_zero(diff):
                             continue
-                        item[0] = [(item[0][l] - use_row[0][l] * diff) for l in range(len(item[0]))]
-                        item[1] -= diff * use_row[1]
+                        g = gdc(abs(mult), abs(diff))
+                        diff = int(diff / g)
+                        mult = int(mult / g)
+                        item[0] = [(item[0][l] * mult - use_row[0][l] * diff) for l in range(len(item[0]))]
+                        item[1] = item[1] * mult  - diff * use_row[1]
 
                 back_substitute()
             #return eqs
@@ -257,10 +270,14 @@ def b():
                             if eq == eq2:
                                 continue
                             if not is_zero(eq2[0][num0]):
-                                diff = eq2[0][num0] / mult
+                                diff = eq2[0][num0] #/ mult
+                                g = gdc(abs(mult), abs(diff))
+                                diff = int(diff / g)
+                                mult = int(mult / g)
                                 for rrr in range(len(eq2[0])):
-                                    eq2[0][rrr] -= diff * eq[0][rrr]
-                                eq2[1] -= diff * eq[1]
+                                    #eq2[0][rrr] = eq2[0][rrr] - diff * eq[0][rrr]
+                                    eq2[0][rrr] = (eq2[0][rrr] * mult) - diff * eq[0][rrr]
+                                eq2[1] = eq2[1] * mult - diff * eq[1]
                         break
 
         #print(f"before gauss_jordan\n{"\n".join(map(str, eqs))}\n")
