@@ -138,7 +138,7 @@ def b():
 
 
 
-        #if line_num != 1:
+        #if line_num != 159:
         #    continue
         eqs = [[[0] * len(buttons), 0, 0] for _ in range(len(jolts))]
         for count, b in enumerate(buttons):
@@ -165,11 +165,17 @@ def b():
             for eq in eqs:
                 if any(x * eq[1] < 0 for x in eq[0]):
                     continue
+                if is_zero(eq[1]) and any(x < 0 for x in eq[0]) and any(x > 0 for x in eq[0]):
+                    continue
                 for i in range(len(limits)):
                     if not is_zero(eq[0][i]): # and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
                     #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
                     #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                        limits[i] = min(limits[i], int(math.ceil(eq[1] / eq[0][i])))
+                        lim_num = min(limits[i], abs(int(math.ceil(eq[1] / eq[0][i]))))
+                        if lim_num != 0:
+                            limits[i] = lim_num
+                        else:
+                            pass
                         pass
         limits = [10000000000000] * len(eqs[0][0])
         find_limits()
@@ -297,8 +303,11 @@ def b():
         find_limits()
         #print(f"before make_pivot_ones\n{"\n".join(map(str, eqs))}\n")
 
+        #print(f"frozen {frozen}")
         #print(f"limits {limits}")
-        #limits = [x + 10 for x in limits]
+        #limits = [x + 30 for x in limits]
+        #limits = [x + 20 if x == 0 else x for x in limits]
+        #print(f"limits {limits}")
 
 
         def rec():
