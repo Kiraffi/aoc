@@ -176,13 +176,13 @@ def b():
                         if exists:
                              return False
 
-                        val = item[1] / z
+                        val = math.floor((item[1] / z) + 0.1)
                         #print(f"{zz} = {val}")
                         frozen.append([zz, val])
                 return True
             return False
 
-        def back_propagate():
+        def back_substitute():
             for f in frozen:
                 for rr in eqs:
                     rr[1] -= f[1] * rr[0][f[0]]
@@ -191,7 +191,7 @@ def b():
             for eq in eqs:
                 found = find_one(eq) or found
             if found:
-                 back_propagate()
+                 back_substitute()
 
 
         frozen = []
@@ -208,6 +208,8 @@ def b():
             return False
 
         def gauss_elim():
+            global eqs
+            global frozen
             frozen_len = -1
             while frozen_len != len(frozen) or has_sames():
                 frozen_len = len(frozen)
@@ -226,7 +228,7 @@ def b():
                         item[0] = [(item[0][l] - use_row[0][l] * diff) for l in range(len(item[0]))]
                         item[1] -= diff * use_row[1]
 
-                back_propagate()
+                back_substitute()
             #return eqs
 
         gauss_elim()
@@ -237,9 +239,11 @@ def b():
             global frozen
             global limits
             global presses
+            #if any(f[1] < 0 for f in frozen):
             if any(f[1] < 0 or f[1] != int(f[1]) for f in frozen):
                 return
-
+            if any(x[1] != 0 and all(y == 0 for y in x[0]) for x in eqs):
+                return
             if len(frozen) != len(eqs) and any(y != 0 for x in eqs for y in x[0]):
 
                 copy_eqs = eqs.copy()
@@ -248,9 +252,9 @@ def b():
                 find_limits()
                 copy_limits = limits.copy()
                 smallest_limits = [[i, x] for i, x in enumerate(limits)]
-                smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
+                #smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
 
-                for ii, limit_value in enumerate(smallest_limits):# < len(smallest_limits):
+                for limit_value in smallest_limits:
                     if any(f[0] == limit_value[0] for f in frozen):
                         continue
                     for limit_range in range(limit_value[1] + 1):
@@ -258,7 +262,7 @@ def b():
                         frozen = copy_frozen.copy()
                         limits = copy_limits.copy()
                         frozen.append([limit_value[0], limit_range])
-                        back_propagate()
+                        back_substitute()
                         gauss_elim()
                         rec()
 
@@ -275,6 +279,7 @@ def b():
                 if all(x == jolts[iii] for iii, x in enumerate(values)):
                     new_sum = sum(x[1] for x in frozen)
                     presses = min(presses, new_sum)
+            return
 
         rec()
 
@@ -450,7 +455,8 @@ def b():
 
         #print(f"{line_num + 1}: lowest button {presses} {stack[0]} frozen_count: {len(frozen)} dur: {timedelta(seconds=end_time - start_time)}")
         #print(f"{line_num + 1}: lowest button {presses} {frozen} frozen_count: {len(frozen)} dur: {timedelta(seconds=end_time - start_time)}")
-        print(f"{line_num + 1}: lowest button {presses} dur: {timedelta(seconds=end_time - start_time)}")
+        #print(f"{line_num + 1}: lowest button {presses} dur: {timedelta(seconds=end_time - start_time)}")
+        print(f"{line_num + 1}: {presses}")
         button_presses_total += presses
         #button_presses_total += presses
     print(f"10b - Button presses: {button_presses_total} run time: {timer() - total_start_time}")
