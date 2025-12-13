@@ -122,7 +122,7 @@ def b():
     total_start_time = timer()
 
     is_zero = lambda x : abs(x) < 1e-5
-
+    is_equal = lambda x, y : abs(y - x) < 1e-5
     for line_num, l in enumerate([line.strip().split(' ') for line in open(file_path, "r").readlines()]):
         presses = 2**60
         buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
@@ -130,7 +130,7 @@ def b():
 
 
 
-        #if line_num != 5:
+        #if line_num != 45:
         #    continue
         eqs = [[[0] * len(buttons), 0, 0] for _ in range(len(jolts))]
         for count, b in enumerate(buttons):
@@ -141,12 +141,12 @@ def b():
              eqs[j_ind][2] = j_ind
         #print(f"{eqs} before sort")
 
-        sort_lam = lambda x : sum((1 if y != 0 else 0)*(2**(len(x) - i)) for i, y in enumerate(x[0]))
+        sort_lam = lambda x : sum((1 if not is_zero(y) else 0)*(2**(len(x) - i)) for i, y in enumerate(x[0]))
         #for eq in eqs:
         #    print(sort_lam(eq))
         eqs = sorted(eqs, key=sort_lam, reverse=True)
         #print(f"{eqs} after sort")
-
+        orig_eqs = copy.deepcopy(eqs)
         #j_copy = jolts.copy()
         variable_count = len(eqs[0][0])
 
@@ -158,7 +158,7 @@ def b():
                 if any(x * eq[1] < 0 for x in eq[0]):
                     continue
                 for i in range(len(limits)):
-                    if (eq[0][i] != 0): # and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
+                    if not is_zero(eq[0][i]): # and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
                     #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
                     #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
                         limits[i] = min(limits[i], int(math.ceil(eq[1] / eq[0][i])))
@@ -169,11 +169,11 @@ def b():
 
 
         def find_one(item):
-            one_pos = lambda x: sum(1 if y == 0 else 0 for y in x) == len(x) - 1
+            one_pos = lambda x: sum(1 if is_zero(y) else 0 for y in x) == len(x) - 1
             #print(one_count(eqs[k]))
             if one_pos(item[0]):
                 for zz, z in enumerate(item[0]):
-                    if z != 0:
+                    if not is_zero(z):
                         exists = any(f[0] == zz for f in frozen)
                         if exists:
                              return False
@@ -201,7 +201,7 @@ def b():
         start_time = timer()
 
         def has_sames():
-            mins = [next((i for i, q in enumerate(eq[0]) if q != 0), len(eqs)) for eq in eqs ]
+            mins = [next((i for i, q in enumerate(eq[0]) if not is_zero(q)), len(eqs)) for eq in eqs ]
             for r0, m0 in enumerate(mins):
                 for r1, m1 in enumerate(mins):
                     if r1 == r0:
@@ -219,14 +219,14 @@ def b():
                 for row in range(len(eqs)):
                     eqs.sort(key=sort_lam, reverse=True)
                     use_row = eqs[row]
-                    min_pos_val = next((i for i, v in enumerate(use_row[0]) if v != 0), variable_count) # min(k if item[row] > 0 else len(eqs) for k, item in enumerate(eqs))
+                    min_pos_val = next((i for i, v in enumerate(use_row[0]) if not is_zero(v)), variable_count) # min(k if item[row] > 0 else len(eqs) for k, item in enumerate(eqs))
                     if min_pos_val >= variable_count:
                         continue
                     for k, item in enumerate(eqs):
                         if k <= row:
                             continue
                         diff = item[0][min_pos_val] / use_row[0][min_pos_val]
-                        if diff == 0:
+                        if is_zero(diff):
                             continue
                         item[0] = [(item[0][l] - use_row[0][l] * diff) for l in range(len(item[0]))]
                         item[1] -= diff * use_row[1]
@@ -240,7 +240,7 @@ def b():
         def make_pivot_ones():
             for eq in eqs:
                 for num0 in range(len(eq[0])):
-                    if(eq[0][num0] != 0):
+                    if(not is_zero(eq[0][num0])):
                         mult = eq[0][num0]
                         for num1 in range(num0, len(eq[0])):
                             eq[0][num1] /= mult
@@ -251,29 +251,29 @@ def b():
         def gauss_jordan():
             for eq in reversed(eqs):
                 for num0 in range(len(eq[0])):
-                    if(eq[0][num0] != 0):
+                    if(not is_zero(eq[0][num0])):
                         mult = eq[0][num0]
                         for eq2 in eqs:
                             if eq == eq2:
                                 continue
-                            if eq2[0][num0] != 0:
+                            if not is_zero(eq2[0][num0]):
                                 diff = eq2[0][num0] / mult
                                 for rrr in range(len(eq2[0])):
                                     eq2[0][rrr] -= diff * eq[0][rrr]
                                 eq2[1] -= diff * eq[1]
                         break
 
-        print(f"before gauss_jordan\n{"\n".join(map(str, eqs))}\n")
+        #print(f"before gauss_jordan\n{"\n".join(map(str, eqs))}\n")
         #find_limits()
 
         gauss_jordan()
         #find_limits()
 
-        print(f"after gauss_jordan\n{"\n".join(map(str, eqs))}\n")
+        #print(f"after gauss_jordan\n{"\n".join(map(str, eqs))}\n")
 
         #eqs = gauss_elim(eqs)
         back_substitute()
-        print(f"after back_substitute\n{"\n".join(map(str, eqs))}\n")
+        #print(f"after back_substitute\n{"\n".join(map(str, eqs))}\n")
         #find_limits()
 
         #make_pivot_ones()
@@ -292,7 +292,7 @@ def b():
             #if any(f[1] < 0 for f in frozen):
             if any(f[1] < 0 or f[1] != int(f[1]) for f in frozen):
                 return
-            if any(x[1] != 0 and all(y == 0 for y in x[0]) for x in eqs):
+            if any(not is_zero(x[1]) and all(is_zero(y) for y in x[0]) for x in eqs):
                 return
             if len(frozen) != len(eqs[0][0]): # and any(y != 0 for x in eqs for y in x[0]):
 
@@ -300,9 +300,20 @@ def b():
                 copy_frozen = copy.deepcopy(frozen)
 
                 #find_limits()
+
+                most_numbers = [0] * len(eqs[0][0])
+                for eq in eqs:
+                    for iiii, vvvv in enumerate(eq[0]):
+                        most_numbers[iiii] += 1 if not is_zero(vvvv) else 0
+                #sum(1 if not is_zero(y) else 0) for eq in eqs for y in eq[0]]
+
                 copy_limits = copy.deepcopy(limits)
                 smallest_limits = [[i, x] for i, x in enumerate(limits)]
-                smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
+
+                most_numbers, smallest_limits = zip(*sorted(zip(most_numbers, smallest_limits), reverse=True))
+                #smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
+                #smallest_limits = sorted(smallest_limits, key=lambda x : x[1], reverse=True )
+                #smallest_limits = sorted(smallest_limits, key=lambda x : sum(1 if not is_zero(y) else 0) for y in x[0] )
 
                 for limit_value in smallest_limits:
                     if any(f[0] == limit_value[0] for f in frozen):
@@ -335,6 +346,12 @@ def b():
             return
 
 
+
+        copy_jolts = copy.deepcopy(jolts)
+
+
+
+
         values = [0] * len(jolts)
         for f in frozen:
             for b in buttons[f[0]]:
@@ -364,7 +381,7 @@ def b():
 
         #print(f"jolts {jolts}")
 
-        if any(j != 0 for j in jolts) and len(buttons) > 0 and False:
+        if any(not is_zero(j) for j in jolts) and len(buttons) > 0 and False:
 
             tmp = list(zip(buttons, limits))
 
@@ -537,175 +554,175 @@ def b():
 
 
 
-
-def bbb():
-    button_presses_total = 0
-    lines = [line.strip().split(' ') for line in open(file_path, "r").readlines()]
-    visited = []
-    for l in lines:
-        presses = 2**60
-        buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
-        jolts = list(map(int, l[-1][1:-1].split(',')))
-
-        button_counts = [0] * len(jolts)
-        for b in buttons:
-            for j in b:
-                button_counts[j] += 1
-
-        buttons = sorted(buttons, key=lambda x : len(x), reverse=True)
-        buttons = sorted(buttons, key=lambda x : min(button_counts[y] for y in x)) # * len(x)) #, reverse=True)
-        result = [c == '#' for c in l[0][1:-1]]
-        #print(f"{buttons}, {result}")
-        button_count = len(l[0]) - 2
-        sequence_count = len(l) - 2
-        if sequence_count != len(buttons):
-            print("aisjfi")
-
-        is_valid = lambda x: all(x[i] <= jolts[i] for i in range(len(jolts)))
-        stack = []
-        stack.append([0] * sequence_count)
-
-        #b_count = values[b] += amount for j, amount in enumerate(stack[0]) for b in buttons[j] ]
-        counted_jolts = [0] * len(jolts)
-
-        def count_jolts(v):
-            values = [0] * len(jolts)
-            for j, amount in enumerate(stack[0]):
-                for b in buttons[j]:
-                    values[b] += amount
-            return values
-
-        def add_jolts(ind, amount):
-            stack[0][ind] += amount
-            if amount == 0:
-                return
-            for b in buttons[ind]:
-                counted_jolts[b] += amount
-
-        def go_back(ind):
-            while ind >= 1:
-                add_jolts(ind, -stack[0][ind])
-                if stack[0][ind - 1] > 0:
-                    add_jolts(ind - 1, -1)
-                    if ind == 1:
-                        print(f"going down one: {counted_jolts}")
-                    break
-                else:
-                    ind -= 1
-            return ind
-
-
-        b_min = lambda b_ind, v : min((jolts[b] - v[b] for b in buttons[b_ind]))
-
-
-        a = b_min(0, counted_jolts)
-        add_jolts(0, a)
-
-
-        #print(f"start: {counted_jolts} find: {jolts}")
-        ind = 1
-        f = False
-
-
-        while(ind > 0 and presses > 2**50):
-            a = b_min(ind, counted_jolts)
-            if a < 0:
-                ind = go_back(ind)
-                if ind == 0:
-                    break
-            else:
-                add_jolts(ind, a)
-                #values = count_jolts(stack[0])
-                #if any(x != y for x,y in zip(counted_jolts, values)):
-                #    print(f"not right {list(zip(counted_jolts, values))}")
-                ind += 1
-                if ind >= sequence_count:
-                    if all(x == y for x,y in zip(counted_jolts, jolts)):
-                        print(f"found one {stack[0]} presses: {sum(stack[0])}")
-                        presses = min(sum(stack[0]), presses)
-
-                    ind -= 1
-                    #add_jolts(counted_jolts, ind, -stack[0][ind])
-                    #stack[0][ind] = 0
-                    ind = go_back(ind)
-                else:
-                    remains = [jolts[i] - counted_jolts[i] > 0 for i in range(len(jolts))]
-                    for indd in range(ind, sequence_count):
-                        for b in buttons[indd]:
-                            remains[b] = False
-                    if any(remains):
-                        ind -= 1
-                        ind = go_back(ind)
-                        #print(f"cannot continue")
-
-        #a = b_min(1, )
-        #print(f"{a} * {buttons[0]}")
-        #while len(stack) > 0:
-        #    s = stack[0]
-        #    del stack[0]
-        #    for i in range(sequence_count):
-        #        s_copy = s.copy()
-        #        s_copy[i] += 1
-        #        values = [0] * len(jolts)
-        #        for j, amount in enumerate(s_copy):
-        #            for b in buttons[j]:
-        #                values[b] += amount
-        #        if all(x <= y for x,y in zip(values, jolts)):
-        #            if all(x == y for x,y in zip(values, jolts)):
-        #                print(f"found one {s_copy} presses: {sum(s_copy)}")
-        #                presses = min(sum(s_copy), presses)
-        #            else:
-        #                if not visited.__contains__(s_copy):
-        #                    stack.append(s_copy)
-        #                    visited.append(s_copy)
-        #        #else:
-        #        #    print(f"over")
-        print(f"lowest button {presses}")
-        button_presses_total += presses
-        #button_presses_total += presses
-    print(f"10a - Button presses: {button_presses_total}")
-
-def bb():
-    button_presses_total = 0
-    lines = [line.strip().split(' ') for line in open(file_path, "r").readlines()]
-    visited = []
-    for l in lines:
-        presses = 2**60
-        buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
-        buttons = sorted(buttons, key=lambda x : len(x), reverse=True)
-        jolts = list(map(int, l[-1][1:-1].split(',')))
-        result = [c == '#' for c in l[0][1:-1]]
-        #print(f"{buttons}, {result}")
-        button_count = len(l[0]) - 2
-        sequence_count = len(l) - 2
-
-        is_valid = lambda x: all(x[i] <= jolts[i] for i in range(len(jolts)))
-        stack = []
-        stack.append([0] * sequence_count)
-        while len(stack) > 0:
-            s = stack[0]
-            del stack[0]
-            for i in range(sequence_count):
-                s_copy = s.copy()
-                s_copy[i] += 1
-                values = [0] * len(jolts)
-                for j, amount in enumerate(s_copy):
-                    for b in buttons[j]:
-                        values[b] += amount
-                if all(x <= y for x,y in zip(values, jolts)):
-                    if all(x == y for x,y in zip(values, jolts)):
-                        print(f"found one {s_copy} presses: {sum(s_copy)}")
-                        presses = min(sum(s_copy), presses)
-                    else:
-                        if not visited.__contains__(s_copy):
-                            stack.append(s_copy)
-                            visited.append(s_copy)
-                #else:
-                #    print(f"over")
-        print(f"lowest button {presses}")
-        button_presses_total += presses
-    print(f"10a - Button presses: {button_presses_total}")
-
+#
+#def bbb():
+#    button_presses_total = 0
+#    lines = [line.strip().split(' ') for line in open(file_path, "r").readlines()]
+#    visited = []
+#    for l in lines:
+#        presses = 2**60
+#        buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
+#        jolts = list(map(int, l[-1][1:-1].split(',')))
+#
+#        button_counts = [0] * len(jolts)
+#        for b in buttons:
+#            for j in b:
+#                button_counts[j] += 1
+#
+#        buttons = sorted(buttons, key=lambda x : len(x), reverse=True)
+#        buttons = sorted(buttons, key=lambda x : min(button_counts[y] for y in x)) # * len(x)) #, reverse=True)
+#        result = [c == '#' for c in l[0][1:-1]]
+#        #print(f"{buttons}, {result}")
+#        button_count = len(l[0]) - 2
+#        sequence_count = len(l) - 2
+#        if sequence_count != len(buttons):
+#            print("aisjfi")
+#
+#        is_valid = lambda x: all(x[i] <= jolts[i] for i in range(len(jolts)))
+#        stack = []
+#        stack.append([0] * sequence_count)
+#
+#        #b_count = values[b] += amount for j, amount in enumerate(stack[0]) for b in buttons[j] ]
+#        counted_jolts = [0] * len(jolts)
+#
+#        def count_jolts(v):
+#            values = [0] * len(jolts)
+#            for j, amount in enumerate(stack[0]):
+#                for b in buttons[j]:
+#                    values[b] += amount
+#            return values
+#
+#        def add_jolts(ind, amount):
+#            stack[0][ind] += amount
+#            if amount == 0:
+#                return
+#            for b in buttons[ind]:
+#                counted_jolts[b] += amount
+#
+#        def go_back(ind):
+#            while ind >= 1:
+#                add_jolts(ind, -stack[0][ind])
+#                if stack[0][ind - 1] > 0:
+#                    add_jolts(ind - 1, -1)
+#                    if ind == 1:
+#                        print(f"going down one: {counted_jolts}")
+#                    break
+#                else:
+#                    ind -= 1
+#            return ind
+#
+#
+#        b_min = lambda b_ind, v : min((jolts[b] - v[b] for b in buttons[b_ind]))
+#
+#
+#        a = b_min(0, counted_jolts)
+#        add_jolts(0, a)
+#
+#
+#        #print(f"start: {counted_jolts} find: {jolts}")
+#        ind = 1
+#        f = False
+#
+#
+#        while(ind > 0 and presses > 2**50):
+#            a = b_min(ind, counted_jolts)
+#            if a < 0:
+#                ind = go_back(ind)
+#                if ind == 0:
+#                    break
+#            else:
+#                add_jolts(ind, a)
+#                #values = count_jolts(stack[0])
+#                #if any(x != y for x,y in zip(counted_jolts, values)):
+#                #    print(f"not right {list(zip(counted_jolts, values))}")
+#                ind += 1
+#                if ind >= sequence_count:
+#                    if all(x == y for x,y in zip(counted_jolts, jolts)):
+#                        print(f"found one {stack[0]} presses: {sum(stack[0])}")
+#                        presses = min(sum(stack[0]), presses)
+#
+#                    ind -= 1
+#                    #add_jolts(counted_jolts, ind, -stack[0][ind])
+#                    #stack[0][ind] = 0
+#                    ind = go_back(ind)
+#                else:
+#                    remains = [jolts[i] - counted_jolts[i] > 0 for i in range(len(jolts))]
+#                    for indd in range(ind, sequence_count):
+#                        for b in buttons[indd]:
+#                            remains[b] = False
+#                    if any(remains):
+#                        ind -= 1
+#                        ind = go_back(ind)
+#                        #print(f"cannot continue")
+#
+#        #a = b_min(1, )
+#        #print(f"{a} * {buttons[0]}")
+#        #while len(stack) > 0:
+#        #    s = stack[0]
+#        #    del stack[0]
+#        #    for i in range(sequence_count):
+#        #        s_copy = s.copy()
+#        #        s_copy[i] += 1
+#        #        values = [0] * len(jolts)
+#        #        for j, amount in enumerate(s_copy):
+#        #            for b in buttons[j]:
+#        #                values[b] += amount
+#        #        if all(x <= y for x,y in zip(values, jolts)):
+#        #            if all(x == y for x,y in zip(values, jolts)):
+#        #                print(f"found one {s_copy} presses: {sum(s_copy)}")
+#        #                presses = min(sum(s_copy), presses)
+#        #            else:
+#        #                if not visited.__contains__(s_copy):
+#        #                    stack.append(s_copy)
+#        #                    visited.append(s_copy)
+#        #        #else:
+#        #        #    print(f"over")
+#        print(f"lowest button {presses}")
+#        button_presses_total += presses
+#        #button_presses_total += presses
+#    print(f"10a - Button presses: {button_presses_total}")
+#
+#def bb():
+#    button_presses_total = 0
+#    lines = [line.strip().split(' ') for line in open(file_path, "r").readlines()]
+#    visited = []
+#    for l in lines:
+#        presses = 2**60
+#        buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
+#        buttons = sorted(buttons, key=lambda x : len(x), reverse=True)
+#        jolts = list(map(int, l[-1][1:-1].split(',')))
+#        result = [c == '#' for c in l[0][1:-1]]
+#        #print(f"{buttons}, {result}")
+#        button_count = len(l[0]) - 2
+#        sequence_count = len(l) - 2
+#
+#        is_valid = lambda x: all(x[i] <= jolts[i] for i in range(len(jolts)))
+#        stack = []
+#        stack.append([0] * sequence_count)
+#        while len(stack) > 0:
+#            s = stack[0]
+#            del stack[0]
+#            for i in range(sequence_count):
+#                s_copy = s.copy()
+#                s_copy[i] += 1
+#                values = [0] * len(jolts)
+#                for j, amount in enumerate(s_copy):
+#                    for b in buttons[j]:
+#                        values[b] += amount
+#                if all(x <= y for x,y in zip(values, jolts)):
+#                    if all(x == y for x,y in zip(values, jolts)):
+#                        print(f"found one {s_copy} presses: {sum(s_copy)}")
+#                        presses = min(sum(s_copy), presses)
+#                    else:
+#                        if not visited.__contains__(s_copy):
+#                            stack.append(s_copy)
+#                            visited.append(s_copy)
+#                #else:
+#                #    print(f"over")
+#        print(f"lowest button {presses}")
+#        button_presses_total += presses
+#    print(f"10a - Button presses: {button_presses_total}")
+#
 a()#
 b()
 
