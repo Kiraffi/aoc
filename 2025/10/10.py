@@ -121,6 +121,8 @@ def b():
 
     total_start_time = timer()
 
+    is_zero = lambda x : abs(x) < 1e-5
+
     for line_num, l in enumerate([line.strip().split(' ') for line in open(file_path, "r").readlines()]):
         presses = 2**60
         buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
@@ -128,7 +130,7 @@ def b():
 
 
 
-        #if line_num != 36:
+        #if line_num != 5:
         #    continue
         eqs = [[[0] * len(buttons), 0, 0] for _ in range(len(jolts))]
         for count, b in enumerate(buttons):
@@ -175,8 +177,9 @@ def b():
                         exists = any(f[0] == zz for f in frozen)
                         if exists:
                              return False
-
-                        val = math.floor((item[1] / z) + 0.1)
+                        #val = (item[1] / z)
+                        val = math.floor((item[1] / z) + 0.01)
+                        #print(f"val {val}")
                         #print(f"{zz} = {val}")
                         frozen.append([zz, val])
                 return True
@@ -232,7 +235,54 @@ def b():
             #return eqs
 
         gauss_elim()
+
+
+        def make_pivot_ones():
+            for eq in eqs:
+                for num0 in range(len(eq[0])):
+                    if(eq[0][num0] != 0):
+                        mult = eq[0][num0]
+                        for num1 in range(num0, len(eq[0])):
+                            eq[0][num1] /= mult
+                        break
+        #print(f"before make_pivot_ones\n{"\n".join(map(str, eqs))}\n")
+        #make_pivot_ones()
+
+        def gauss_jordan():
+            for eq in reversed(eqs):
+                for num0 in range(len(eq[0])):
+                    if(eq[0][num0] != 0):
+                        mult = eq[0][num0]
+                        for eq2 in eqs:
+                            if eq == eq2:
+                                continue
+                            if eq2[0][num0] != 0:
+                                diff = eq2[0][num0] / mult
+                                for rrr in range(len(eq2[0])):
+                                    eq2[0][rrr] -= diff * eq[0][rrr]
+                                eq2[1] -= diff * eq[1]
+                        break
+
+        print(f"before gauss_jordan\n{"\n".join(map(str, eqs))}\n")
+        #find_limits()
+
+        gauss_jordan()
+        #find_limits()
+
+        print(f"after gauss_jordan\n{"\n".join(map(str, eqs))}\n")
+
         #eqs = gauss_elim(eqs)
+        back_substitute()
+        print(f"after back_substitute\n{"\n".join(map(str, eqs))}\n")
+        #find_limits()
+
+        #make_pivot_ones()
+        find_limits()
+        #print(f"before make_pivot_ones\n{"\n".join(map(str, eqs))}\n")
+
+        #print(f"limits {limits}")
+        #limits = [x + 10 for x in limits]
+
 
         def rec():
             global eqs
@@ -244,44 +294,56 @@ def b():
                 return
             if any(x[1] != 0 and all(y == 0 for y in x[0]) for x in eqs):
                 return
-            if len(frozen) != len(eqs) and any(y != 0 for x in eqs for y in x[0]):
+            if len(frozen) != len(eqs[0][0]): # and any(y != 0 for x in eqs for y in x[0]):
 
-                copy_eqs = eqs.copy()
-                copy_frozen = frozen.copy()
+                copy_eqs = copy.deepcopy(eqs)
+                copy_frozen = copy.deepcopy(frozen)
 
-                find_limits()
-                copy_limits = limits.copy()
+                #find_limits()
+                copy_limits = copy.deepcopy(limits)
                 smallest_limits = [[i, x] for i, x in enumerate(limits)]
-                #smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
+                smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
 
                 for limit_value in smallest_limits:
                     if any(f[0] == limit_value[0] for f in frozen):
                         continue
                     for limit_range in range(limit_value[1] + 1):
-                        eqs = copy_eqs.copy()
-                        frozen = copy_frozen.copy()
-                        limits = copy_limits.copy()
+                        eqs = copy.deepcopy(copy_eqs)
+                        frozen = copy.deepcopy(copy_frozen)
+                        limits = copy.deepcopy(copy_limits)
+                        #print(f"bef frozen: {frozen}")
+                        #print(f"all sum: {sum(x[1] for x in frozen)}")
                         frozen.append([limit_value[0], limit_range])
                         back_substitute()
-                        gauss_elim()
+                        #gauss_elim()
+                        #print(f"aft frozen: {frozen}")
                         rec()
 
                         #print(f"{eqs} | {eqs[k][1]}")
                         #print(f"{eqs}")
-            else:
+            elif len(frozen) == len(eqs[0][0]):
                 #if all(x[1] == 0 for x in eqs):
 
                 values = [0] * len(jolts)
                 for f in frozen:
                     for b in buttons[f[0]]:
                         values[b] += f[1]
-
+                #if all(x == 0 for y in eqs for x in y[0]):
                 if all(x == jolts[iii] for iii, x in enumerate(values)):
                     new_sum = sum(x[1] for x in frozen)
                     presses = min(presses, new_sum)
             return
 
-        rec()
+
+        values = [0] * len(jolts)
+        for f in frozen:
+            for b in buttons[f[0]]:
+                values[b] += f[1]
+        if all(x == jolts[iii] for iii, x in enumerate(values)):
+            new_sum = sum(x[1] for x in frozen)
+            presses = min(presses, new_sum)
+        else:
+            rec()
 
         frozen = sorted(frozen, key=lambda x : x[0], reverse=True)
         #print(f"all frozen {frozen}")
@@ -289,7 +351,7 @@ def b():
         #    print(f"{eqs}")
         #    has_sames()
 
-        find_limits()
+        #find_limits()
 
         #print(f"limits {limits}")
         #if len(frozen) == 0: #and line_num == 37:
@@ -363,8 +425,8 @@ def b():
                     add_jolts(ind, -stack[0][ind])
                     if stack[0][ind - 1] > 0:
                         add_jolts(ind - 1, -1)
-                        #if ind == 1:
-                        #    print(f"going down one: {counted_jolts}")
+                        if ind == 1:
+                            print(f"going down one: {counted_jolts}")
                         break
                     else:
                         ind -= 1
