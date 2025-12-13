@@ -162,21 +162,36 @@ def b():
 
 
         def find_limits():
-            for eq in eqs:
-                if any(x * eq[1] < 0 for x in eq[0]):
-                    continue
-                if is_zero(eq[1]) and any(x < 0 for x in eq[0]) and any(x > 0 for x in eq[0]):
-                    continue
-                for i in range(len(limits)):
-                    if not is_zero(eq[0][i]): # and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                    #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                    #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                        lim_num = min(limits[i], abs(int(math.ceil(eq[1] / eq[0][i]))))
-                        if lim_num != 0:
-                            limits[i] = lim_num
-                        else:
-                            pass
+            while True:
+                limits_copy = copy.deepcopy(limits)
+                def set_limit(eq):
+                    for i in range(len(limits)):
+                        if not is_zero(eq[0][i]):
+                            lim_num = min(limits[i], int(math.ceil(eq[1] / eq[0][i])))
+                            if lim_num > 0:
+                                limits[i] = lim_num
+
+                for eq in eqs:
+                    pos_neg_coeffs = ([x > 0 and not is_zero(x), x < 0 and not is_zero(x)] for x in eq[0])
+                    pos_coeffs, neg_coeffs = zip(*pos_neg_coeffs)
+                    has_pos_coeffs = any(pos_coeffs)
+                    has_neg_coeffs = any(neg_coeffs)
+
+                    if not has_pos_coeffs and not has_neg_coeffs: #all zero
+                        continue
+
+                    if has_pos_coeffs and has_neg_coeffs:
                         pass
+                        tmp_eq = copy.deepcopy(eq)
+                        for i in range(len(limits)):
+                            if not is_zero(eq[0][i]) and eq[0][i] > 0:
+                                tmp_eq[1] -= eq[0][i] * limits[i]
+                                tmp_eq[0][i] = 0
+                        set_limit(tmp_eq)
+                    else:
+                        set_limit(eq)
+                if all(x == y for x, y in zip(limits, limits_copy)):
+                    break
         limits = [10000000000000] * len(eqs[0][0])
         find_limits()
 
@@ -245,10 +260,10 @@ def b():
                         if is_zero(diff):
                             continue
                         g = gdc(abs(mult), abs(diff))
-                        diff = int(diff / g)
-                        mult = int(mult / g)
-                        item[0] = [(item[0][l] * mult - use_row[0][l] * diff) for l in range(len(item[0]))]
-                        item[1] = item[1] * mult  - diff * use_row[1]
+                        diff = diff // g
+                        multi = mult // g
+                        item[0] = [(item[0][l] * multi - use_row[0][l] * diff) for l in range(len(item[0]))]
+                        item[1] = item[1] * multi  - diff * use_row[1]
 
                 back_substitute()
             #return eqs
@@ -278,12 +293,12 @@ def b():
                             if not is_zero(eq2[0][num0]):
                                 diff = eq2[0][num0] #/ mult
                                 g = gdc(abs(mult), abs(diff))
-                                diff = int(diff / g)
-                                mult = int(mult / g)
+                                diff = diff // g
+                                multi = mult // g
                                 for rrr in range(len(eq2[0])):
                                     #eq2[0][rrr] = eq2[0][rrr] - diff * eq[0][rrr]
-                                    eq2[0][rrr] = (eq2[0][rrr] * mult) - diff * eq[0][rrr]
-                                eq2[1] = eq2[1] * mult - diff * eq[1]
+                                    eq2[0][rrr] = (eq2[0][rrr] * multi) - diff * eq[0][rrr]
+                                eq2[1] = eq2[1] * multi - diff * eq[1]
                         break
 
         #print(f"before gauss_jordan\n{"\n".join(map(str, eqs))}\n")
@@ -315,17 +330,20 @@ def b():
             global frozen
             global limits
             global presses
+
+
             #if any(f[1] < 0 for f in frozen):
-            if any(f[1] < 0 or f[1] != int(f[1]) for f in frozen):
+            if any(f[1] < 0 for f in frozen):
                 return
-            if any(not is_zero(x[1]) and all(is_zero(y) for y in x[0]) for x in eqs):
-                return
+            #if any(not is_zero(x[1]) and all(is_zero(y) for y in x[0]) for x in eqs):
+            #if any(not is_zero(x[1]) and all(is_zero(y) for y in x[0]) for x in eqs):
+            #    return
             if len(frozen) != len(eqs[0][0]): # and any(y != 0 for x in eqs for y in x[0]):
 
                 copy_eqs = copy.deepcopy(eqs)
                 copy_frozen = copy.deepcopy(frozen)
 
-                #find_limits()
+                find_limits()
 
                 most_numbers = [0] * len(eqs[0][0])
                 for eq in eqs:
@@ -365,7 +383,6 @@ def b():
                 for f in frozen:
                     for b in buttons[f[0]]:
                         values[b] += f[1]
-                #if all(x == 0 for y in eqs for x in y[0]):
                 if all(x == jolts[iii] for iii, x in enumerate(values)):
                     new_sum = sum(x[1] for x in frozen)
                     presses = min(presses, new_sum)
