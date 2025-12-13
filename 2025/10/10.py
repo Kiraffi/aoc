@@ -107,25 +107,29 @@ def a():
 
 
 
-
-
-
+eqs = []
+frozen = []
+limits = []
+presses = 2**60
 
 def b():
+    global eqs
+    global frozen
+    global limits
+    global presses
     button_presses_total = 0
+
+    total_start_time = timer()
 
     for line_num, l in enumerate([line.strip().split(' ') for line in open(file_path, "r").readlines()]):
         presses = 2**60
         buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
         jolts = list(map(int, l[-1][1:-1].split(',')))
 
-        button_counts = [0] * len(jolts)
-        for b in buttons:
-            for j in b:
-                button_counts[j] += 1
 
 
-
+        #if line_num != 36:
+        #    continue
         eqs = [[[0] * len(buttons), 0, 0] for _ in range(len(jolts))]
         for count, b in enumerate(buttons):
             for j in b:
@@ -145,6 +149,21 @@ def b():
         variable_count = len(eqs[0][0])
 
         ##print(f"-----")
+
+
+        def find_limits():
+            for eq in eqs:
+                if any(x * eq[1] < 0 for x in eq[0]):
+                    continue
+                for i in range(len(limits)):
+                    if (eq[0][i] != 0): # and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
+                    #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
+                    #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
+                        limits[i] = min(limits[i], int(math.ceil(eq[1] / eq[0][i])))
+                        pass
+        limits = [10000000000000] * len(eqs[0][0])
+        find_limits()
+
 
 
         def find_one(item):
@@ -176,7 +195,6 @@ def b():
 
 
         frozen = []
-        frozen_len = -1
         start_time = timer()
 
         def has_sames():
@@ -189,44 +207,85 @@ def b():
                         return True
             return False
 
-
-        while frozen_len != len(frozen) or has_sames():
-            frozen_len = len(frozen)
-            for row in range(len(eqs)):
-                eqs = sorted(eqs, key=sort_lam, reverse=True)
-                use_row = eqs[row]
-                min_pos_val = next((i for i, v in enumerate(use_row[0]) if v != 0), variable_count) # min(k if item[row] > 0 else len(eqs) for k, item in enumerate(eqs))
-                if min_pos_val >= variable_count:
-                    continue
-                for k, item in enumerate(eqs):
-                    if k <= row:
+        def gauss_elim():
+            frozen_len = -1
+            while frozen_len != len(frozen) or has_sames():
+                frozen_len = len(frozen)
+                for row in range(len(eqs)):
+                    eqs.sort(key=sort_lam, reverse=True)
+                    use_row = eqs[row]
+                    min_pos_val = next((i for i, v in enumerate(use_row[0]) if v != 0), variable_count) # min(k if item[row] > 0 else len(eqs) for k, item in enumerate(eqs))
+                    if min_pos_val >= variable_count:
                         continue
-                    diff = item[0][min_pos_val] / use_row[0][min_pos_val]
-                    if diff == 0:
+                    for k, item in enumerate(eqs):
+                        if k <= row:
+                            continue
+                        diff = item[0][min_pos_val] / use_row[0][min_pos_val]
+                        if diff == 0:
+                            continue
+                        item[0] = [(item[0][l] - use_row[0][l] * diff) for l in range(len(item[0]))]
+                        item[1] -= diff * use_row[1]
+
+                back_propagate()
+            #return eqs
+
+        gauss_elim()
+        #eqs = gauss_elim(eqs)
+
+        def rec():
+            global eqs
+            global frozen
+            global limits
+            global presses
+            if any(f[1] < 0 or f[1] != int(f[1]) for f in frozen):
+                return
+
+            if len(frozen) != len(eqs) and any(y != 0 for x in eqs for y in x[0]):
+
+                copy_eqs = eqs.copy()
+                copy_frozen = frozen.copy()
+
+                find_limits()
+                copy_limits = limits.copy()
+                smallest_limits = [[i, x] for i, x in enumerate(limits)]
+                smallest_limits = sorted(smallest_limits, key=lambda x : x[1] )
+
+                for ii, limit_value in enumerate(smallest_limits):# < len(smallest_limits):
+                    if any(f[0] == limit_value[0] for f in frozen):
                         continue
-                    item[0] = [(item[0][l] - use_row[0][l] * diff) for l in range(len(item[0]))]
-                    item[1] -= diff * use_row[1]
+                    for limit_range in range(limit_value[1] + 1):
+                        eqs = copy_eqs.copy()
+                        frozen = copy_frozen.copy()
+                        limits = copy_limits.copy()
+                        frozen.append([limit_value[0], limit_range])
+                        back_propagate()
+                        gauss_elim()
+                        rec()
 
-            back_propagate()
+                        #print(f"{eqs} | {eqs[k][1]}")
+                        #print(f"{eqs}")
+            else:
+                #if all(x[1] == 0 for x in eqs):
 
-                #print(f"{eqs} | {eqs[k][1]}")
-                #print(f"{eqs}")
+                values = [0] * len(jolts)
+                for f in frozen:
+                    for b in buttons[f[0]]:
+                        values[b] += f[1]
+
+                if all(x == jolts[iii] for iii, x in enumerate(values)):
+                    new_sum = sum(x[1] for x in frozen)
+                    presses = min(presses, new_sum)
+
+        rec()
+
         frozen = sorted(frozen, key=lambda x : x[0], reverse=True)
         #print(f"all frozen {frozen}")
         #if any(eq[1] < 0 for eq in eqs):
         #    print(f"{eqs}")
         #    has_sames()
 
-        big_number = 10000000000000
-        limits = [big_number] * len(eqs[0][0])
-        for eq in eqs:
-            if any(x * eq[1] < 0 for x in eq[0]):
-                continue
-            for i in range(len(limits)):
-                if (eq[0][i] != 0): # and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                #if (eq[0][i] > 0 and eq[1] > 0) or (eq[0][1] < 0 and eq[1] < 0):
-                    limits[i] = min(limits[i], math.ceil(eq[1] / eq[0][i]))
+        find_limits()
+
         #print(f"limits {limits}")
         #if len(frozen) == 0: #and line_num == 37:
         #    print(f"ech: {eqs}")
@@ -238,12 +297,28 @@ def b():
 
         #print(f"jolts {jolts}")
 
-        if any(j != 0 for j in jolts) and len(buttons) > 0:
+        if any(j != 0 for j in jolts) and len(buttons) > 0 and False:
+
+            tmp = list(zip(buttons, limits))
+
+            #button_counts = [0] * len(jolts)
+            #for b in tmp: #buttons[0]
+            #    for j in b[0]:
+            #        button_counts[j] += 1
+            #tmp = sorted(tmp, key=lambda x : min(button_counts[y] for y in x[0])) # * len(x)) #, reverse=True)
 
 
-            buttons = sorted(buttons, key=lambda x : len(x), reverse=True)
+            tmp = sorted(tmp, key=lambda x : x[1])
+            #button_counts = [0] * len(jolts)
+            #for b in tmp: #buttons[0]
+            #    for j in b[0]:
+            #        button_counts[j] += 1
+            #tmp = sorted(tmp, key=lambda x : min(button_counts[y] for y in x[0])) # * len(x)) #, reverse=True)
+            buttons = [x[0] for x in tmp]
+            limits = [x[1] for x in tmp]
+            #buttons = sorted(buttons, key=lambda x : len(x), reverse=True)
             #buttons = sorted(buttons, key=lambda x : min(button_counts[y] for y in x)) # * len(x)) #, reverse=True)
-            result = [c == '#' for c in l[0][1:-1]]
+            #result = [c == '#' for c in l[0][1:-1]]
             #print(f"{buttons}, {result}")
             button_count = len(l[0]) - 2
             sequence_count = len(buttons)
@@ -293,7 +368,11 @@ def b():
 
             b_min = lambda b_ind, v : min(limits[b_ind], min((jolts[b] - v[b]) for b in buttons[b_ind]))
 
+            memoiz = set()
 
+            get_mem = lambda ind : tuple(counted_jolts + [ind])
+            t = get_mem(0)
+            memoiz.update( list(get_mem(0)) )
             a = b_min(0, counted_jolts)
             add_jolts(0, a)
 
@@ -303,7 +382,11 @@ def b():
             f = False
 
 
-            while(ind > 0 and presses > 2**50):
+            while(ind > 0): # and presses > 2**50):
+                if get_mem(ind) in memoiz:
+                    ind = go_back(ind)
+                    continue
+                memoiz.update( get_mem(ind) )
                 a = b_min(ind, counted_jolts)
                 if a < 0:
                     ind = go_back(ind)
@@ -311,6 +394,7 @@ def b():
                         break
                 else:
                     add_jolts(ind, a)
+
                     #values = count_jolts(stack[0])
                     #if any(x != y for x,y in zip(counted_jolts, values)):
                     #    print(f"not right {list(zip(counted_jolts, values))}")
@@ -356,16 +440,20 @@ def b():
         #                    visited.append(s_copy)
         #        #else:
         #        #    print(f"over")
-        else:
-            presses = 0
 
-        presses += sum(x[1] for x in frozen)
+
+        #else:
+        #    presses = 0
+
+        #presses += sum(x[1] for x in frozen)
         end_time = timer()
 
-        print(f"{line_num + 1}: lowest button {presses} {stack[0]} frozen_count: {len(frozen)} dur: {timedelta(seconds=end_time - start_time)}")
+        #print(f"{line_num + 1}: lowest button {presses} {stack[0]} frozen_count: {len(frozen)} dur: {timedelta(seconds=end_time - start_time)}")
+        #print(f"{line_num + 1}: lowest button {presses} {frozen} frozen_count: {len(frozen)} dur: {timedelta(seconds=end_time - start_time)}")
+        print(f"{line_num + 1}: lowest button {presses} dur: {timedelta(seconds=end_time - start_time)}")
         button_presses_total += presses
         #button_presses_total += presses
-    print(f"10b - Button presses: {button_presses_total}")
+    print(f"10b - Button presses: {button_presses_total} run time: {timer() - total_start_time}")
 
 
 
