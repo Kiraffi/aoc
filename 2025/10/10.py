@@ -37,7 +37,6 @@ eqs = []
 coeffs = []
 limits = []
 presses = 2**60
-
 @functools.cache
 def gdc(a, b):
     if a == 0 or b == 0: return 1
@@ -50,6 +49,7 @@ def b():
     global coeffs
     global limits
     global presses
+
     button_presses_total = 0
 
     total_start_time = timer()
@@ -61,17 +61,15 @@ def b():
         buttons = [list(map(int, line[1:-1].split(','))) for line in l[1:-1]]
         jolts = list(map(int, l[-1][1:-1].split(',')))
 
-
-
         #if line_num > 44:
         #    continue
         eqs = [[[0] * len(buttons), 0, 0] for _ in range(len(jolts))]
-        for count, b in enumerate(buttons):
+        for button_index, b in enumerate(buttons):
             for j in b:
-                eqs[j][0][count] = 1
+                eqs[j][0][button_index] = 1
         for j_ind, jolt in enumerate(jolts):
              eqs[j_ind][1] = jolt
-             eqs[j_ind][2] = j_ind
+             #eqs[j_ind][2] = j_ind
 
         def find_coeff_limits():
             changed = True
@@ -109,19 +107,22 @@ def b():
                     return changed
 
                 for eq in eqs:
-                    pos_neg_coeffs = ([x > 0 and not is_zero(x), x < 0 and not is_zero(x)] for x in eq[0])
-                    pos_coeffs, neg_coeffs = zip(*pos_neg_coeffs)
-                    has_pos_coeffs = any(pos_coeffs)
-                    has_neg_coeffs = any(neg_coeffs)
+                    has_pos_coeffs = False
+                    has_neg_coeffs = False
+                    for x in eq[0]:
+                        has_pos_coeffs |= x > 0
+                        has_neg_coeffs |= x < 0
 
                     if not has_pos_coeffs and not has_neg_coeffs: #all zero
                         continue
 
+                    # if there are both positive and negative coeffs,
                     if has_pos_coeffs and has_neg_coeffs:
                         tmp_max_eq0 = copy.deepcopy(eq)
                         tmp_max_eq1 = copy.deepcopy(eq)
                         tmp_min_eq0 = copy.deepcopy(eq)
                         tmp_min_eq1 = copy.deepcopy(eq)
+
                         for i in range(len(limits)):
                             if eq[0][i] > 0:
                                 tmp_max_eq0[1] -= eq[0][i] * limits[i][1]
@@ -138,7 +139,7 @@ def b():
                         if set_max_limits(tmp_max_eq1): changed = True
                         if set_min_limits(tmp_min_eq0): changed = True
                         if set_min_limits(tmp_min_eq1): changed = True
-                    else:
+                    elif eq[1] >= 0 and has_pos_coeffs or eq[1] <= 0 and has_neg_coeffs:
                         if set_max_limits(eq): changed = True
                         if set_min_limits(eq): changed = True
                 if not changed:
@@ -147,34 +148,38 @@ def b():
         limits = [[0, 10000000000000] for _ in eqs[0][0]]
         find_coeff_limits()
 
-        def find_new_coeffs(eq):
-            count = 0
-            found_index = 0
-            for col, coeff in enumerate(eq[0]):
-                if not is_zero(coeff):
-                    found_index = col
-                else:
-                    count +=1
-            if count != len(eq[0]) - 1:
-                return False
-            if any(coeff[0] == found_index for coeff in coeffs):
-                return False
-            val = (eq[1] // eq[0][found_index])
-            coeffs.append([found_index, val])
-            return True
+        # tries to find rows that have only single coeff
+        def find_new_coeffs():
+            for eq in eqs:
+                count = 0
+                found_index = 0
+                for col, coeff in enumerate(eq[0]):
+                    if not is_zero(coeff):
+                        found_index = col
+                    else:
+                        count +=1
+                if count != len(eq[0]) - 1:
+                    continue
+                if any(coeff[0] == found_index for coeff in coeffs):
+                    continue
+                val = (eq[1] // eq[0][found_index])
+                coeffs.append([found_index, val])
 
+        # replaces rows coeffs with 0 on values we have found and reduces the value from right side
         def back_substitute():
-            for coeff in coeffs:
-                for eq in eqs:
-                    eq[1] -= coeff[1] * eq[0][coeff[0]]
-                    eq[0][coeff[0]] = 0
-            if any(find_new_coeffs(eq) for eq in eqs):
-                 back_substitute()
-
+            index = 0
+            while index < len(coeffs):
+                for i in range(index, len(coeffs)):
+                    for eq in eqs:
+                        eq[1] -= coeffs[i][1] * eq[0][coeffs[i][0]]
+                        eq[0][coeffs[i][0]] = 0
+                index = len(coeffs)
+                find_new_coeffs()
 
         coeffs = []
         start_time = timer()
 
+        # find firt non-zero value
         def get_pivot_index(r0):
             for num0, row_value in enumerate(r0[0]):
                 if(not is_zero(row_value)):
@@ -196,10 +201,10 @@ def b():
                 eq2[1] = eq2[1] * multi - diff * eq[1]
 
 
-        # sort the rows in order of leftmost pivots
-        sort_lam = lambda x : sum((1 if not is_zero(y) else 0) * (4**(len(x) - i)) for i, y in enumerate(x[0]))
 
         def gauss_elim():
+            # sort the rows in order of leftmost pivots
+            sort_lam = lambda x : sum((1 if not is_zero(y) else 0) * (4**(len(x) - i)) for i, y in enumerate(x[0]))
             for row_index in range(len(eqs)):
                 eqs.sort(key=sort_lam, reverse=True)
                 use_row = eqs[row_index]
@@ -221,11 +226,13 @@ def b():
         #print(f"after back_substitute\n{"\n".join(map(str, eqs))}\n")
         #find_coeff_limits()
 
-        def rec():
+        def find_smallest_solution_recursively():
             global eqs
             global coeffs
             global limits
             global presses
+
+            back_substitute()
 
             if any(coeff[1] < 0 for coeff in coeffs):
                 return
@@ -246,8 +253,8 @@ def b():
                         most_numbers[eq_index] += 1 if not is_zero(eq_value) else 0
 
                 smallest_limits = [[i, x] for i, x in enumerate(limits)]
+                # sort by the button that causes most jolts from current state of eqs
                 most_numbers, smallest_limits = zip(*sorted(zip(most_numbers, smallest_limits), reverse=True))
-
 
                 for limit_value in smallest_limits:
                     if any(coeff[0] == limit_value[0] for coeff in coeffs):
@@ -257,10 +264,8 @@ def b():
                         eqs = copy.deepcopy(copy_eqs)
                         coeffs = copy.deepcopy(copy_coeffs)
                         limits = copy.deepcopy(copy_limits)
-
                         coeffs.append([limit_value[0], limit_range])
-                        back_substitute()
-                        rec()
+                        find_smallest_solution_recursively()
 
             elif all(eq[1] == 0 and all(value == 0 for value in eq[0]) for eq in eqs):
                 new_sum = sum(x[1] for x in coeffs)
@@ -277,13 +282,11 @@ def b():
             new_sum = sum(coeff[1] for coeff in coeffs)
             presses = min(presses, new_sum)
         else:
-            rec()
-        print(f"{line_num + 1}: {presses}")# time: {timer() - start_time}")
+            find_smallest_solution_recursively()
+        print(f"{line_num + 1}: {presses}")#, time: {timer() - start_time}")
         button_presses_total += presses
 
     print(f"10b - Button presses: {button_presses_total} run time: {timer() - total_start_time}")
-
-
 
 a()
 b()
