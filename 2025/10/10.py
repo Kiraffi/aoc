@@ -79,7 +79,7 @@ def b():
 
         variable_count = len(eqs[0][0])
 
-        def find_limits():
+        def find_coeff_max_limits():
             while True:
                 limits_copy = copy.deepcopy(limits)
                 def set_limit(eq):
@@ -99,7 +99,6 @@ def b():
                         continue
 
                     if has_pos_coeffs and has_neg_coeffs:
-                        pass
                         tmp_eq = copy.deepcopy(eq)
                         for i in range(len(limits)):
                             if not is_zero(eq[0][i]) and eq[0][i] > 0:
@@ -111,31 +110,34 @@ def b():
                 if all(x == y for x, y in zip(limits, limits_copy)):
                     break
         limits = [10000000000000] * len(eqs[0][0])
-        find_limits()
+        find_coeff_max_limits()
 
 
 
-        def find_one(item):
-            one_pos = lambda x: sum(1 if is_zero(y) else 0 for y in x) == len(x) - 1
-            if one_pos(item[0]):
-                for zz, z in enumerate(item[0]):
-                    if not is_zero(z):
-                        exists = any(f[0] == zz for f in frozen)
-                        if exists:
-                             return False
-                        val = math.floor((item[1] / z) + 0.01)
-                        frozen.append([zz, val])
-                return True
-            return False
+        def has_only_pivot(r0):
+            count = 0
+            found_index = 0
+            for col, coeff in enumerate(r0[0]):
+                if not is_zero(coeff):
+                    found_index = col
+                else:
+                    count +=1
+            if count != len(r0[0]) - 1:
+                return False
+            if any(f[0] == found_index for f in frozen):
+                return False
+            val = (r0[1] // r0[0][found_index])
+            frozen.append([found_index, val])
+            return True
 
         def back_substitute():
             for f in frozen:
-                for rr in eqs:
-                    rr[1] -= f[1] * rr[0][f[0]]
-                    rr[0][f[0]] = 0
+                for eq in eqs:
+                    eq[1] -= f[1] * eq[0][f[0]]
+                    eq[0][f[0]] = 0
             found = False
             for eq in eqs:
-                found = find_one(eq) or found
+                found = has_only_pivot(eq) or found
             if found:
                  back_substitute()
 
@@ -143,71 +145,60 @@ def b():
         frozen = []
         start_time = timer()
 
-        def has_sames():
-            mins = [next((i for i, q in enumerate(eq[0]) if not is_zero(q)), len(eqs)) for eq in eqs ]
+        def get_pivot_index(r0):
+            for num0 in range(len(r0[0])):
+                if(not is_zero(r0[0][num0])):
+                    return num0
+            return len(r0[0])
+
+        def has_multiple_row_same_pivot():
+            mins = [get_pivot_index(eq) for eq in eqs ]
             for r0, m0 in enumerate(mins):
                 for r1, m1 in enumerate(mins):
                     if r1 == r0:
                         continue
-                    if m0 == m1 and m0 != len(eqs):
+                    if m0 == m1 and m0 != len(eqs[0][0]):
                         return True
             return False
+
+        def remove_pivot_from_other_rows(r0, from_row_index):
+            num0 = get_pivot_index(r0)
+            if num0 < len(r0[0]):
+                for eq2 in eqs[from_row_index:]:
+                    if r0 == eq2:
+                        continue
+                    if not is_zero(eq2[0][num0]):
+                        diff = eq2[0][num0]
+                        g = gdc(abs(r0[0][num0]), abs(diff))
+                        diff = diff // g
+                        multi = r0[0][num0] // g
+                        for rrr in range(len(eq2[0])):
+                            eq2[0][rrr] = (eq2[0][rrr] * multi) - diff * r0[0][rrr]
+                        eq2[1] = eq2[1] * multi - diff * r0[1]
+
 
         def gauss_elim():
             global eqs
             global frozen
             frozen_len = -1
-            while frozen_len != len(frozen) or has_sames():
+            while frozen_len != len(frozen) or has_multiple_row_same_pivot():
                 frozen_len = len(frozen)
-                for row in range(len(eqs)):
+                for row_index in range(len(eqs)):
                     eqs.sort(key=sort_lam, reverse=True)
-                    use_row = eqs[row]
-                    min_pos_val = next((i for i, v in enumerate(use_row[0]) if not is_zero(v)), variable_count) # min(k if item[row] > 0 else len(eqs) for k, item in enumerate(eqs))
-                    if min_pos_val >= variable_count:
-                        continue
-                    mult = use_row[0][min_pos_val]
-                    for k, item in enumerate(eqs):
-                        if k <= row:
-                            continue
-                        diff = item[0][min_pos_val] #/ mult
-
-                        if is_zero(diff):
-                            continue
-                        g = gdc(abs(mult), abs(diff))
-                        diff = diff // g
-                        multi = mult // g
-                        item[0] = [(item[0][l] * multi - use_row[0][l] * diff) for l in range(len(item[0]))]
-                        item[1] = item[1] * multi  - diff * use_row[1]
-
-                #back_substitute()
-            #return eqs
+                    use_row = eqs[row_index]
+                    remove_pivot_from_other_rows(use_row, row_index)
 
         gauss_elim()
 
         def gauss_jordan():
             for eq in reversed(eqs):
-                for num0 in range(len(eq[0])):
-                    if(not is_zero(eq[0][num0])):
-                        mult = eq[0][num0]
-                        for eq2 in eqs:
-                            if eq == eq2:
-                                continue
-                            if not is_zero(eq2[0][num0]):
-                                diff = eq2[0][num0] #/ mult
-                                g = gdc(abs(mult), abs(diff))
-                                diff = diff // g
-                                multi = mult // g
-                                for rrr in range(len(eq2[0])):
-                                    #eq2[0][rrr] = eq2[0][rrr] - diff * eq[0][rrr]
-                                    eq2[0][rrr] = (eq2[0][rrr] * multi) - diff * eq[0][rrr]
-                                eq2[1] = eq2[1] * multi - diff * eq[1]
-                        break
+                remove_pivot_from_other_rows(eq, 0)
 
         #print(f"before gauss_jordan\n{"\n".join(map(str, eqs))}\n")
-        #find_limits()
+        #find_coeff_max_limits()
 
         gauss_jordan()
-        #find_limits()
+        #find_coeff_max_limits()
 
         #print(f"after gauss_jordan\n{"\n".join(map(str, eqs))}\n")
 
@@ -215,7 +206,7 @@ def b():
         back_substitute()
         #print(f"after back_substitute\n{"\n".join(map(str, eqs))}\n")
 
-        find_limits()
+        #find_coeff_max_limits()
 
 
         def rec():
@@ -233,7 +224,7 @@ def b():
                 copy_eqs = copy.deepcopy(eqs)
                 copy_frozen = copy.deepcopy(frozen)
 
-                find_limits()
+                find_coeff_max_limits()
 
                 most_numbers = [0] * len(eqs[0][0])
                 for eq in eqs:
@@ -257,8 +248,6 @@ def b():
                         rec()
 
             elif len(frozen) == len(eqs[0][0]):
-                #if all(x[1] == 0 for x in eqs):
-
                 values = [0] * len(jolts)
                 for f in frozen:
                     for b in buttons[f[0]]:
